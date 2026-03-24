@@ -195,8 +195,7 @@ RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then 
         apt-get update && \
         apt-get install -y --no-install-recommends \
             amdrocm-llvm \
-            amdrocm-core-sdk-gfx1151 \
-            rocwmma-dev && \
+            amdrocm-core-sdk-gfx1151 && \
         apt-get clean && \
         rm -rf /var/lib/apt/lists/* && \
         echo "amd-gfx1151" > /run/localai/capability && \
@@ -410,6 +409,21 @@ WORKDIR /build
 # Copy the backend source (includes llama.cpp submodule and build scripts)
 COPY ./backend ./backend
 COPY ./scripts ./scripts
+
+# Install rocWMMA headers from source (rocwmma-dev is not in ROCm 7.11 apt repo)
+RUN if [ "${BUILD_TYPE}" = "hipblas" ]; then \
+        apt-get update && apt-get install -y --no-install-recommends git && \
+        apt-get clean && rm -rf /var/lib/apt/lists/* && \
+        git clone --depth 1 https://github.com/ROCm/rocWMMA /tmp/rocwmma && \
+        mkdir -p /opt/rocm/include/rocwmma && \
+        cp -r /tmp/rocwmma/library/include/rocwmma/. /opt/rocm/include/rocwmma/ && \
+        if [ -f /opt/rocm/include/rocwmma/rocwmma-version.hpp.in ]; then \
+            sed 's/@rocwmma_VERSION_MAJOR@/2/g; s/@rocwmma_VERSION_MINOR@/2/g; s/@rocwmma_VERSION_PATCH@/0/g' \
+                /opt/rocm/include/rocwmma/rocwmma-version.hpp.in \
+                > /opt/rocm/include/rocwmma/rocwmma-version.hpp ; \
+        fi && \
+        rm -rf /tmp/rocwmma ; \
+    fi
 
 RUN <<'EOT' bash
 set -euxo pipefail
