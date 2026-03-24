@@ -201,10 +201,20 @@ RUN if [ "${BUILD_TYPE}" = "clblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then \
     ; fi
 
 RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then \
+        mkdir -p /etc/apt/keyrings && \
+        apt-get update && \
+        apt-get install -y --no-install-recommends wget gpg && \
+        wget -qO- https://repo.amd.com/rocm/packages/gpg/rocm.gpg | gpg --dearmor > /etc/apt/keyrings/amdrocm.gpg && \
+        echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/amdrocm.gpg] https://repo.amd.com/rocm/packages/ubuntu2404 stable main' > /etc/apt/sources.list.d/rocm.list && \
         apt-get update && \
         apt-get install -y --no-install-recommends \
-            hipblas-dev \
-            rocblas-dev && \
+            amdrocm-runtime-dev \
+            amdrocm-blas-gfx1151 \
+            amdrocm-blas-dev-gfx1151 \
+            rocwmma-dev || apt-get install -y --no-install-recommends \
+            amdrocm-runtime-dev \
+            amdrocm-blas-gfx1151 \
+            amdrocm-blas-dev-gfx1151 && \
         apt-get clean && \
         rm -rf /var/lib/apt/lists/* && \
         # I have no idea why, but the ROCM lib packages don't trigger ldconfig after they install, which results in local-ai and others not being able
