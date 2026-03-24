@@ -209,7 +209,8 @@ RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then 
         apt-get update && \
         apt-get install -y --no-install-recommends \
             amdrocm-llvm \
-            amdrocm-core-sdk-gfx1151 && \
+            amdrocm-core-sdk-gfx1151 \
+            rocwmma-dev && \
         apt-get clean && \
         rm -rf /var/lib/apt/lists/* && \
         # ROCm 7.11 installs to /opt/rocm/core-7.11/ instead of /opt/rocm/
@@ -221,25 +222,6 @@ RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then 
         ln -sf /opt/rocm/core-7.11/include /opt/rocm/include && \
         # ROCm lib packages don't trigger ldconfig - run it manually
         ldconfig \
-    ; fi
-
-# Install rocWMMA headers for Flash Attention acceleration (not available as apt package in ROCm 7.11)
-# rocwmma-version.hpp is generated from .in template during cmake configure; we run configure
-# but skip the build step (which would compile GPU kernels) - install headers only
-RUN if [ "${BUILD_TYPE}" = "hipblas" ]; then \
-        git clone --depth 1 https://github.com/ROCm/rocWMMA /tmp/rocwmma && \
-        cmake -S /tmp/rocwmma -B /tmp/rocwmma-build \
-            -DCMAKE_INSTALL_PREFIX=/opt/rocm \
-            -DAMDGPU_TARGETS=gfx1151 \
-            -DROCWMMA_BUILD_TESTS=OFF \
-            -DROCWMMA_BUILD_SAMPLES=OFF \
-            -DROCWMMA_BUILD_DOCS=OFF \
-            -DROCWMMA_BUILD_VALIDATION_TESTS=OFF \
-            -DROCWMMA_BUILD_BENCHMARK_TESTS=OFF && \
-        cmake --install /tmp/rocwmma-build --component rocwmma-dev 2>/dev/null || \
-        ( cp -r /tmp/rocwmma/library/include/rocwmma /opt/rocm/include/ && \
-          find /tmp/rocwmma-build -name 'rocwmma-version.hpp' -exec cp {} /opt/rocm/include/rocwmma/ \; ) && \
-        rm -rf /tmp/rocwmma /tmp/rocwmma-build \
     ; fi
 
 RUN echo "TARGETARCH: $TARGETARCH"

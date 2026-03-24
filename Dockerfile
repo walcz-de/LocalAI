@@ -195,7 +195,8 @@ RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then 
         apt-get update && \
         apt-get install -y --no-install-recommends \
             amdrocm-llvm \
-            amdrocm-core-sdk-gfx1151 && \
+            amdrocm-core-sdk-gfx1151 \
+            rocwmma-dev && \
         apt-get clean && \
         rm -rf /var/lib/apt/lists/* && \
         echo "amd-gfx1151" > /run/localai/capability && \
@@ -403,28 +404,6 @@ ARG SKIP_DRIVERS=false
 
 # Install grpc (needed by the grpc-server build target)
 COPY --from=llama-grpc /opt/grpc /usr/local
-
-# Install rocWMMA headers (needed for GGML_HIP_ROCWMMA_FATTN=ON)
-# rocwmma-version.hpp is generated from the .in template using sed to avoid needing
-# ROCmCMakeBuildTools which may not be in cmake's search path during multi-stage builds.
-RUN if [ "${BUILD_TYPE}" = "hipblas" ]; then \
-        git clone --depth 1 https://github.com/ROCm/rocWMMA /tmp/rocwmma && \
-        mkdir -p /opt/rocm/include/rocwmma && \
-        cp -r /tmp/rocwmma/library/include/rocwmma/. /opt/rocm/include/rocwmma/ && \
-        if [ -f /tmp/rocwmma/library/include/rocwmma/rocwmma-version.hpp.in ]; then \
-            VERSION=$(grep -oP 'project\s*\([^)]*VERSION\s+\K[\d.]+' /tmp/rocwmma/CMakeLists.txt | head -1) && \
-            MAJOR=$(echo ${VERSION:-1.5.0} | cut -d. -f1) && \
-            MINOR=$(echo ${VERSION:-1.5.0} | cut -d. -f2) && \
-            PATCH=$(echo ${VERSION:-1.5.0} | cut -d. -f3) && \
-            sed -e "s/@rocwmma_VERSION_MAJOR@/${MAJOR}/g" \
-                -e "s/@rocwmma_VERSION_MINOR@/${MINOR}/g" \
-                -e "s/@rocwmma_VERSION_PATCH@/${PATCH:-0}/g" \
-                -e "s/@rocwmma_VERSION_TWEAK@/0/g" \
-                /tmp/rocwmma/library/include/rocwmma/rocwmma-version.hpp.in \
-                > /opt/rocm/include/rocwmma/rocwmma-version.hpp ; \
-        fi && \
-        rm -rf /tmp/rocwmma \
-    ; fi
 
 WORKDIR /build
 
