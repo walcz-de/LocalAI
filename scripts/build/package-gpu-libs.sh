@@ -189,6 +189,7 @@ package_rocm_libs() {
         "libamd_comgr.so*"
         "libhip_hcc.so*"
         "libhiprtc.so*"
+        "librocprofiler-register.so*"
     )
 
     for lib_path in "${rocm_lib_paths[@]}"; do
