@@ -146,20 +146,26 @@ RUN if [ "${BUILD_TYPE}" = "clblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then \
     ; fi
 
 RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then \
+        mkdir -p /etc/apt/keyrings && \
+        apt-get update && \
+        apt-get install -y --no-install-recommends wget gpg && \
+        wget -qO- https://repo.amd.com/rocm/packages/gpg/rocm.gpg | gpg --dearmor > /etc/apt/keyrings/amdrocm.gpg && \
+        echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/amdrocm.gpg] https://repo.amd.com/rocm/packages/ubuntu2404 stable main' > /etc/apt/sources.list.d/rocm.list && \
         apt-get update && \
         apt-get install -y --no-install-recommends \
-            hipblas-dev \
-            rocblas-dev && \
+            amdrocm-runtime-dev \
+            amdrocm-blas-gfx1151 \
+            amdrocm-blas-dev-gfx1151 && \
         apt-get clean && \
         rm -rf /var/lib/apt/lists/* && \
-        echo "amd" > /run/localai/capability && \
+        echo "amd-gfx1151" > /run/localai/capability && \
         # I have no idea why, but the ROCM lib packages don't trigger ldconfig after they install, which results in local-ai and others not being able
         # to locate the libraries. We run ldconfig ourselves to work around this packaging deficiency
         ldconfig \
     ; fi
 
 RUN if [ "${BUILD_TYPE}" = "hipblas" ]; then \
-    ln -s /opt/rocm-**/lib/llvm/lib/libomp.so /usr/lib/libomp.so \
+    ln -sf /opt/rocm/lib/llvm/lib/libomp.so /usr/lib/libomp.so \
     ; fi
 
 RUN expr "${BUILD_TYPE}" = intel && echo "intel" > /run/localai/capability || echo "not intel"
@@ -372,6 +378,11 @@ ARG CUDA_MAJOR_VERSION=12
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 ENV NVIDIA_REQUIRE_CUDA="cuda>=${CUDA_MAJOR_VERSION}.0"
 ENV NVIDIA_VISIBLE_DEVICES=all
+
+# AMD gfx1151 (Strix Halo / RDNA 3.5) runtime requirements
+ARG BUILD_TYPE
+ENV HSA_OVERRIDE_GFX_VERSION=11.5.1
+ENV ROCBLAS_USE_HIPBLASLT=1
 
 WORKDIR /
 
