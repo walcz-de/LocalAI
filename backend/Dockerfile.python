@@ -220,15 +220,16 @@ COPY scripts/build/package-gpu-libs.sh /package-gpu-libs.sh
 
 RUN cd /${BACKEND} && PORTABLE_PYTHON=true make
 
-# For gfx1151: reinstall gfx1151-specific torch after requirements
-# (requirements-hipblas.txt pins torch+rocm6.4 which overwrites the pre-install above)
+# For gfx1151: attempt to upgrade torch to AMD prerelease wheels (gfx1151-native).
+# torchvision is excluded: AMD prerelease index only has cp311+ wheels, but the
+# portable Python used here is 3.10. If this fails, the rocm6.4 torch from
+# requirements-hipblas.txt is used instead (works with HSA_OVERRIDE_GFX_VERSION=11.5.1).
 RUN <<EOT bash
     if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${ROCM_ARCH}" = "gfx1151" ]; then
         if [ -f "/${BACKEND}/venv/bin/python" ]; then
-            uv pip install --python "/${BACKEND}/venv/bin/python" --pre torch torchvision \
-                --index-url https://rocm.prereleases.amd.com/whl/gfx1151/ 2>/dev/null || \
-            pip install --pre torch torchvision \
-                --index-url https://rocm.prereleases.amd.com/whl/gfx1151/
+            uv pip install --python "/${BACKEND}/venv/bin/python" --pre torch \
+                --index-url https://rocm.prereleases.amd.com/whl/gfx1151/ || \
+            echo "gfx1151 prerelease torch not available for this Python version, keeping rocm6.4 torch"
         fi
     fi
 EOT
