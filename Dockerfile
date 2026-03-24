@@ -412,18 +412,24 @@ COPY ./scripts ./scripts
 
 # Install rocWMMA headers from source (rocwmma-dev is not in ROCm 7.11 apt repo)
 RUN if [ "${BUILD_TYPE}" = "hipblas" ]; then \
-        apt-get update && apt-get install -y --no-install-recommends git && \
-        apt-get clean && rm -rf /var/lib/apt/lists/* && \
         git clone --depth 1 https://github.com/ROCm/rocWMMA /tmp/rocwmma && \
         mkdir -p /opt/rocm/include/rocwmma && \
         cp -r /tmp/rocwmma/library/include/rocwmma/. /opt/rocm/include/rocwmma/ && \
-        if [ -f /opt/rocm/include/rocwmma/rocwmma-version.hpp.in ]; then \
-            sed 's/@rocwmma_VERSION_MAJOR@/2/g; s/@rocwmma_VERSION_MINOR@/2/g; s/@rocwmma_VERSION_PATCH@/0/g' \
-                /opt/rocm/include/rocwmma/rocwmma-version.hpp.in \
-                > /opt/rocm/include/rocwmma/rocwmma-version.hpp ; \
-        fi && \
         rm -rf /tmp/rocwmma ; \
     fi
+# Write rocwmma-version.hpp with known content (avoids cmake configure_file dependency)
+RUN <<'EOT' bash
+if [ "${BUILD_TYPE}" = "hipblas" ]; then
+    cat > /opt/rocm/include/rocwmma/rocwmma-version.hpp << 'ROCWMMA_EOF'
+#ifndef ROCWMMA_API_VERSION_HPP
+#define ROCWMMA_API_VERSION_HPP
+#define ROCWMMA_VERSION_MAJOR 2
+#define ROCWMMA_VERSION_MINOR 2
+#define ROCWMMA_VERSION_PATCH 0
+#endif
+ROCWMMA_EOF
+fi
+EOT
 
 RUN <<'EOT' bash
 set -euxo pipefail
