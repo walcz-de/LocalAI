@@ -3,6 +3,47 @@ ARG GRPC_BASE_IMAGE=${BASE_IMAGE}
 ARG INTEL_BASE_IMAGE=${BASE_IMAGE}
 ARG UBUNTU_CODENAME=noble
 
+###################################
+# gRPC stage — builds gRPC C++ library for use by llama-cpp backend builder
+# Same approach as backend/Dockerfile.llama-cpp so the main image can bake in
+# the llama-cpp backend without an external stage reference.
+FROM ${GRPC_BASE_IMAGE} AS llama-grpc
+
+ARG GRPC_MAKEFLAGS="-j4 -Otarget"
+ARG GRPC_VERSION=v1.65.0
+ARG CMAKE_FROM_SOURCE=false
+ARG CMAKE_VERSION=3.31.10
+
+ENV MAKEFLAGS=${GRPC_MAKEFLAGS}
+WORKDIR /build
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        build-essential curl libssl-dev \
+        git wget && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN <<EOT bash
+    if [ "${CMAKE_FROM_SOURCE}" = "true" ]; then
+        curl -L -s https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}.tar.gz -o cmake.tar.gz && tar xvf cmake.tar.gz && cd cmake-${CMAKE_VERSION} && ./configure && make && make install
+    else
+        apt-get update && apt-get install -y cmake && apt-get clean && rm -rf /var/lib/apt/lists/*
+    fi
+EOT
+
+RUN git clone --recurse-submodules --jobs 4 -b ${GRPC_VERSION} --depth 1 --shallow-submodules https://github.com/grpc/grpc && \
+    mkdir -p /build/grpc/cmake/build && \
+    cd /build/grpc/cmake/build && \
+    sed -i "216i\  TESTONLY" "../../third_party/abseil-cpp/absl/container/CMakeLists.txt" && \
+    cmake -DgRPC_INSTALL=ON -DgRPC_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX:PATH=/opt/grpc ../.. && \
+    make && \
+    make install && \
+    rm -rf /build
+
+###################################
+
 FROM ${BASE_IMAGE} AS requirements
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -360,7 +401,7 @@ FROM build-requirements AS llama-cpp-hipblas-builder
 ARG BUILD_TYPE
 
 # Install grpc (needed by the grpc-server build target)
-COPY --from=grpc /opt/grpc /usr/local
+COPY --from=llama-grpc /opt/grpc /usr/local
 
 WORKDIR /build
 
