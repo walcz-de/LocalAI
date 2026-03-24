@@ -354,6 +354,37 @@ RUN make build
 ###################################
 ###################################
 
+# Build llama-cpp backend with hipblas/ROCm 7.11 for gfx1151 — baked into the main image
+# so no gallery download is needed at runtime.
+FROM build-requirements AS llama-cpp-hipblas-builder
+ARG BUILD_TYPE
+
+# Install grpc (needed by the grpc-server build target)
+COPY --from=grpc /opt/grpc /usr/local
+
+WORKDIR /build
+
+# Copy the backend source (includes llama.cpp submodule and build scripts)
+COPY ./backend ./backend
+COPY ./scripts ./scripts
+
+RUN <<'EOT' bash
+set -euxo pipefail
+if [ "${BUILD_TYPE}" = "hipblas" ]; then
+  cd /build/backend/cpp/llama-cpp
+  make llama-cpp-fallback
+  make llama-cpp-grpc
+  make llama-cpp-rpc-server
+  make package
+else
+  # Create empty package dir for non-hipblas builds so COPY doesn't fail
+  mkdir -p /build/backend/cpp/llama-cpp/package
+fi
+EOT
+
+###################################
+###################################
+
 # The devcontainer target is not used on CI. It is a target for developers to use locally -
 # rather than copying files it mounts them locally and leaves building to the developer
 
@@ -401,6 +432,15 @@ RUN --mount=from=builder,src=/build/,dst=/mnt/build \
 
 # Make sure the models directory exists
 RUN mkdir -p /models /backends /data
+
+# Bake in llama-cpp backend for amd-gfx1151 capability (avoids gallery download at runtime)
+# The backend name matches the capability mapping in backend/index.yaml
+RUN --mount=from=llama-cpp-hipblas-builder,src=/build/backend/cpp/llama-cpp/package,dst=/mnt/llama-pkg \
+    if [ -n "$(ls -A /mnt/llama-pkg 2>/dev/null)" ]; then \
+        mkdir -p /backends/rocm-gfx1151-llama-cpp && \
+        cp -a /mnt/llama-pkg/. /backends/rocm-gfx1151-llama-cpp/ && \
+        echo "llama-cpp backend baked in at /backends/rocm-gfx1151-llama-cpp/" ; \
+    fi
 
 # Define the health check command
 HEALTHCHECK --interval=1m --timeout=10m --retries=10 \
