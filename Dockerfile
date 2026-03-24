@@ -487,6 +487,13 @@ WORKDIR /
 
 COPY ./entrypoint.sh .
 
+# Embed backend/index.yaml so the gallery uses our local index (with gfx1151 entries)
+# instead of fetching github:mudler/LocalAI/backend/index.yaml@master at runtime.
+# The file:// URI is supported by the downloader.
+RUN mkdir -p /var/lib/local-ai
+COPY ./backend/index.yaml /var/lib/local-ai/backend-index.yaml
+ENV LOCALAI_BACKEND_GALLERIES='[{"name":"localai","url":"file:///var/lib/local-ai/backend-index.yaml"}]'
+
 # Copy the binary
 COPY --from=builder /build/local-ai ./
 # Copy the opus shim if it was built
