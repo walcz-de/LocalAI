@@ -496,14 +496,15 @@ RUN --mount=from=builder,src=/build/,dst=/mnt/build \
 # Make sure the models directory exists
 RUN mkdir -p /models /backends /data
 
-# Bake in llama-cpp backend for amd-gfx1151 capability (avoids gallery download at runtime)
-# The backend name matches the capability mapping in backend/index.yaml
+# Bake in llama-cpp backend into BackendsSystemPath (/var/lib/local-ai/backends) rather than
+# /backends — the VOLUME instruction makes /backends overrideable by user mounts, which would
+# hide baked-in content. BackendsSystemPath is not a Docker VOLUME, so it's always visible.
 RUN --mount=from=llama-cpp-hipblas-builder,src=/build/backend/cpp/llama-cpp/package,dst=/mnt/llama-pkg \
     if [ -n "$(ls -A /mnt/llama-pkg 2>/dev/null)" ]; then \
-        mkdir -p /backends/rocm-gfx1151-llama-cpp && \
-        cp -a /mnt/llama-pkg/. /backends/rocm-gfx1151-llama-cpp/ && \
-        printf '{"alias":"llama-cpp","name":"rocm-gfx1151-llama-cpp"}' > /backends/rocm-gfx1151-llama-cpp/metadata.json && \
-        echo "llama-cpp backend baked in at /backends/rocm-gfx1151-llama-cpp/" ; \
+        mkdir -p /var/lib/local-ai/backends/rocm-gfx1151-llama-cpp && \
+        cp -a /mnt/llama-pkg/. /var/lib/local-ai/backends/rocm-gfx1151-llama-cpp/ && \
+        printf '{"alias":"llama-cpp","name":"rocm-gfx1151-llama-cpp"}' > /var/lib/local-ai/backends/rocm-gfx1151-llama-cpp/metadata.json && \
+        echo "llama-cpp backend baked in at /var/lib/local-ai/backends/rocm-gfx1151-llama-cpp/" ; \
     fi
 
 # Define the health check command
