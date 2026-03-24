@@ -163,6 +163,8 @@ RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then 
         ln -sf /opt/rocm/core-7.11/lib/llvm /opt/rocm/llvm && \
         ln -sf /opt/rocm/core-7.11/bin /opt/rocm/bin && \
         ln -sf /opt/rocm/core-7.11 /opt/rocm/hip && \
+        ln -sf /opt/rocm/core-7.11/lib /opt/rocm/lib && \
+        ln -sf /opt/rocm/core-7.11/include /opt/rocm/include && \
         # ROCm lib packages don't trigger ldconfig - run it manually
         ldconfig \
     ; fi
