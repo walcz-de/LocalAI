@@ -132,4 +132,7 @@ type PredictionOptions struct {
 
 	// RWKV (?)
 	Tokenizer string `json:"tokenizer,omitempty" yaml:"tokenizer,omitempty"`
+
+	// Embedding dimensions (OpenAI API compatible)
+	Dimensions *int `json:"dimensions,omitempty" yaml:"dimensions,omitempty"`
 }
