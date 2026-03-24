@@ -153,9 +153,8 @@ RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then 
         echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/amdrocm.gpg] https://repo.amd.com/rocm/packages/ubuntu2404 stable main' > /etc/apt/sources.list.d/rocm.list && \
         apt-get update && \
         apt-get install -y --no-install-recommends \
-            amdrocm-runtime-dev \
-            amdrocm-blas-gfx1151 \
-            amdrocm-blas-dev-gfx1151 && \
+            amdrocm-llvm \
+            amdrocm-core-sdk-gfx1151 && \
         apt-get clean && \
         rm -rf /var/lib/apt/lists/* && \
         echo "amd-gfx1151" > /run/localai/capability && \
