@@ -158,13 +158,17 @@ RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then 
         apt-get clean && \
         rm -rf /var/lib/apt/lists/* && \
         echo "amd-gfx1151" > /run/localai/capability && \
-        # I have no idea why, but the ROCM lib packages don't trigger ldconfig after they install, which results in local-ai and others not being able
-        # to locate the libraries. We run ldconfig ourselves to work around this packaging deficiency
+        # ROCm 7.11 installs to /opt/rocm/core-7.11/ instead of /opt/rocm/
+        # Create compatibility symlinks expected by the build system (ROCM_HOME=/opt/rocm)
+        ln -sf /opt/rocm/core-7.11/lib/llvm /opt/rocm/llvm && \
+        ln -sf /opt/rocm/core-7.11/bin /opt/rocm/bin && \
+        ln -sf /opt/rocm/core-7.11 /opt/rocm/hip && \
+        # ROCm lib packages don't trigger ldconfig - run it manually
         ldconfig \
     ; fi
 
 RUN if [ "${BUILD_TYPE}" = "hipblas" ]; then \
-    ln -sf /opt/rocm/lib/llvm/lib/libomp.so /usr/lib/libomp.so \
+    ln -sf /opt/rocm/llvm/lib/libomp.so /usr/lib/libomp.so \
     ; fi
 
 RUN expr "${BUILD_TYPE}" = intel && echo "intel" > /run/localai/capability || echo "not intel"
