@@ -223,6 +223,15 @@ RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then 
         ldconfig \
     ; fi
 
+# Install rocWMMA headers for Flash Attention acceleration (not available as apt package in ROCm 7.11)
+# rocWMMA is a header-only template library; only headers are needed for compilation
+RUN if [ "${BUILD_TYPE}" = "hipblas" ]; then \
+        git clone --depth 1 https://github.com/ROCm/rocWMMA /tmp/rocwmma && \
+        mkdir -p /opt/rocm/include/rocwmma && \
+        cp -r /tmp/rocwmma/library/include/rocwmma/* /opt/rocm/include/rocwmma/ && \
+        rm -rf /tmp/rocwmma \
+    ; fi
+
 RUN echo "TARGETARCH: $TARGETARCH"
 
 # We need protoc installed, and the version in 22.04 is too old.  We will create one as part installing the GRPC build below
