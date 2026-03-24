@@ -502,6 +502,7 @@ RUN --mount=from=llama-cpp-hipblas-builder,src=/build/backend/cpp/llama-cpp/pack
     if [ -n "$(ls -A /mnt/llama-pkg 2>/dev/null)" ]; then \
         mkdir -p /backends/rocm-gfx1151-llama-cpp && \
         cp -a /mnt/llama-pkg/. /backends/rocm-gfx1151-llama-cpp/ && \
+        printf '{"alias":"llama-cpp","name":"rocm-gfx1151-llama-cpp"}' > /backends/rocm-gfx1151-llama-cpp/metadata.json && \
         echo "llama-cpp backend baked in at /backends/rocm-gfx1151-llama-cpp/" ; \
     fi
 
