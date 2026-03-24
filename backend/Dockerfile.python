@@ -220,6 +220,19 @@ COPY scripts/build/package-gpu-libs.sh /package-gpu-libs.sh
 
 RUN cd /${BACKEND} && PORTABLE_PYTHON=true make
 
+# For gfx1151: reinstall gfx1151-specific torch after requirements
+# (requirements-hipblas.txt pins torch+rocm6.4 which overwrites the pre-install above)
+RUN <<EOT bash
+    if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${ROCM_ARCH}" = "gfx1151" ]; then
+        if [ -f "/${BACKEND}/venv/bin/python" ]; then
+            uv pip install --python "/${BACKEND}/venv/bin/python" --pre torch torchvision \
+                --index-url https://rocm.prereleases.amd.com/whl/gfx1151/ 2>/dev/null || \
+            pip install --pre torch torchvision \
+                --index-url https://rocm.prereleases.amd.com/whl/gfx1151/
+        fi
+    fi
+EOT
+
 # Package GPU libraries into the backend's lib directory
 RUN mkdir -p /${BACKEND}/lib && \
     TARGET_LIB_DIR="/${BACKEND}/lib" BUILD_TYPE="${BUILD_TYPE}" CUDA_MAJOR_VERSION="${CUDA_MAJOR_VERSION}" \
