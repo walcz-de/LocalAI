@@ -400,6 +400,15 @@ RUN make build
 FROM build-requirements AS llama-cpp-hipblas-builder
 ARG BUILD_TYPE
 ARG SKIP_DRIVERS=false
+# GPU_TARGETS allows callers to restrict which GPU architectures are compiled.
+# When set (e.g. GPU_TARGETS=gfx1151) it is forwarded as AMDGPU_TARGETS to the
+# llama-cpp make invocations below.  Without an explicit override the cmake
+# command is built up from multiple recursive $(MAKE) calls which can result in
+# -DAMDGPU_TARGETS being specified more than once; cmake uses the LAST value,
+# so if any sub-make appends a stale default the desired targets are silently
+# dropped.  Passing AMDGPU_TARGETS on the command line prevents this by
+# overriding the ?= assignment in every recursive Makefile call.
+ARG GPU_TARGETS
 
 # Install grpc (needed by the grpc-server build target)
 COPY --from=llama-grpc /opt/grpc /usr/local
@@ -435,8 +444,13 @@ RUN <<'EOT' bash
 set -euxo pipefail
 if [ "${BUILD_TYPE}" = "hipblas" ]; then
   cd /build/backend/cpp/llama-cpp
-  make llama-cpp-fallback
-  make llama-cpp-grpc
+  # Pass AMDGPU_TARGETS explicitly on the make command line so it propagates
+  # through all recursive $(MAKE) calls without being overridden by the ?=
+  # default in sub-Makefiles.  Without this, cmake receives -DAMDGPU_TARGETS
+  # multiple times and the last (stale) value silently wins.
+  MAKE_TARGETS="AMDGPU_TARGETS=${GPU_TARGETS:-gfx1151}"
+  make llama-cpp-fallback ${MAKE_TARGETS}
+  make llama-cpp-grpc ${MAKE_TARGETS}
   make llama-cpp-rpc-server
   make package
 else
