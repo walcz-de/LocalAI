@@ -187,6 +187,7 @@ package_rocm_libs() {
         "libroctx64.so*"
         "libhsa-runtime64.so*"
         "libamd_comgr.so*"
+        "libamd_comgr_loader.so*"
         "libhip_hcc.so*"
         "libhiprtc.so*"
         "librocprofiler-register.so*"
