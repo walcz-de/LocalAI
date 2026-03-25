@@ -135,4 +135,7 @@ type PredictionOptions struct {
 
 	// Embedding dimensions (OpenAI API compatible)
 	Dimensions *int `json:"dimensions,omitempty" yaml:"dimensions,omitempty"`
+
+	// Embedding encoding format: "float" (default) or "base64" (OpenAI Node.js SDK default)
+	EncodingFormat string `json:"encoding_format,omitempty" yaml:"encoding_format,omitempty"`
 }
