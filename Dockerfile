@@ -450,6 +450,12 @@ if [ "${BUILD_TYPE}" = "hipblas" ]; then
   # exists from COPY, make considers the dependency satisfied and skips the
   # clone — potentially leaving us with the wrong commit.
   rm -rf llama.cpp
+  # Also remove stale llama.cpp checkouts inside the build variant directories.
+  # These directories are copied from the host build context and may contain an
+  # old llama.cpp commit that lacks common/chat-auto-parser.h.  Removing them
+  # forces each variant Makefile to re-clone at the correct LLAMA_VERSION.
+  rm -rf ../llama-cpp-fallback-build/llama.cpp
+  rm -rf ../llama-cpp-grpc-build/llama.cpp
   # Pass AMDGPU_TARGETS explicitly on the make command line so it propagates
   # through all recursive $(MAKE) calls without being overridden by the ?=
   # default in sub-Makefiles.  Without this, cmake receives -DAMDGPU_TARGETS
