@@ -534,12 +534,15 @@ WORKDIR /
 
 COPY ./entrypoint.sh .
 
-# Embed backend/index.yaml so the gallery uses our local index (with gfx1151 entries)
-# instead of fetching github:mudler/LocalAI/backend/index.yaml@master at runtime.
-# The file:// URI is supported by the downloader.
-RUN mkdir -p /var/lib/local-ai
-COPY ./backend/index.yaml /var/lib/local-ai/backend-index.yaml
-ENV LOCALAI_BACKEND_GALLERIES='[{"name":"localai","url":"file:///var/lib/local-ai/backend-index.yaml"}]'
+# Use the default upstream gallery URL (github:mudler/LocalAI/backend/index.yaml@master).
+# We intentionally do NOT set LOCALAI_BACKEND_GALLERIES here because the file:// URI
+# handler in the downloader checks that the target file is inside BackendsPath (/backends)
+# via InTrustedRoot — a path like /var/lib/local-ai/backend-index.yaml is outside that
+# trusted root and the check fails, returning an empty gallery.
+#
+# The baked-in rocm-gfx1151-llama-cpp backend is still used for inference via the alias
+# mechanism: its metadata.json carries alias=llama-cpp, so ListSystemBackends resolves
+# "llama-cpp" to the baked-in backend before any gallery download is attempted.
 
 # Copy the binary
 COPY --from=builder /build/local-ai ./

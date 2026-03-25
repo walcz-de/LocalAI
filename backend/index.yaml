@@ -22,7 +22,6 @@
     nvidia: "cuda12-llama-cpp"
     intel: "intel-sycl-f16-llama-cpp"
     amd: "rocm-llama-cpp"
-    amd-gfx1151: "rocm-gfx1151-llama-cpp"
     metal: "metal-llama-cpp"
     vulkan: "vulkan-llama-cpp"
     nvidia-l4t: "nvidia-l4t-arm64-llama-cpp"
@@ -51,7 +50,6 @@
     intel: "intel-sycl-f16-whisper"
     metal: "metal-whisper"
     amd: "rocm-whisper"
-    amd-gfx1151: "rocm-gfx1151-whisper"
     vulkan: "vulkan-whisper"
     nvidia-l4t: "nvidia-l4t-arm64-whisper"
     nvidia-cuda-13: "cuda13-whisper"
@@ -158,7 +156,6 @@
   capabilities:
     nvidia: "cuda12-vllm"
     amd: "rocm-vllm"
-    amd-gfx1151: "rocm-gfx1151-vllm"
     intel: "intel-vllm"
     nvidia-cuda-12: "cuda12-vllm"
 - &vllm-omni
@@ -294,7 +291,6 @@
     nvidia: "cuda12-rerankers"
     intel: "intel-rerankers"
     amd: "rocm-rerankers"
-    amd-gfx1151: "rocm-gfx1151-rerankers"
     metal: "metal-rerankers"
 - &transformers
   name: "transformers"
@@ -313,7 +309,6 @@
     nvidia: "cuda12-transformers"
     intel: "intel-transformers"
     amd: "rocm-transformers"
-    amd-gfx1151: "rocm-gfx1151-transformers"
     metal: "metal-transformers"
     nvidia-cuda-13: "cuda13-transformers"
     nvidia-cuda-12: "cuda12-transformers"
@@ -334,7 +329,6 @@
     nvidia: "cuda12-diffusers"
     intel: "intel-diffusers"
     amd: "rocm-diffusers"
-    amd-gfx1151: "rocm-gfx1151-diffusers"
     nvidia-l4t: "nvidia-l4t-diffusers"
     metal: "metal-diffusers"
     default: "cpu-diffusers"
