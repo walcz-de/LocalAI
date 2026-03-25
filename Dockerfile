@@ -482,6 +482,11 @@ ENV NVIDIA_VISIBLE_DEVICES=all
 ARG BUILD_TYPE
 ENV HSA_OVERRIDE_GFX_VERSION=11.5.1
 ENV ROCBLAS_USE_HIPBLASLT=1
+# libamd_comgr.so.3 depends on libLLVM.so.22.0git and libclang-cpp.so.22.0git from the
+# ROCm LLVM toolchain.  These libs live in /opt/rocm/llvm/lib which is NOT searched by
+# default.  Setting LD_LIBRARY_PATH here ensures backend subprocesses (run.sh prepends
+# their own lib/ then inherits this) can find the LLVM shared libraries via dlopen.
+ENV LD_LIBRARY_PATH=/opt/rocm/llvm/lib
 
 WORKDIR /
 
