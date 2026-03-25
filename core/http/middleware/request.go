@@ -259,6 +259,10 @@ func mergeOpenAIRequestAndModelConfig(config *config.ModelConfig, input *schema.
 		config.Maxtokens = input.Maxtokens
 	}
 
+	if input.Dimensions != nil {
+		config.Dimensions = input.Dimensions
+	}
+
 	if input.ResponseFormat != nil {
 		switch responseFormat := input.ResponseFormat.(type) {
 		case string:

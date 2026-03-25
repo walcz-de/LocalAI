@@ -495,12 +495,28 @@ ENV NVIDIA_VISIBLE_DEVICES=all
 # AMD gfx1151 (Strix Halo / RDNA 3.5) runtime requirements
 ARG BUILD_TYPE
 ENV HSA_OVERRIDE_GFX_VERSION=11.5.1
+# Prefer hipBLASLt over rocBLAS for GEMM (avoids rocBLAS Kernels.so lookup).
 ENV ROCBLAS_USE_HIPBLASLT=1
+# Enable XNACK (memory fault retry) for APU unified memory (Strix Halo).
+ENV HSA_XNACK=1
+# Disable SDMA engine — known to cause hangs/errors on APU/iGPU configs.
+ENV HSA_ENABLE_SDMA=0
+# Enable HIP unified memory so GPU/CPU share the same physical pages (UMA).
+# Required for stable operation on Strix Halo (gfx1151) APU.
+ENV GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
+# Enable rocWMMA-accelerated Flash Attention for RDNA 3.5.
+ENV GGML_HIP_ROCWMMA=1
 # libamd_comgr.so.3 depends on libLLVM.so.22.0git and libclang-cpp.so.22.0git from the
 # ROCm LLVM toolchain.  These libs live in /opt/rocm/llvm/lib which is NOT searched by
 # default.  Setting LD_LIBRARY_PATH here ensures backend subprocesses (run.sh prepends
 # their own lib/ then inherits this) can find the LLVM shared libraries via dlopen.
 ENV LD_LIBRARY_PATH=/opt/rocm/llvm/lib
+# hipBLASLt and rocBLAS ship kernel data (TensileLibrary + Kernels.so) in arch-specific
+# subdirectories relative to their library.  When backends run in isolation using the
+# packaged lib/ directory, the library can't find its own data via dladdr.  Point both
+# libraries explicitly to the system data path so gfx1151 kernels are always found.
+ENV HIPBLASLT_TENSILE_LIBPATH=/opt/rocm/lib/hipblaslt/library
+ENV ROCBLAS_TENSILE_LIBPATH=/opt/rocm/lib/rocblas/library
 
 WORKDIR /
 
