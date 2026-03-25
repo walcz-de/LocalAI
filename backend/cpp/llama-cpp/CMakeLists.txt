@@ -28,7 +28,7 @@ find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${Protobuf_INCLUDE_DIRS})
 
-message(STATUS "Using protobuf version ${Protobuf_VERSION} | Protobuf_INCLUDE_DIRS: ${Protobuf_INCLUDE_DIRS} | CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
+message(STATUS "Using protobuf version ${Protobuf_VERSION} | Protobuf_INCLUDE_DIRS: ${Protobuf_INCLUDE_DIRS} | CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR} | CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR} | CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
 
 # Proto file
 get_filename_component(hw_proto "../../../../../../backend/backend.proto" ABSOLUTE)
@@ -61,7 +61,11 @@ add_executable(${TARGET} grpc-server.cpp json.hpp httplib.h)
 
 target_include_directories(${TARGET} PRIVATE ../llava)
 target_include_directories(${TARGET} PRIVATE ${CMAKE_SOURCE_DIR})
-target_include_directories(${TARGET} PRIVATE ${CMAKE_SOURCE_DIR}/common)
+# grpc-server lives at tools/grpc-server/; common/ is two levels up at the llama.cpp root.
+# Use both global include_directories (always applied) and target-specific as belt+suspenders.
+get_filename_component(LLAMA_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../common" ABSOLUTE)
+include_directories("${LLAMA_COMMON_DIR}")
+target_include_directories(${TARGET} PRIVATE "${LLAMA_COMMON_DIR}")
 
 target_link_libraries(${TARGET} PRIVATE common llama mtmd ${CMAKE_THREAD_LIBS_INIT} absl::flags hw_grpc_proto
   absl::flags_parse
