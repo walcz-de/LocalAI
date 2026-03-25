@@ -1,0 +1,720 @@
+services:
+  localai:
+    # Custom LocalAI 4.0.0 build – ROCm 7.11.0 + gfx1151 (Strix Halo / Radeon 8060S)
+    # Gebaut aus: https://github.com/stefanwalcz/LocalAI feat/rocm7-gfx1151-v4-clean
+    # Enthält: baked-in llama-cpp grpc-server (HIP UMA + rocWMMA FA), Dimensions-Fix
+    image: 192.168.178.127:5000/localai:4.0.0-rocm7.11-gfx1151
+    #image: pointblank.ddns.net:5556/localai:4.0.0-rocm7.11-gfx1151
+    deploy:
+      resources:
+        limits:
+          cpus: '12.0'
+          # 35B-Modell (~22GB Q4) + Multimodal (~2GB) + Embedding (~1GB) + ROCm-Overhead
+          # Bei UMA geht VRAM-Allokation via /dev/kfd und zählt ggf. nicht gegen cgroup-Limit,
+          # aber CPU-seitige Puffer, KV-Cache und ROCm runtime brauchen zusätzlich ~8-12G.
+          memory: 48G
+    shm_size: '2gb'
+    command:
+      - ${MODEL_NAME:-Qwen3.5-35B-A3B-GGUF}
+      - ${MULTIMODAL_MODEL:-moondream2-20250414}
+      - jina-embeddings-v3-GGUF
+    depends_on:
+      dind:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/readyz"]
+      interval: 60s
+      timeout: 10m
+      retries: 120
+    ports:
+      - 8081:8080
+    environment:
+      #==========================================================================
+      # LocalAI Konfiguration
+      #==========================================================================
+      - LOCALAI_FORCE_META_BACKEND_CAPABILITY=amd-gfx1151
+      - LOCALAI_LOG_LEVEL=info
+      - GOTRACEBACK=single
+      - LOCALAI_CONFIG_DIR=/configuration
+      # Gallery: upstream-Index als Primärquelle + lokaler gallery-server als zweite Quelle
+      # für custom Backends (z.B. zukünftige gfx1151-spezifische Python-Backends).
+      # WICHTIG: file:// URLs funktionieren NICHT (InTrustedRoot-Check blockt /var/lib/local-ai/).
+      # Der baked-in llama-cpp wird via alias-Mechanismus gefunden (kein Download nötig).
+      - LOCALAI_BACKEND_GALLERIES=[{"name":"localai","url":"github:mudler/LocalAI/backend/index.yaml@master"},{"name":"local","url":"http://gallery-server:80/backends.yaml"}]
+      - DOCKER_HOST=tcp://dind:2375
+
+      # Modelle beim Start direkt in den RAM/VRAM laden
+      - LOCALAI_LOAD_TO_MEMORY=${MODEL_NAME:-Qwen3.5-35B-A3B-GGUF},jina-embeddings-v3-GGUF
+      # VRAM Management: Max 3 Backends gleichzeitig
+      - LOCALAI_MAX_ACTIVE_BACKENDS=3
+      - LOCALAI_BATCH_SIZE=4096
+      - LOCALAI_WATCHDOG_BUSY=true
+      - LOCALAI_WATCHDOG_BUSY_TIMEOUT=30m
+      - LOCALAI_WATCHDOG_IDLE=false
+      - LOCALAI_WATCHDOG_IDLE_TIMEOUT=15m
+      - LOCALAI_WATCHDOG_INTERVAL=${LOCALAI_WATCHDOG_INTERVAL:-5s}
+      - PARALLEL_REQUESTS=true
+      - LLAMACPP_PARALLEL=1
+
+      #==========================================================================
+      # Agent Pool (ersetzt separates LocalAGI + LocalRecall)
+      #==========================================================================
+      - LOCALAI_AGENT_POOL_DEFAULT_MODEL=qwen3.5-agent
+      - LOCALAI_AGENT_POOL_MULTIMODAL_MODEL=${MULTIMODAL_MODEL:-moondream2-20250414}
+      - LOCALAI_AGENT_POOL_EMBEDDING_MODEL=jina-embeddings-v3-GGUF
+      - LOCALAI_AGENT_POOL_VECTOR_ENGINE=postgres
+      - LOCALAI_AGENT_POOL_DATABASE_URL=postgresql://localrecall:localrecall@pgbouncer:5432/localrecall?sslmode=disable
+      - LOCALAI_AGENT_POOL_ENABLE_LOGS=false
+      - LOCALAI_AGENT_POOL_ENABLE_SKILLS=false
+      - LOCALAI_AGENT_POOL_TIMEOUT=60m
+
+      #==========================================================================
+      # AMD ROCm 7.11.0 / HIP – Strix Halo (gfx1151 / RDNA 3.5)
+      #==========================================================================
+      # gfx1151 ist offiziell noch nicht im ROCm-Katalog → Override auf 11.5.1
+      - HSA_OVERRIDE_GFX_VERSION=11.5.1
+      # UMA: VRAM = Systemspeicher – kein separater VRAM-Pool bei Strix Halo
+      - GGML_HIP_UMA=1
+      - HSA_VISIBLE_DEVICES=0
+      - HIP_VISIBLE_DEVICES=0
+      - HIP_PLATFORM=amd
+      # SDMA deaktivieren – verursacht Hänger bei gfx1151 unter ROCm 7.x
+      - HSA_ENABLE_SDMA=0
+      # XNACK: Unified Memory Fault Handling aktivieren (nötig für UMA-Effizienz)
+      - HSA_XNACK=1
+      # hipBLASLt statt rocBLAS wo möglich (bessere Performance auf gfx1151)
+      - ROCBLAS_USE_HIPBLASLT=1
+      # Explizite Pfade für TensileLibrary – wichtig für ROCm 7.11 (Pfade geändert)
+      - ROCBLAS_TENSILE_LIBPATH=/opt/rocm/lib/rocblas/library
+      - HIPBLASLT_TENSILE_LIBPATH=/opt/rocm/lib/hipblaslt/library
+      # LLVM runtime libs für ROCm (openmp, clang-RT etc.)
+      - LD_LIBRARY_PATH=/opt/rocm/llvm/lib
+      - GPU_MAX_ALLOC_PERCENT=100
+      - GPU_MAX_HEAP_SIZE=100
+
+      #==========================================================================
+      # HuggingFace Token für Model-Downloads (in .env setzen: HF_TOKEN=hf_...)
+      #==========================================================================
+      - HF_TOKEN=${HF_TOKEN}
+
+      #==========================================================================
+      # Model-Namen (Legacy, für andere Services die darauf referenzieren)
+      #==========================================================================
+      - MODEL_NAME=${MODEL_NAME:-Qwen3.5-35B-A3B-GGUF}
+      - MULTIMODAL_MODEL=${MULTIMODAL_MODEL:-moondream2-20250414}
+      - IMAGE_MODEL=${IMAGE_MODEL:-flux.1-dev-ggml}
+    volumes:
+      - ./models:/models
+      - ./ingestion:/data
+      - ./generated-images:/tmp/generated/images
+      - ./configuration:/configuration
+      - /usr/bin/docker:/usr/bin/docker
+    devices:
+      - /dev/dri
+      - /dev/kfd
+    group_add:
+      - "44"   # video
+      - "992"  # render
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - ./volumes/qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__MAX_REQUEST_SIZE_MB=256
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+    healthcheck:
+      test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/6333"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  localrecall-postgres:
+    image: quay.io/mudler/localrecall:${LOCALRECALL_VERSION:-v0.5.5}-postgresql
+    command: >
+      postgres 
+      -c max_connections=500 
+      -c idle_in_transaction_session_timeout=60000 
+      -c synchronous_commit=on 
+      -c max_wal_size=8GB 
+      -c checkpoint_timeout=30min
+      -c checkpoint_completion_target=0.9
+      -c shared_buffers=6GB
+      -c work_mem=32MB
+      -c maintenance_work_mem=512MB
+    shm_size: '2gb'
+    environment:
+      - POSTGRES_DB=localrecall
+      - POSTGRES_USER=localrecall
+      - POSTGRES_PASSWORD=localrecall
+    ports:
+      - 5433:5432
+    volumes:
+      - ./volumes/postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U localrecall -d localrecall"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: pgbouncer
+    volumes:
+      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    ports:
+      - "5432:5432"
+    depends_on:
+      localrecall-postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U localrecall"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  sshbox:
+    build:
+      context: .
+      dockerfile: Dockerfile.sshbox
+      network: host
+    ports:
+      - "22"
+    environment:
+      - SSH_USER=root
+      - SSH_PASSWORD=root
+      - DOCKER_HOST=tcp://dind:2375
+    depends_on:
+      dind:
+        condition: service_healthy
+
+  dind:
+    image: docker:dind
+    privileged: true
+    command: ["dockerd", "-H", "tcp://0.0.0.0:2375", "-H", "unix:///var/run/docker.sock"]
+    environment:
+      - DOCKER_TLS_CERTDIR=""
+    expose:
+      - 2375
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  gitea:
+    image: gitea/gitea:latest
+    container_name: gitea
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__database__DB_TYPE=sqlite3
+      - GITEA__server__DOMAIN=localhost
+      - GITEA__server__HTTP_PORT=3000
+      - GITEA__server__ROOT_URL=http://localhost:3005
+    ports:
+      - "3005:3000"
+      - "2222:22"
+    volumes:
+      - ./volumes/gitea:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+
+  skillserver:
+    image: ghcr.io/mudler/skillserver:latest
+    container_name: skillserver
+    depends_on:
+      localai:
+        condition: service_healthy
+    tty: true
+    stdin_open: true
+    ports:
+      - "8083:8080"
+      - "3008:3001"
+    environment:
+      - LOCALAI_URL=http://localai:8080/v1
+      - SKILLS_DIR=/skills
+      - PORT=8080
+      - SKILLSERVER_ENABLE_LOGGING=true
+      - SKILLSERVER_GIT_REPOS=https://github.com/anthropics/skills.git
+      - DEBUG=true
+    volumes:
+      - ./skills:/skills
+      - /home/stefanwalcz/.ssh/known_hosts:/root/.ssh/known_hosts:ro
+    restart: unless-stopped
+
+  rag-ingestion:
+    image: pointblank.ddns.net:5556/agntsio-ingestion:v2
+    container_name: rag-ingestion
+    build:
+      context: .
+      dockerfile: Dockerfile.ingestion
+      network: host
+    deploy:
+      resources:
+        limits:
+          cpus: '6.0'
+          memory: 6G
+    depends_on:
+      localai:
+        condition: service_healthy
+      unstructured:
+        condition: service_healthy
+    ports:
+      - "0.0.0.0:${INGESTION_PORT:-8084}:8083"
+    environment:
+      LOG_LEVEL: DEBUG
+      INGESTION_DEFAULT_COLLECTION: ${INGESTION_DEFAULT_COLLECTION:-pprls_docs}
+      INGESTION_EMBEDDING_ENGINE: localai
+      INGESTION_WATCH_INTERVAL: "2"
+      INGESTION_INBOX_PATH: /ingestion/inbox
+      INGESTION_PROCESSED_PATH: /ingestion/processed
+      INGESTION_FAILED_PATH: /ingestion/failed
+      INGESTION_STATUS_PATH: /ingestion/status
+      INGESTION_UNSTRUCTURED_URL: http://unstructured:8000/general/v0/general
+      INGESTION_EMBEDDING_API_URL: http://localai:8080/v1/embeddings
+      INGESTION_EMBEDDING_MODEL: jina-embeddings-v3-GGUF
+      INGESTION_VECTORDB_URL: postgresql://localrecall:localrecall@pgbouncer:5432/localrecall?sslmode=disable
+      INGESTION_COLLECTIONS_PATH: /collections
+      INGESTION_ASSETS_PATH: /assets
+      INGESTION_WRITE_LOCALRECALL_INDEX: "true"
+      INGESTION_WORKER_COUNT: "4"
+      INGESTION_BATCH_SIZE: "16"
+      INGESTION_MAX_CONCURRENT: "5"
+      INGESTION_MAX_CONCURRENT_UPLOAD_ONLY: "24"
+      INGESTION_QUEUE_MAX: "200"
+      EMBEDDING_BATCH_SIZE: "256"
+      EMBEDDING_BATCH_TIMEOUT_SEC: "600"
+      INGESTION_UNSTRUCTURED_TIMEOUT_SEC: "3600"
+      INGESTION_UNSTRUCTURED_STRATEGY: "fast"
+      INGESTION_FILE_MIN_AGE_SEC: "15"
+      INGESTION_DB_MAX_CONNECTIONS: "100"
+      INGESTION_DB_MIN_CONNECTIONS: "1"
+      INGESTION_DB_BATCH_SIZE: "128"
+      INGESTION_DB_STATEMENT_TIMEOUT: "60000"
+      INGESTION_DB_LOCK_TIMEOUT: "60000"
+      INGESTION_DB_IDLE_TIMEOUT: "10000"
+      INGESTION_DB_ALLOW_FALLBACK: "false"
+      INGESTION_TEMP_WARN: "85"
+      INGESTION_TEMP_CRIT: "95"
+      INGESTION_LOAD_WARN: "10"
+      INGESTION_LOAD_CRIT: "30"
+      INGESTION_THROTTLE_SLEEP: "5.0"
+      INGESTION_BULK_IMPORT_THRESHOLD: "100"
+      INGESTION_ANALYZE_THRESHOLD: "64"
+      INGESTION_TARGETS_DEFAULT: "anythingllm"
+      INGESTION_QDRANT_HOST: qdrant
+      INGESTION_QDRANT_PORT: 6333
+      ANYLLM_DB_URL: ${ANYLLM_DB_URL:-postgresql://localrecall:localrecall@pgbouncer:5432/localrecall?sslmode=disable}
+      ANYLLM_TABLE: ${ANYLLM_TABLE:-anythingllm_vectors}
+      CUDA_VISIBLE_DEVICES: "-1"
+    volumes:
+      - ./ingestion/inbox:/ingestion/inbox
+      - ./ingestion/processed:/ingestion/processed
+      - ./ingestion/failed:/ingestion/failed
+      - ./ingestion/status:/ingestion/status
+      - ./ingestion/cache:/ingestion/cache
+      - ./volumes/localrag_collections:/collections
+      - ./volumes/localrag_assets:/assets
+      - /sys:/sys:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8083/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    privileged: true
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.hwmon'
+      - '--collector.thermal_zone'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - '/proc:/host/proc:ro'
+      - '/sys:/host/sys:ro'
+    ports:
+      - '9100:9100'
+    restart: unless-stopped
+
+  unstructured:
+    image: downloads.unstructured.io/unstructured-io/unstructured-api:latest
+    container_name: unstructured
+    deploy:
+      resources:
+        limits:
+          cpus: '10.0'
+          memory: 14G
+    shm_size: '2gb'
+    volumes:
+      - ./ingestion/cache:/cache
+    environment:
+      - UNSTRUCTURED_WORK_DIR=/cache
+      - UNSTRUCTURED_STRATEGY=fast
+      - UNSTRUCTURED_CHUNKING_STRATEGY=by_title
+      - UNSTRUCTURED_COMBINE_UNDER_N_CHARS=500
+      - UNSTRUCTURED_MAX_CHARACTERS=800
+      - UNSTRUCTURED_OVERLAP=160
+      - UNSTRUCTURED_OVERLAP_ALL=true
+      - UNSTRUCTURED_OCR_AGENT=paddle
+      - UNSTRUCTURED_HI_RES_MODEL_NAME=yolox
+      - UNSTRUCTURED_INFER_TABLE_STRUCTURE=true
+      - UNSTRUCTURED_OCR_LANGUAGES=deu+eng
+      - UNSTRUCTURED_PDF_INFER_TABLE_STRUCTURE=true
+      - UNSTRUCTURED_INCLUDE_PAGE_BREAKS=true
+    ports:
+      - "8001:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/healthcheck"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./configuration/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./configuration/prometheus/rules:/etc/prometheus/rules
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin1
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./configuration/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter
+    container_name: postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://localrecall:localrecall@localrecall-postgres:5432/localrecall?sslmode=disable"
+    depends_on:
+      localrecall-postgres:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+    ports:
+      - "9187:9187"
+    restart: unless-stopped
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - GENERIC_TIMEZONE=Europe/Berlin
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=change-me
+      - N8N_HOST=n8n.wlcz.io
+      - WEBHOOK_URL=https://n8n.wlcz.io/
+      - N8N_SECURE_COOKIE=false
+      - NODE_OPTIONS=--max-old-space-size=2048
+      - N8N_PORT=5678
+      - N8N_EDITOR_BASE_URL=https://n8n.wlcz.io
+      - N8N_API_ALLOW_EXTERNAL_ACCESS=true
+      - N8N_ALLOW_CORS=true
+      - N8N_ALLOWED_ORIGINS=*
+      - DEBUG=false
+      - LOG_LEVEL=info
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
+      - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=true
+    volumes:
+      - ./volumes/n8n_data:/home/node/.n8n
+      - /opt/agntsio/ingestion/inbox:/home/node/.n8n-files/inbox
+    restart: unless-stopped
+
+  anythingllm:
+    #image: 192.168.178.127:5000/anything-llm:1.11.0
+    image: mintplexlabs/anythingllm:latest
+    container_name: anythingllm
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - LLM_PROVIDER=localai
+      - LOCAL_AI_BASE_PATH=http://localai:8080/v1
+      - LOCAL_AI_MODEL_PREF=Qwen3.5-35B-A3B-GGUF
+      - LOCAL_AI_MODEL_TOKEN_LIMIT=131072
+      - EMBEDDING_ENGINE=localai
+      - EMBEDDING_BASE_PATH=http://localai:8080/v1
+      - EMBEDDING_MODEL_PREF=jina-embeddings-v3-GGUF
+      - EMBEDDING_MODEL_MAX_CHUNK_LENGTH=800
+      - EMBEDDING_OUTPUT_DIMENSIONS=1024
+      - VECTOR_DB=qdrant
+      - QDRANT_ENDPOINT=http://qdrant:6333
+      - PGVECTOR_CONNECTION_STRING=postgresql://localrecall:localrecall@pgbouncer:5432/localrecall?sslmode=disable
+      - PGVECTOR_TABLE_NAME=anythingllm_vectors
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_MODEL_PREF=claude-opus-4-6
+      - ANTHROPIC_CACHE_CONTROL=1h
+      - STORAGE_DIR=/app/server/storage
+      - SERVER_PORT=3001
+      - SIG_KEY=9c89ff0dd89afad26f7fb9c8423f9bf07a2bd262c682f71c0832081ccad2bd4c
+      - SIG_SALT=b8fa35e31a2018deb0d2625249d5e063174814b7616615341d928dcdde999d66
+      - MULTI_USER_MODE=true
+    volumes:
+      - ./volumes/anythingllm_storage:/app/server/storage
+    depends_on:
+      localai:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+
+  gallery-server:
+    image: nginx:alpine
+    container_name: localai-gallery
+    volumes:
+      - ./localai-gallery:/usr/share/nginx/html:ro
+    ports:
+      - "8092:80"
+    restart: unless-stopped
+
+  ghost-mcp:
+    build:
+      context: ./ghost-mcp
+      network: host
+    container_name: ghost-mcp
+    restart: unless-stopped
+    ports:
+      - 3064:3001
+    environment:
+      - GHOST_API_URL=${GHOST_API_URL}
+      - GHOST_ADMIN_KEY=${GHOST_ADMIN_KEY}
+      - GHOST_CONTENT_KEY=${GHOST_CONTENT_KEY}
+
+  paperless-mcp:
+    build:
+      context: ./paperless-mcp
+      network: host
+    container_name: paperless-mcp
+    command: >
+      --stdio "paperless-mcp https://pprls.3utilities.com:8843 f1b9442c34617fc8b5b1361e121093b73b54f665"
+      --port 3100
+      --host 0.0.0.0
+      --outputTransport streamableHttp
+    ports:
+      - 3100:3100
+    restart: unless-stopped
+
+  shared-state-redis:
+    image: redis:7-alpine
+    container_name: shared-state-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  prompt-optimizer:
+    build:
+      context: ./prompt-optimizer-repo
+      network: host
+    container_name: prompt-optimizer
+    ports:
+      - "8091:8090"
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      shared-state-redis:
+        condition: service_healthy
+    environment:
+      - LOCAL_LLM_BASE_URL=http://localai:8080/v1
+      - ROUTING_POLICY=${ROUTING_POLICY:-latest}
+      - OPENAI_COMPAT_STREAM_DEFAULT=${OPENAI_COMPAT_STREAM_DEFAULT:-false}
+      - ALLOW_PREVIEW_MODELS=${ALLOW_PREVIEW_MODELS:-false}
+      - BLOCKED_MODEL_IDS=gpt-4o,gpt-4
+      - BLOCKED_MODEL_IDS_JSON=${BLOCKED_MODEL_IDS_JSON:-[]}
+      - CLASSIFIER_MODEL=Qwen3.5-35B-A3B-GGUF
+      - SUMMARIZER_MODEL=Qwen3.5-35B-A3B-GGUF
+      - FAST_MODEL=gemma-3-4b-it-qat
+      - COMPRESSION_MODEL=${COMPRESSION_MODEL:-gemma-3-4b-it-qat}
+      - LOCAL_FALLBACK_MODEL=${LOCAL_FALLBACK_MODEL:-Qwen3.5-35B-A3B-GGUF}
+      - SHADOW_MODE=${SHADOW_MODE:-False}
+      - MAX_OPTIMIZATION_LATENCY_MS=150000
+      - MAX_CLASSIFICATION_LATENCY_MS=45000
+      - MAX_COMPRESSION_LATENCY_MS=90000
+      - COMPRESSION_LOCAL_TIMEOUT_S=${COMPRESSION_LOCAL_TIMEOUT_S:-60}
+      - ENABLE_COMPRESSION_QUALITY_VALIDATION=true
+      - MIN_COMPRESSION_QUALITY_SCORE=0.80
+      - MAX_RAG_TIMEOUT_S=5
+      - RETRY_BUDGET_MS=3000
+      - TIMEOUT_SAFETY_MARGIN_MS=500
+      - PGVECTOR_HOST=pgbouncer
+      - PGVECTOR_PORT=5432
+      - PGVECTOR_DB=localrecall
+      - PGVECTOR_USER=localrecall
+      - PGVECTOR_PASSWORD=localrecall
+      - DEFAULT_COMPRESSION_RATE=${DEFAULT_COMPRESSION_RATE:-0.5}
+      - MAX_CONTEXT_TOKENS=${MAX_CONTEXT_TOKENS:-32768}
+      - RAG_TOP_K=${RAG_TOP_K:-5}
+      - RAG_SCORE_THRESHOLD=${RAG_SCORE_THRESHOLD:-0.75}
+      - LLM_TIMEOUT_S=${LLM_TIMEOUT_S:-60}
+      - REQUEST_TIMEOUT_S=${REQUEST_TIMEOUT_S:-90}
+      - OPTIMIZATION_TIMEOUT_S=${OPTIMIZATION_TIMEOUT_S:-12}
+      - LLM_CALL_TIMEOUT_S=${LLM_CALL_TIMEOUT_S:-60}
+      - PROXY_LLM_TIMEOUT_S=${PROXY_LLM_TIMEOUT_S:-30}
+      - PROXY_STREAM_TIMEOUT_S=${PROXY_STREAM_TIMEOUT_S:-600}
+      - LOCAL_FALLBACK_TIMEOUT_S=${LOCAL_FALLBACK_TIMEOUT_S:-60}
+      - LOCAL_STREAM_TIMEOUT_S=${LOCAL_STREAM_TIMEOUT_S:-600}
+      - LLM_EXTERNAL_RETRY_ATTEMPTS=${LLM_EXTERNAL_RETRY_ATTEMPTS:-0}
+      - LLM_LOCAL_RETRY_ATTEMPTS=${LLM_LOCAL_RETRY_ATTEMPTS:-0}
+      - EXTERNAL_STREAM_VIA_NONSTREAM_FALLBACK=false
+      - EXTERNAL_RATE_LIMIT_COOLDOWN_S=${EXTERNAL_RATE_LIMIT_COOLDOWN_S:-90}
+      - EXTERNAL_TIMEOUT_COOLDOWN_S=${EXTERNAL_TIMEOUT_COOLDOWN_S:-90}
+      - EXTERNAL_QUOTA_COOLDOWN_S=${EXTERNAL_QUOTA_COOLDOWN_S:-900}
+      - LONG_TERM_MEMORY_ENABLED=${LONG_TERM_MEMORY_ENABLED:-true}
+      - LONG_TERM_MEMORY_INCLUDE_GLOBAL=${LONG_TERM_MEMORY_INCLUDE_GLOBAL:-true}
+      - LONG_TERM_MEMORY_GLOBAL_WORKSPACE_ID=${LONG_TERM_MEMORY_GLOBAL_WORKSPACE_ID:-global_memory}
+      - LONG_TERM_MEMORY_TOP_K=${LONG_TERM_MEMORY_TOP_K:-3}
+      - LONG_TERM_MEMORY_SCORE_THRESHOLD=${LONG_TERM_MEMORY_SCORE_THRESHOLD:-0.75}
+      - LONG_TERM_MEMORY_MAX_WRITES_PER_TURN=${LONG_TERM_MEMORY_MAX_WRITES_PER_TURN:-2}
+      - LONG_TERM_MEMORY_PRUNE_ENABLED=${LONG_TERM_MEMORY_PRUNE_ENABLED:-true}
+      - LONG_TERM_MEMORY_PRUNE_INTERVAL_S=${LONG_TERM_MEMORY_PRUNE_INTERVAL_S:-86400}
+      - LONG_TERM_MEMORY_PRUNE_MAX_ITEMS_PER_SCOPE=${LONG_TERM_MEMORY_PRUNE_MAX_ITEMS_PER_SCOPE:-800}
+      - LONG_TERM_MEMORY_PRUNE_MIN_SCORE=${LONG_TERM_MEMORY_PRUNE_MIN_SCORE:-0.2}
+      - DAILY_COST_ALERT=${DAILY_COST_ALERT:-5.0}
+      - MONTHLY_BUDGET_LIMIT=${MONTHLY_BUDGET_LIMIT:-100.0}
+      - GATEWAY_LLM_BASE_URL=http://ai-gateway:4000
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - LITELLM_ROUTER_NUM_RETRIES=${LITELLM_ROUTER_NUM_RETRIES:-0}
+      - LITELLM_ENABLE_INTERNAL_FALLBACKS=${LITELLM_ENABLE_INTERNAL_FALLBACKS:-true}
+      - MODELS_CONFIG_PATH=/app/models.yaml
+      - LOCALAI_MODELS_DIR=/opt/agntsio/models
+      - LITELLM_CONFIG_PATH=/app/litellm-config.yaml
+      - ANYTHINGLLM_CONTEXT_WINDOWS_PATH=/app/context-windows.json
+      - SHARED_STATE_ENABLED=${SHARED_STATE_ENABLED:-true}
+      - SHARED_STATE_BACKEND=${SHARED_STATE_BACKEND:-redis}
+      - SHARED_STATE_PATH=${SHARED_STATE_PATH:-/tmp/prompt_optimizer_state.db}
+      - SHARED_STATE_URL=${SHARED_STATE_URL:-redis://shared-state-redis:6379/0}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./models:/opt/agntsio/models:ro
+      - ./models.yaml:/app/models.yaml:ro
+      - ./prompt-optimizer-repo/litellm-config.yaml:/app/litellm-config.yaml:rw
+      - ./volumes/anythingllm_storage/models/context-windows/context-windows.json:/app/context-windows.json:rw
+    restart: unless-stopped
+
+  litellm:
+    image: litellm/litellm:v1.81.14-stable.gpt-5.4-patch8
+    container_name: ai-gateway
+    command: ["--config", "/app/config.yaml"]
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./prompt-optimizer-repo/litellm-config.yaml:/app/config.yaml
+      - ./configuration/litellm/schema.prisma:/usr/lib/python3.13/site-packages/litellm_proxy_extras/schema.prisma:ro
+    environment:
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - LITELLM_PROMETHEUS_METRICS=True
+      - LITELLM_METRICS_PROTECT=False
+      - LITELLM_LOG=${LITELLM_LOG:-ERROR}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DATABASE_URL=postgresql://litellm:${LITELLM_DB_PASSWORD:-litellm-db-pwd}@litellm-db:5432/litellm
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+      prompt-optimizer:
+        condition: service_started
+    networks:
+      default:
+        aliases:
+          - ai-gateway
+    restart: unless-stopped
+
+  litellm-db:
+    image: postgres:16-alpine
+    container_name: litellm-db
+    environment:
+      - POSTGRES_DB=litellm
+      - POSTGRES_USER=litellm
+      - POSTGRES_PASSWORD=${LITELLM_DB_PASSWORD:-litellm-db-pwd}
+    volumes:
+      - ./volumes/litellm_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+
+  searxng:
+    image: docker.io/searxng/searxng:latest
+    container_name: searxng
+    restart: unless-stopped
+    ports:
+      - "8888:8080"
+    volumes:
+      - ./searxng:/etc/searxng:rw
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8888/
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "1"
+
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  models:
+  images:
