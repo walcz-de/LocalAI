@@ -444,6 +444,12 @@ RUN <<'EOT' bash
 set -euxo pipefail
 if [ "${BUILD_TYPE}" = "hipblas" ]; then
   cd /build/backend/cpp/llama-cpp
+  # Remove any llama.cpp directory that came from the COPY context.
+  # The Makefile's `llama.cpp` target clones at LLAMA_VERSION, which is the
+  # correct commit (with common/chat-auto-parser.h).  If the directory already
+  # exists from COPY, make considers the dependency satisfied and skips the
+  # clone — potentially leaving us with the wrong commit.
+  rm -rf llama.cpp
   # Pass AMDGPU_TARGETS explicitly on the make command line so it propagates
   # through all recursive $(MAKE) calls without being overridden by the ?=
   # default in sub-Makefiles.  Without this, cmake receives -DAMDGPU_TARGETS
