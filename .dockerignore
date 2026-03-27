@@ -10,6 +10,15 @@ backend/go/*/build
 backend/go/*/.cache
 backend/go/*/sources
 backend/go/*/package
+
+# llama-cpp build variant dirs — created at build time, must not be copied
+# into the Docker build context (stale grpc-server.cpp would override the
+# current one from llama-cpp/ and break compilation)
+backend/cpp/llama-cpp-fallback-build/
+backend/cpp/llama-cpp-grpc-build/
+backend/cpp/llama-cpp-avx-build/
+backend/cpp/llama-cpp-avx2-build/
+backend/cpp/llama-cpp-avx512-build/
 examples/rwkv/models
 examples/**/models
 Dockerfile*
