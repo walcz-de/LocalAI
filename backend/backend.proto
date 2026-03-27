@@ -511,6 +511,9 @@ message ToolFormatMarkers {
   string call_id_position = 29;    // "none", "pre_func_name", "between_func_and_args", "post_args"
   string call_id_prefix = 30;      // e.g., "[CALL_ID]"
   string call_id_suffix = 31;      // e.g., ""
+
+  // Python dict style arguments (tool_format_analysis::uses_python_dicts)
+  bool uses_python_dicts = 32;
 }
 
 message AudioEncodeRequest {

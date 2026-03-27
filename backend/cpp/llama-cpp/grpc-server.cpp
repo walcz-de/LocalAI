@@ -2722,6 +2722,7 @@ public:
                         }
                         tf->set_call_id_prefix(ap.tools.call_id.prefix);
                         tf->set_call_id_suffix(ap.tools.call_id.suffix);
+                        tf->set_uses_python_dicts(ap.tools.format.uses_python_dicts);
 
                         // Reasoning markers
                         tf->set_reasoning_start(ap.reasoning.start);
