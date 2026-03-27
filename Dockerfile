@@ -420,16 +420,20 @@ COPY ./backend ./backend
 COPY ./scripts ./scripts
 
 # Install rocWMMA headers from source (rocwmma-dev is not in ROCm 7.11 apt repo)
+# /opt/rocm/include may be a symlink; resolve it with readlink -f so mkdir -p
+# can create the rocwmma subdir inside the real target directory.
 RUN if [ "${BUILD_TYPE}" = "hipblas" ]; then \
         git clone --depth 1 https://github.com/ROCm/rocWMMA /tmp/rocwmma && \
-        mkdir -p /opt/rocm/include/rocwmma && \
-        cp -r /tmp/rocwmma/library/include/rocwmma/. /opt/rocm/include/rocwmma/ && \
+        ROCM_INC=$(readlink -f /opt/rocm/include 2>/dev/null || echo /opt/rocm/include) && \
+        mkdir -p "${ROCM_INC}/rocwmma" && \
+        cp -r /tmp/rocwmma/library/include/rocwmma/. "${ROCM_INC}/rocwmma/" && \
         rm -rf /tmp/rocwmma ; \
     fi
 # Write rocwmma-version.hpp with known content (avoids cmake configure_file dependency)
 RUN <<'EOT' bash
 if [ "${BUILD_TYPE}" = "hipblas" ]; then
-    cat > /opt/rocm/include/rocwmma/rocwmma-version.hpp << 'ROCWMMA_EOF'
+    ROCM_INC=$(readlink -f /opt/rocm/include 2>/dev/null || echo /opt/rocm/include)
+    cat > "${ROCM_INC}/rocwmma/rocwmma-version.hpp" << 'ROCWMMA_EOF'
 #ifndef ROCWMMA_API_VERSION_HPP
 #define ROCWMMA_API_VERSION_HPP
 #define ROCWMMA_VERSION_MAJOR 2
