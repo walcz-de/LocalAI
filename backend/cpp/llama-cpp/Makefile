@@ -1,8 +1,5 @@
 
-# Pinned to last verified-working commit for gfx1151/ROCm build.
-# a970515b breaks our grpc-server.cpp: autoparser::tool_format_analysis API
-# changed (uses_python_dicts field missing). Revisit when upstream fixes this.
-LLAMA_VERSION?=9f102a1407ed5d73b8c954f32edab50f8dfa3f58
+LLAMA_VERSION?=a970515bdb0b1d09519106847660b0d0c84d2472
 LLAMA_REPO?=https://github.com/ggerganov/llama.cpp
 
 CMAKE_ARGS?=
