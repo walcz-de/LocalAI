@@ -51,7 +51,7 @@ type Item struct {
 // MarshalJSON serialises Item so that the "embedding" field is either a float array
 // or a base64 string depending on which field is populated.  This satisfies the
 // OpenAI API encoding_format contract: the Node.js SDK (v4+) sends
-// encoding_format=base64 and expects a base64 string back.
+// encoding_format=base64 by default and expects a base64 string back.
 func (item Item) MarshalJSON() ([]byte, error) {
 	type itemFields struct {
 		Embedding interface{} `json:"embedding,omitempty"`
