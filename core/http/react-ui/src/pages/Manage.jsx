@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
 import ResourceMonitor from '../components/ResourceMonitor'
+import ConfirmDialog from '../components/ConfirmDialog'
 import { useModels } from '../hooks/useModels'
 import { backendControlApi, modelsApi, backendsApi, systemApi } from '../utils/api'
 
@@ -21,6 +22,7 @@ export default function Manage() {
   const [backendsLoading, setBackendsLoading] = useState(true)
   const [reloading, setReloading] = useState(false)
   const [reinstallingBackends, setReinstallingBackends] = useState(new Set())
+  const [confirmDialog, setConfirmDialog] = useState(null)
 
   const handleTabChange = (tab) => {
     setActiveTab(tab)
@@ -51,34 +53,47 @@ export default function Manage() {
   }, [])
 
   useEffect(() => {
-    if (activeTab === 'models') {
-      fetchLoadedModels()
-    } else {
-      fetchBackends()
-    }
-  }, [activeTab, fetchLoadedModels, fetchBackends])
+    fetchLoadedModels()
+    fetchBackends()
+  }, [fetchLoadedModels, fetchBackends])
 
-  const handleStopModel = async (modelName) => {
-    if (!confirm(`Stop model ${modelName}?`)) return
-    try {
-      await backendControlApi.shutdown({ model: modelName })
-      addToast(`Stopped ${modelName}`, 'success')
-      setTimeout(fetchLoadedModels, 500)
-    } catch (err) {
-      addToast(`Failed to stop: ${err.message}`, 'error')
-    }
+  const handleStopModel = (modelName) => {
+    setConfirmDialog({
+      title: 'Stop Model',
+      message: `Stop model ${modelName}?`,
+      confirmLabel: 'Stop',
+      danger: true,
+      onConfirm: async () => {
+        setConfirmDialog(null)
+        try {
+          await backendControlApi.shutdown({ model: modelName })
+          addToast(`Stopped ${modelName}`, 'success')
+          setTimeout(fetchLoadedModels, 500)
+        } catch (err) {
+          addToast(`Failed to stop: ${err.message}`, 'error')
+        }
+      },
+    })
   }
 
-  const handleDeleteModel = async (modelName) => {
-    if (!confirm(`Delete model ${modelName}? This cannot be undone.`)) return
-    try {
-      await modelsApi.deleteByName(modelName)
-      addToast(`Deleted ${modelName}`, 'success')
-      refetchModels()
-      fetchLoadedModels()
-    } catch (err) {
-      addToast(`Failed to delete: ${err.message}`, 'error')
-    }
+  const handleDeleteModel = (modelName) => {
+    setConfirmDialog({
+      title: 'Delete Model',
+      message: `Delete model ${modelName}? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      danger: true,
+      onConfirm: async () => {
+        setConfirmDialog(null)
+        try {
+          await modelsApi.deleteByName(modelName)
+          addToast(`Deleted ${modelName}`, 'success')
+          refetchModels()
+          fetchLoadedModels()
+        } catch (err) {
+          addToast(`Failed to delete: ${err.message}`, 'error')
+        }
+      },
+    })
   }
 
   const handleReload = async () => {
@@ -109,15 +124,23 @@ export default function Manage() {
     }
   }
 
-  const handleDeleteBackend = async (name) => {
-    if (!confirm(`Delete backend ${name}?`)) return
-    try {
-      await backendsApi.deleteInstalled(name)
-      addToast(`Deleted backend ${name}`, 'success')
-      fetchBackends()
-    } catch (err) {
-      addToast(`Failed to delete backend: ${err.message}`, 'error')
-    }
+  const handleDeleteBackend = (name) => {
+    setConfirmDialog({
+      title: 'Delete Backend',
+      message: `Delete backend ${name}?`,
+      confirmLabel: 'Delete',
+      danger: true,
+      onConfirm: async () => {
+        setConfirmDialog(null)
+        try {
+          await backendsApi.deleteInstalled(name)
+          addToast(`Deleted backend ${name}`, 'success')
+          fetchBackends()
+        } catch (err) {
+          addToast(`Failed to delete backend: ${err.message}`, 'error')
+        }
+      },
+    })
   }
 
   return (
@@ -207,6 +230,14 @@ export default function Manage() {
                         >
                           <i className="fas fa-pen-to-square" />
                         </a>
+                        <a
+                          href="#"
+                          onClick={(e) => { e.preventDefault(); navigate(`/app/backend-logs/${encodeURIComponent(model.id)}`) }}
+                          style={{ fontSize: '0.75rem', color: 'var(--color-primary)' }}
+                          title="Backend logs"
+                        >
+                          <i className="fas fa-terminal" />
+                        </a>
                       </div>
                     </td>
                     <td>
@@ -221,7 +252,7 @@ export default function Manage() {
                       )}
                     </td>
                     <td>
-                      <span className="badge badge-info">Auto</span>
+                      <span className="badge badge-info">{model.backend || 'Auto'}</span>
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
@@ -374,6 +405,16 @@ export default function Manage() {
         )}
       </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDialog}
+        title={confirmDialog?.title}
+        message={confirmDialog?.message}
+        confirmLabel={confirmDialog?.confirmLabel}
+        danger={confirmDialog?.danger}
+        onConfirm={confirmDialog?.onConfirm}
+        onCancel={() => setConfirmDialog(null)}
+      />
     </div>
   )
 }

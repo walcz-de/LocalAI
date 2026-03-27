@@ -3,52 +3,10 @@ import { useOutletContext } from 'react-router-dom'
 import { settingsApi, resourcesApi } from '../utils/api'
 import LoadingSpinner from '../components/LoadingSpinner'
 import SearchableModelSelect from '../components/SearchableModelSelect'
+import { CAP_CHAT } from '../utils/capabilities'
+import Toggle from '../components/Toggle'
+import SettingRow from '../components/SettingRow'
 import { formatBytes, percentColor } from '../utils/format'
-
-function Toggle({ checked, onChange, disabled }) {
-  return (
-    <label style={{
-      position: 'relative', display: 'inline-block', width: 40, height: 22, cursor: disabled ? 'not-allowed' : 'pointer',
-      opacity: disabled ? 0.5 : 1,
-    }}>
-      <input
-        type="checkbox"
-        checked={checked || false}
-        onChange={(e) => onChange(e.target.checked)}
-        disabled={disabled}
-        style={{ display: 'none' }}
-      />
-      <span style={{
-        position: 'absolute', inset: 0, borderRadius: 22,
-        background: checked ? 'var(--color-primary)' : 'var(--color-toggle-off)',
-        transition: 'background 200ms',
-      }}>
-        <span style={{
-          position: 'absolute', top: 2, left: checked ? 20 : 2,
-          width: 18, height: 18, borderRadius: '50%',
-          background: '#fff', transition: 'left 200ms',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
-        }} />
-      </span>
-    </label>
-  )
-}
-
-function SettingRow({ label, description, children }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: 'var(--spacing-sm) 0',
-      borderBottom: '1px solid var(--color-border-subtle)',
-    }}>
-      <div style={{ flex: 1, marginRight: 'var(--spacing-md)' }}>
-        <div style={{ fontSize: '0.875rem', fontWeight: 500 }}>{label}</div>
-        {description && <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2 }}>{description}</div>}
-      </div>
-      <div style={{ flexShrink: 0 }}>{children}</div>
-    </div>
-  )
-}
 
 const SECTIONS = [
   { id: 'watchdog', icon: 'fa-shield-halved', color: 'var(--color-primary)', label: 'Watchdog' },
@@ -68,6 +26,7 @@ const SECTIONS = [
 export default function Settings() {
   const { addToast } = useOutletContext()
   const [settings, setSettings] = useState(null)
+  const [initialSettings, setInitialSettings] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [resources, setResources] = useState(null)
@@ -81,6 +40,7 @@ export default function Settings() {
     try {
       const data = await settingsApi.get()
       setSettings(data)
+      setInitialSettings(structuredClone(data))
     } catch (err) {
       addToast(`Failed to load settings: ${err.message}`, 'error')
     } finally {
@@ -99,6 +59,7 @@ export default function Settings() {
     setSaving(true)
     try {
       await settingsApi.save(settings)
+      setInitialSettings(structuredClone(settings))
       addToast('Settings saved successfully', 'success')
     } catch (err) {
       addToast(`Save failed: ${err.message}`, 'error')
@@ -140,7 +101,8 @@ export default function Settings() {
   if (loading) return <div className="page" style={{ display: 'flex', justifyContent: 'center', padding: 'var(--spacing-xl)' }}><LoadingSpinner size="lg" /></div>
   if (!settings) return <div className="page"><div className="empty-state"><p className="empty-state-text">Settings not available</p></div></div>
 
-  const watchdogEnabled = settings.watchdog_idle || settings.watchdog_busy
+  const isDirty = settings && initialSettings && JSON.stringify(settings) !== JSON.stringify(initialSettings)
+  const watchdogEnabled = settings.watchdog_idle_enabled || settings.watchdog_busy_enabled
 
   return (
     <div className="page" style={{ maxWidth: 1000, padding: 0 }}>
@@ -153,8 +115,8 @@ export default function Settings() {
           <h1 className="page-title">Settings</h1>
           <p className="page-subtitle">Configure LocalAI runtime settings</p>
         </div>
-        <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-          {saving ? <><LoadingSpinner size="sm" /> Saving...</> : <><i className="fas fa-save" /> Save</>}
+        <button className={`btn ${isDirty ? 'btn-primary' : 'btn-secondary'}`} onClick={handleSave} disabled={saving || !isDirty}>
+          {saving ? <><LoadingSpinner size="sm" /> Saving...</> : <><i className="fas fa-save" /> {isDirty ? 'Save Changes' : 'Saved'}</>}
         </button>
       </div>
 
@@ -205,31 +167,31 @@ export default function Settings() {
             </h3>
             <div className="card">
               <SettingRow label="Enable Watchdog" description="Automatically monitor and manage backend processes">
-                <Toggle checked={settings.watchdog_idle || settings.watchdog_busy} onChange={(v) => { update('watchdog_idle', v); update('watchdog_busy', v) }} />
+                <Toggle checked={settings.watchdog_idle_enabled || settings.watchdog_busy_enabled} onChange={(v) => { update('watchdog_idle_enabled', v); update('watchdog_busy_enabled', v) }} />
               </SettingRow>
               <SettingRow label="Enable Idle Check" description="Automatically stop backends that have been idle too long">
-                <Toggle checked={settings.watchdog_idle} onChange={(v) => update('watchdog_idle', v)} disabled={!watchdogEnabled} />
+                <Toggle checked={settings.watchdog_idle_enabled} onChange={(v) => update('watchdog_idle_enabled', v)} disabled={!watchdogEnabled} />
               </SettingRow>
               <SettingRow label="Idle Timeout" description="Time before an idle backend is stopped (e.g. 15m, 1h)">
-                <input className="input" style={{ width: 120 }} value={settings.watchdog_idle_timeout || ''} onChange={(e) => update('watchdog_idle_timeout', e.target.value)} placeholder="15m" disabled={!settings.watchdog_idle} />
+                <input className="input" style={{ width: 120 }} value={settings.watchdog_idle_timeout || ''} onChange={(e) => update('watchdog_idle_timeout', e.target.value)} placeholder="15m" disabled={!settings.watchdog_idle_enabled} />
               </SettingRow>
               <SettingRow label="Enable Busy Check" description="Stop stuck/busy processes that exceed timeout">
-                <Toggle checked={settings.watchdog_busy} onChange={(v) => update('watchdog_busy', v)} disabled={!watchdogEnabled} />
+                <Toggle checked={settings.watchdog_busy_enabled} onChange={(v) => update('watchdog_busy_enabled', v)} disabled={!watchdogEnabled} />
               </SettingRow>
               <SettingRow label="Busy Timeout" description="Time before a busy backend is stopped (e.g. 5m)">
-                <input className="input" style={{ width: 120 }} value={settings.watchdog_busy_timeout || ''} onChange={(e) => update('watchdog_busy_timeout', e.target.value)} placeholder="5m" disabled={!settings.watchdog_busy} />
+                <input className="input" style={{ width: 120 }} value={settings.watchdog_busy_timeout || ''} onChange={(e) => update('watchdog_busy_timeout', e.target.value)} placeholder="5m" disabled={!settings.watchdog_busy_enabled} />
               </SettingRow>
               <SettingRow label="Check Interval" description="How often the watchdog checks backends (e.g. 2s)">
-                <input className="input" style={{ width: 120 }} value={settings.watchdog_check_interval || ''} onChange={(e) => update('watchdog_check_interval', e.target.value)} placeholder="2s" />
+                <input className="input" style={{ width: 120 }} value={settings.watchdog_interval || ''} onChange={(e) => update('watchdog_interval', e.target.value)} placeholder="2s" />
               </SettingRow>
               <SettingRow label="Force Eviction When Busy" description="Allow model eviction even during active API calls">
-                <Toggle checked={settings.force_eviction} onChange={(v) => update('force_eviction', v)} />
+                <Toggle checked={settings.force_eviction_when_busy} onChange={(v) => update('force_eviction_when_busy', v)} />
               </SettingRow>
               <SettingRow label="LRU Eviction Max Retries" description="Maximum retries waiting for busy models before eviction">
-                <input className="input" type="number" style={{ width: 120 }} value={settings.lru_retries ?? ''} onChange={(e) => update('lru_retries', parseInt(e.target.value) || 0)} placeholder="30" />
+                <input className="input" type="number" style={{ width: 120 }} value={settings.lru_eviction_max_retries ?? ''} onChange={(e) => update('lru_eviction_max_retries', parseInt(e.target.value) || 0)} placeholder="30" />
               </SettingRow>
               <SettingRow label="LRU Eviction Retry Interval" description="Wait between eviction retries (e.g. 1s)">
-                <input className="input" style={{ width: 120 }} value={settings.lru_retry_interval || ''} onChange={(e) => update('lru_retry_interval', e.target.value)} placeholder="1s" />
+                <input className="input" style={{ width: 120 }} value={settings.lru_eviction_retry_interval || ''} onChange={(e) => update('lru_eviction_retry_interval', e.target.value)} placeholder="1s" />
               </SettingRow>
             </div>
           </div>
@@ -282,13 +244,13 @@ export default function Settings() {
                 </div>
               )}
               <SettingRow label="Enable Memory Reclaimer" description="Evict backends when memory usage exceeds threshold">
-                <Toggle checked={settings.memory_reclaimer} onChange={(v) => update('memory_reclaimer', v)} />
+                <Toggle checked={settings.memory_reclaimer_enabled} onChange={(v) => update('memory_reclaimer_enabled', v)} />
               </SettingRow>
               <SettingRow label="Memory Threshold (%)" description="Eviction triggers when usage exceeds this percentage">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-                  <input type="range" min="50" max="100" value={settings.memory_threshold || 80} onChange={(e) => update('memory_threshold', parseInt(e.target.value))} disabled={!settings.memory_reclaimer} style={{ width: 120 }} />
-                  <span style={{ fontSize: '0.875rem', fontWeight: 600, minWidth: 40, textAlign: 'right', color: percentColor(settings.memory_threshold || 80) }}>
-                    {settings.memory_threshold || 80}%
+                  <input type="range" min="50" max="100" value={Math.round((settings.memory_reclaimer_threshold || 0.8) * 100)} onChange={(e) => update('memory_reclaimer_threshold', parseInt(e.target.value) / 100)} disabled={!settings.memory_reclaimer_enabled} style={{ width: 120 }} />
+                  <span style={{ fontSize: '0.875rem', fontWeight: 600, minWidth: 40, textAlign: 'right', color: percentColor(Math.round((settings.memory_reclaimer_threshold || 0.8) * 100)) }}>
+                    {Math.round((settings.memory_reclaimer_threshold || 0.8) * 100)}%
                   </span>
                 </div>
               </SettingRow>
@@ -342,6 +304,9 @@ export default function Settings() {
               </SettingRow>
               <SettingRow label="Max Items" description="Maximum number of trace items to retain (0 = unlimited)">
                 <input className="input" type="number" style={{ width: 120 }} value={settings.tracing_max_items ?? ''} onChange={(e) => update('tracing_max_items', parseInt(e.target.value) || 0)} placeholder="100" disabled={!settings.enable_tracing} />
+              </SettingRow>
+              <SettingRow label="Enable Backend Logging" description="Capture backend process output per model (without requiring debug mode)">
+                <Toggle checked={settings.enable_backend_logging} onChange={(v) => update('enable_backend_logging', v)} />
               </SettingRow>
             </div>
           </div>
@@ -472,7 +437,7 @@ export default function Settings() {
                 <Toggle checked={settings.agent_pool_enabled ?? true} onChange={(v) => update('agent_pool_enabled', v)} />
               </SettingRow>
               <SettingRow label="Default Model" description="Default LLM model for agents">
-                <SearchableModelSelect value={settings.agent_pool_default_model || ''} onChange={(v) => update('agent_pool_default_model', v)} capability="FLAG_CHAT" placeholder="e.g. gpt-4" />
+                <SearchableModelSelect value={settings.agent_pool_default_model || ''} onChange={(v) => update('agent_pool_default_model', v)} capability={CAP_CHAT} placeholder="e.g. gpt-4" />
               </SettingRow>
               <SettingRow label="Embedding Model" description="Model used for knowledge base embeddings">
                 <SearchableModelSelect value={settings.agent_pool_embedding_model || ''} onChange={(v) => update('agent_pool_embedding_model', v)} placeholder="granite-embedding-107m-multilingual" />

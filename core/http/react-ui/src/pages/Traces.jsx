@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { useOutletContext } from 'react-router-dom'
-import { Link } from 'react-router-dom'
+import { useOutletContext, useSearchParams } from 'react-router-dom'
 import { tracesApi, settingsApi } from '../utils/api'
+import { formatTimestamp } from '../utils/format'
 import LoadingSpinner from '../components/LoadingSpinner'
+import Toggle from '../components/Toggle'
+import SettingRow from '../components/SettingRow'
 
 const AUDIO_DATA_KEYS = new Set([
   'audio_wav_base64', 'audio_duration_s', 'audio_snippet_s',
@@ -16,12 +18,6 @@ function formatDuration(ns) {
   if (ns < 1_000_000) return `${(ns / 1000).toFixed(1)}\u00b5s`
   if (ns < 1_000_000_000) return `${(ns / 1_000_000).toFixed(1)}ms`
   return `${(ns / 1_000_000_000).toFixed(2)}s`
-}
-
-function formatTimestamp(ts) {
-  if (!ts) return '-'
-  const d = new Date(ts)
-  return d.toLocaleTimeString() + '.' + String(d.getMilliseconds()).padStart(3, '0')
 }
 
 function decodeTraceBody(body) {
@@ -74,6 +70,8 @@ const TYPE_COLORS = {
   sound_generation: { bg: 'rgba(20,184,166,0.15)', color: '#2dd4bf' },
   rerank: { bg: 'rgba(99,102,241,0.15)', color: '#818cf8' },
   tokenize: { bg: 'rgba(107,114,128,0.15)', color: '#9ca3af' },
+  detection: { bg: 'rgba(14,165,233,0.15)', color: '#38bdf8' },
+  model_load: { bg: 'rgba(239,68,68,0.15)', color: '#f87171' },
 }
 
 function typeBadgeStyle(type) {
@@ -211,12 +209,24 @@ function BackendTraceDetail({ trace }) {
       {/* Error banner */}
       {trace.error && (
         <div style={{
-          background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+          background: 'var(--color-error-light)', border: '1px solid var(--color-error-border)',
           borderRadius: 'var(--radius-md)', padding: 'var(--spacing-sm)', marginBottom: 'var(--spacing-md)',
           display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)',
         }}>
           <i className="fas fa-exclamation-triangle" style={{ color: 'var(--color-error)' }} />
           <span style={{ color: 'var(--color-error)', fontSize: '0.8125rem' }}>{trace.error}</span>
+        </div>
+      )}
+
+      {/* Backend logs link */}
+      {trace.model_name && (
+        <div style={{ marginBottom: 'var(--spacing-md)' }}>
+          <a
+            href={`/app/backend-logs/${encodeURIComponent(trace.model_name)}${trace.timestamp ? `?from=${encodeURIComponent(trace.timestamp)}` : ''}`}
+            style={{ fontSize: '0.8125rem', color: 'var(--color-primary)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}
+          >
+            <i className="fas fa-terminal" /> View backend logs
+          </a>
         </div>
       )}
 
@@ -233,6 +243,16 @@ function BackendTraceDetail({ trace }) {
 function ApiTraceDetail({ trace }) {
   return (
     <div style={{ padding: 'var(--spacing-md)', background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border)' }}>
+      {trace.error && (
+        <div style={{
+          background: 'var(--color-error-light)', border: '1px solid var(--color-error-border)',
+          borderRadius: 'var(--radius-md)', padding: 'var(--spacing-sm)', marginBottom: 'var(--spacing-md)',
+          display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)',
+        }}>
+          <i className="fas fa-exclamation-triangle" style={{ color: 'var(--color-error)' }} />
+          <span style={{ color: 'var(--color-error)', fontSize: '0.8125rem', fontFamily: 'monospace', wordBreak: 'break-all' }}>{trace.error}</span>
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
         <div>
           <h4 style={{ fontSize: '0.8125rem', fontWeight: 600, marginBottom: 'var(--spacing-xs)' }}>Request Body</h4>
@@ -263,20 +283,45 @@ function ApiTraceDetail({ trace }) {
 
 export default function Traces() {
   const { addToast } = useOutletContext()
-  const [activeTab, setActiveTab] = useState('api')
+  const [searchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') === 'backend' ? 'backend' : 'api')
   const [traces, setTraces] = useState([])
   const [apiCount, setApiCount] = useState(0)
   const [backendCount, setBackendCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [expandedRow, setExpandedRow] = useState(null)
   const [tracingEnabled, setTracingEnabled] = useState(null)
+  const [backendLoggingEnabled, setBackendLoggingEnabled] = useState(null)
+  const [settings, setSettings] = useState(null)
+  const [settingsExpanded, setSettingsExpanded] = useState(false)
+  const [saving, setSaving] = useState(false)
   const refreshRef = useRef(null)
 
   useEffect(() => {
     settingsApi.get()
-      .then(data => setTracingEnabled(!!data.enable_tracing))
+      .then(data => {
+        setTracingEnabled(!!data.enable_tracing)
+        setBackendLoggingEnabled(!!data.enable_backend_logging)
+        setSettings(data)
+        if (!data.enable_tracing) setSettingsExpanded(true)
+      })
       .catch(() => {})
   }, [])
+
+  const handleSaveSettings = async () => {
+    setSaving(true)
+    try {
+      await settingsApi.save(settings)
+      setTracingEnabled(!!settings.enable_tracing)
+      setBackendLoggingEnabled(!!settings.enable_backend_logging)
+      addToast('Tracing settings saved', 'success')
+      if (settings.enable_tracing) setSettingsExpanded(false)
+    } catch (err) {
+      addToast(`Save failed: ${err.message}`, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const fetchTraces = useCallback(async () => {
     try {
@@ -356,32 +401,72 @@ export default function Traces() {
         <button className="btn btn-secondary btn-sm" onClick={handleExport} disabled={traces.length === 0}><i className="fas fa-download" /> Export</button>
       </div>
 
-      {tracingEnabled === false && (
+      {settings && (() => {
+        const allEnabled = tracingEnabled && backendLoggingEnabled
+        return (
         <div style={{
-          background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)',
-          borderRadius: 'var(--radius-md)', padding: 'var(--spacing-sm) var(--spacing-md)',
-          marginBottom: 'var(--spacing-md)', display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)',
+          border: `1px solid ${allEnabled ? 'var(--color-success-border)' : 'var(--color-warning-border)'}`,
+          borderRadius: 'var(--radius-md)',
+          marginBottom: 'var(--spacing-md)',
+          overflow: 'hidden',
         }}>
-          <i className="fas fa-exclamation-triangle" style={{ color: '#facc15', flexShrink: 0 }} />
-          <span style={{ fontSize: '0.8125rem' }}>
-            Tracing is currently <strong>disabled</strong>. New requests will not be recorded.{' '}
-            <Link to="/settings" style={{ color: 'var(--color-primary)' }}>Enable in Settings</Link>
-          </span>
+          <button
+            onClick={() => setSettingsExpanded(!settingsExpanded)}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: 'var(--spacing-sm) var(--spacing-md)',
+              background: allEnabled ? 'var(--color-success-light)' : 'var(--color-warning-light)',
+              border: 'none', cursor: 'pointer',
+              color: 'var(--color-text-primary)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+              <i className={`fas ${allEnabled ? 'fa-circle-check' : 'fa-exclamation-triangle'}`}
+                style={{ color: allEnabled ? 'var(--color-success)' : 'var(--color-warning)', flexShrink: 0 }} />
+              <span style={{ fontSize: '0.8125rem', textAlign: 'left' }}>
+                Tracing is <strong>{tracingEnabled ? 'enabled' : 'disabled'}</strong>
+                {' · Backend logging is '}<strong>{backendLoggingEnabled ? 'enabled' : 'disabled'}</strong>
+                {!tracingEnabled && ' — new requests will not be recorded'}
+              </span>
+            </div>
+            <i className={`fas fa-chevron-${settingsExpanded ? 'up' : 'down'}`}
+              style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', flexShrink: 0 }} />
+          </button>
+          {settingsExpanded && (
+            <div style={{ padding: '0 var(--spacing-md) var(--spacing-md)', background: 'var(--color-bg-secondary)', borderTop: '1px solid var(--color-border-subtle)' }}>
+              <SettingRow label="Enable Tracing" description="Record API requests, responses, and backend operations">
+                <Toggle
+                  checked={settings.enable_tracing}
+                  onChange={(v) => setSettings(prev => ({ ...prev, enable_tracing: v }))}
+                />
+              </SettingRow>
+              <SettingRow label="Max Items" description="Maximum trace items to retain (0 = unlimited)">
+                <input
+                  className="input"
+                  type="number"
+                  style={{ width: 120 }}
+                  value={settings.tracing_max_items ?? ''}
+                  onChange={(e) => setSettings(prev => ({ ...prev, tracing_max_items: parseInt(e.target.value) || 0 }))}
+                  placeholder="100"
+                  disabled={!settings.enable_tracing}
+                />
+              </SettingRow>
+              <SettingRow label="Enable Backend Logging" description="Capture backend process output per model (without requiring debug mode)">
+                <Toggle
+                  checked={settings.enable_backend_logging}
+                  onChange={(v) => setSettings(prev => ({ ...prev, enable_backend_logging: v }))}
+                />
+              </SettingRow>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--spacing-sm)' }}>
+                <button className="btn btn-primary btn-sm" onClick={handleSaveSettings} disabled={saving}>
+                  {saving ? <><LoadingSpinner size="sm" /> Saving...</> : <><i className="fas fa-save" /> Save</>}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-      )}
-      {tracingEnabled === true && (
-        <div style={{
-          background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)',
-          borderRadius: 'var(--radius-md)', padding: 'var(--spacing-sm) var(--spacing-md)',
-          marginBottom: 'var(--spacing-md)', display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)',
-        }}>
-          <i className="fas fa-circle-check" style={{ color: 'var(--color-success)', flexShrink: 0 }} />
-          <span style={{ fontSize: '0.8125rem' }}>
-            Tracing is <strong>enabled</strong>. Requests are being recorded.{' '}
-            <Link to="/settings" style={{ color: 'var(--color-primary)' }}>Manage in Settings</Link>
-          </span>
-        </div>
-      )}
+        )
+      })()}
 
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--spacing-xl)' }}><LoadingSpinner size="lg" /></div>
@@ -400,6 +485,7 @@ export default function Traces() {
                 <th>Method</th>
                 <th>Path</th>
                 <th>Status</th>
+                <th style={{ width: '40px' }}>Result</th>
               </tr>
             </thead>
             <tbody>
@@ -410,10 +496,15 @@ export default function Traces() {
                     <td><span className="badge badge-info">{trace.request?.method || '-'}</span></td>
                     <td style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8125rem' }}>{trace.request?.path || '-'}</td>
                     <td><span className={`badge ${(trace.response?.status || 0) < 400 ? 'badge-success' : 'badge-error'}`}>{trace.response?.status || '-'}</span></td>
+                    <td style={{ textAlign: 'center' }}>
+                      {trace.error
+                        ? <i className="fas fa-times-circle" style={{ color: 'var(--color-error)' }} title={trace.error} />
+                        : <i className="fas fa-check-circle" style={{ color: 'var(--color-success)' }} />}
+                    </td>
                   </tr>
                   {expandedRow === i && (
                     <tr>
-                      <td colSpan="4" style={{ padding: 0 }}>
+                      <td colSpan="5" style={{ padding: 0 }}>
                         <ApiTraceDetail trace={trace} />
                       </td>
                     </tr>

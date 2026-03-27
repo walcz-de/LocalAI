@@ -10,6 +10,7 @@ import (
 	"github.com/mudler/LocalAI/core/backend"
 	"github.com/mudler/LocalAI/core/config"
 	mcpTools "github.com/mudler/LocalAI/core/http/endpoints/mcp"
+	openaiEndpoint "github.com/mudler/LocalAI/core/http/endpoints/openai"
 	"github.com/mudler/LocalAI/core/http/middleware"
 	"github.com/mudler/LocalAI/core/schema"
 	"github.com/mudler/LocalAI/core/templates"
@@ -197,54 +198,24 @@ func handleAnthropicNonStream(c echo.Context, id string, input *schema.Anthropic
 			xlog.Debug("Anthropic MCP re-templating", "iteration", mcpIteration, "prompt_len", len(predInput))
 		}
 
-		images := []string{}
-		for _, m := range openAIReq.Messages {
-			images = append(images, m.StringImages...)
-		}
+		// Populate openAIReq fields for ComputeChoices
+		openAIReq.Tools = convertFuncsToOpenAITools(funcs)
+		openAIReq.ToolsChoice = input.ToolChoice
+		openAIReq.Metadata = input.Metadata
 
-		toolsJSON := ""
-		if len(funcs) > 0 {
-			openAITools := make([]functions.Tool, len(funcs))
-			for i, f := range funcs {
-				openAITools[i] = functions.Tool{Type: "function", Function: f}
-			}
-			if toolsBytes, err := json.Marshal(openAITools); err == nil {
-				toolsJSON = string(toolsBytes)
-			}
+		var result string
+		cb := func(s string, c *[]schema.Choice) {
+			result = s
 		}
-		toolChoiceJSON := ""
-		if input.ToolChoice != nil {
-			if toolChoiceBytes, err := json.Marshal(input.ToolChoice); err == nil {
-				toolChoiceJSON = string(toolChoiceBytes)
-			}
-		}
-
-		predFunc, err := backend.ModelInference(
-			input.Context, predInput, openAIReq.Messages, images, nil, nil, ml, cfg, cl, appConfig, nil, toolsJSON, toolChoiceJSON, nil, nil, nil, input.Metadata)
+		_, tokenUsage, chatDeltas, err := openaiEndpoint.ComputeChoices(openAIReq, predInput, cfg, cl, appConfig, ml, cb, nil)
 		if err != nil {
 			xlog.Error("Anthropic model inference failed", "error", err)
 			return sendAnthropicError(c, 500, "api_error", fmt.Sprintf("model inference failed: %v", err))
 		}
 
-		const maxEmptyRetries = 5
-		var prediction backend.LLMResponse
-		var result string
-		for attempt := 0; attempt <= maxEmptyRetries; attempt++ {
-			prediction, err = predFunc()
-			if err != nil {
-				xlog.Error("Anthropic prediction failed", "error", err)
-				return sendAnthropicError(c, 500, "api_error", fmt.Sprintf("prediction failed: %v", err))
-			}
-			result = backend.Finetune(*cfg, predInput, prediction.Response)
-			if result != "" || !shouldUseFn {
-				break
-			}
-			xlog.Warn("Anthropic: retrying prediction due to empty backend response", "attempt", attempt+1, "maxRetries", maxEmptyRetries)
-		}
-
 		// Try pre-parsed tool calls from C++ autoparser first, fall back to text parsing
 		var toolCalls []functions.FuncCallResults
-		if deltaToolCalls := functions.ToolCallsFromChatDeltas(prediction.ChatDeltas); len(deltaToolCalls) > 0 {
+		if deltaToolCalls := functions.ToolCallsFromChatDeltas(chatDeltas); len(deltaToolCalls) > 0 {
 			xlog.Debug("[ChatDeltas] Anthropic: using pre-parsed tool calls", "count", len(deltaToolCalls))
 			toolCalls = deltaToolCalls
 		} else {
@@ -335,6 +306,35 @@ func handleAnthropicNonStream(c echo.Context, id string, input *schema.Anthropic
 			if textContent != "" {
 				contentBlocks = append([]schema.AnthropicContentBlock{{Type: "text", Text: textContent}}, contentBlocks...)
 			}
+		} else if !shouldUseFn && cfg.FunctionsConfig.AutomaticToolParsingFallback && result != "" {
+			// Automatic tool parsing fallback: no tools in request but model emitted tool call markup
+			parsed := functions.ParseFunctionCall(result, cfg.FunctionsConfig)
+			if len(parsed) > 0 {
+				stopReason = "tool_use"
+				stripped := functions.StripToolCallMarkup(result)
+				if stripped != "" {
+					contentBlocks = append(contentBlocks, schema.AnthropicContentBlock{Type: "text", Text: stripped})
+				}
+				for i, fc := range parsed {
+					var inputArgs map[string]interface{}
+					if err := json.Unmarshal([]byte(fc.Arguments), &inputArgs); err != nil {
+						inputArgs = map[string]interface{}{"raw": fc.Arguments}
+					}
+					toolCallID := fc.ID
+					if toolCallID == "" {
+						toolCallID = fmt.Sprintf("toolu_%s_%d", id, i)
+					}
+					contentBlocks = append(contentBlocks, schema.AnthropicContentBlock{
+						Type:  "tool_use",
+						ID:    toolCallID,
+						Name:  fc.Name,
+						Input: inputArgs,
+					})
+				}
+			} else {
+				stopReason = "end_turn"
+				contentBlocks = []schema.AnthropicContentBlock{{Type: "text", Text: result}}
+			}
 		} else {
 			stopReason = "end_turn"
 			contentBlocks = []schema.AnthropicContentBlock{
@@ -350,8 +350,8 @@ func handleAnthropicNonStream(c echo.Context, id string, input *schema.Anthropic
 			StopReason: &stopReason,
 			Content:    contentBlocks,
 			Usage: schema.AnthropicUsage{
-				InputTokens:  prediction.Usage.Prompt,
-				OutputTokens: prediction.Usage.Completion,
+				InputTokens:  tokenUsage.Prompt,
+				OutputTokens: tokenUsage.Completion,
 			},
 		}
 
@@ -395,12 +395,6 @@ func handleAnthropicStream(c echo.Context, id string, input *schema.AnthropicReq
 		if mcpIteration > 0 {
 			predInput = evaluator.TemplateMessages(*openAIReq, openAIReq.Messages, cfg, funcs, shouldUseFn)
 			xlog.Debug("Anthropic MCP stream re-templating", "iteration", mcpIteration)
-		}
-
-		openAIMessages := openAIReq.Messages
-		images := []string{}
-		for _, m := range openAIMessages {
-			images = append(images, m.StringImages...)
 		}
 
 		// Track accumulated content for tool call detection
@@ -481,38 +475,19 @@ func handleAnthropicStream(c echo.Context, id string, input *schema.AnthropicReq
 			return true
 		}
 
-		toolsJSON := ""
-		if len(funcs) > 0 {
-			openAITools := make([]functions.Tool, len(funcs))
-			for i, f := range funcs {
-				openAITools[i] = functions.Tool{Type: "function", Function: f}
-			}
-			if toolsBytes, err := json.Marshal(openAITools); err == nil {
-				toolsJSON = string(toolsBytes)
-			}
-		}
-		toolChoiceJSON := ""
-		if input.ToolChoice != nil {
-			if toolChoiceBytes, err := json.Marshal(input.ToolChoice); err == nil {
-				toolChoiceJSON = string(toolChoiceBytes)
-			}
-		}
+		// Populate openAIReq fields for ComputeChoices
+		openAIReq.Tools = convertFuncsToOpenAITools(funcs)
+		openAIReq.ToolsChoice = input.ToolChoice
+		openAIReq.Metadata = input.Metadata
 
-		predFunc, err := backend.ModelInference(
-			input.Context, predInput, openAIMessages, images, nil, nil, ml, cfg, cl, appConfig, tokenCallback, toolsJSON, toolChoiceJSON, nil, nil, nil, input.Metadata)
+		_, tokenUsage, chatDeltas, err := openaiEndpoint.ComputeChoices(openAIReq, predInput, cfg, cl, appConfig, ml, func(s string, c *[]schema.Choice) {}, tokenCallback)
 		if err != nil {
 			xlog.Error("Anthropic stream model inference failed", "error", err)
 			return sendAnthropicError(c, 500, "api_error", fmt.Sprintf("model inference failed: %v", err))
 		}
 
-		prediction, err := predFunc()
-		if err != nil {
-			xlog.Error("Anthropic stream prediction failed", "error", err)
-			return sendAnthropicError(c, 500, "api_error", fmt.Sprintf("prediction failed: %v", err))
-		}
-
 		// Also check chat deltas for tool calls
-		if deltaToolCalls := functions.ToolCallsFromChatDeltas(prediction.ChatDeltas); len(deltaToolCalls) > 0 && len(collectedToolCalls) == 0 {
+		if deltaToolCalls := functions.ToolCallsFromChatDeltas(chatDeltas); len(deltaToolCalls) > 0 && len(collectedToolCalls) == 0 {
 			collectedToolCalls = deltaToolCalls
 		}
 
@@ -576,6 +551,51 @@ func handleAnthropicStream(c echo.Context, id string, input *schema.AnthropicReq
 			}
 		}
 
+		// Automatic tool parsing fallback for streaming: when no tools were requested
+		// but the model emitted tool call markup, parse and emit as tool_use blocks.
+		if !shouldUseFn && cfg.FunctionsConfig.AutomaticToolParsingFallback && accumulatedContent != "" && toolCallsEmitted == 0 {
+			parsed := functions.ParseFunctionCall(accumulatedContent, cfg.FunctionsConfig)
+			if len(parsed) > 0 {
+				// Close the text content block
+				sendAnthropicSSE(c, schema.AnthropicStreamEvent{
+					Type:  "content_block_stop",
+					Index: currentBlockIndex,
+				})
+				currentBlockIndex++
+				inToolCall = true
+
+				for i, fc := range parsed {
+					toolCallID := fc.ID
+					if toolCallID == "" {
+						toolCallID = fmt.Sprintf("toolu_%s_%d", id, i)
+					}
+					sendAnthropicSSE(c, schema.AnthropicStreamEvent{
+						Type:  "content_block_start",
+						Index: currentBlockIndex,
+						ContentBlock: &schema.AnthropicContentBlock{
+							Type: "tool_use",
+							ID:   toolCallID,
+							Name: fc.Name,
+						},
+					})
+					sendAnthropicSSE(c, schema.AnthropicStreamEvent{
+						Type:  "content_block_delta",
+						Index: currentBlockIndex,
+						Delta: &schema.AnthropicStreamDelta{
+							Type:        "input_json_delta",
+							PartialJSON: fc.Arguments,
+						},
+					})
+					sendAnthropicSSE(c, schema.AnthropicStreamEvent{
+						Type:  "content_block_stop",
+						Index: currentBlockIndex,
+					})
+					currentBlockIndex++
+					toolCallsEmitted++
+				}
+			}
+		}
+
 		// No MCP tools to execute, close stream
 		if !inToolCall {
 			sendAnthropicSSE(c, schema.AnthropicStreamEvent{
@@ -595,7 +615,7 @@ func handleAnthropicStream(c echo.Context, id string, input *schema.AnthropicReq
 				StopReason: &stopReason,
 			},
 			Usage: &schema.AnthropicUsage{
-				OutputTokens: prediction.Usage.Completion,
+				OutputTokens: tokenUsage.Completion,
 			},
 		})
 
@@ -611,6 +631,14 @@ func handleAnthropicStream(c echo.Context, id string, input *schema.AnthropicReq
 		Type: "message_stop",
 	})
 	return nil
+}
+
+func convertFuncsToOpenAITools(funcs functions.Functions) []functions.Tool {
+	tools := make([]functions.Tool, len(funcs))
+	for i, f := range funcs {
+		tools[i] = functions.Tool{Type: "function", Function: f}
+	}
+	return tools
 }
 
 func sendAnthropicSSE(c echo.Context, event schema.AnthropicStreamEvent) {

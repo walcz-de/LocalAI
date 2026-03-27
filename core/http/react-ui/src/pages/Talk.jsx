@@ -1,22 +1,25 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useOutletContext, useNavigate } from 'react-router-dom'
 import { realtimeApi } from '../utils/api'
+import ModelSelector from '../components/ModelSelector'
 
 const STATUS_STYLES = {
   disconnected: { icon: 'fa-solid fa-circle', color: 'var(--color-text-secondary)', bg: 'transparent' },
   connecting:   { icon: 'fa-solid fa-spinner fa-spin', color: 'var(--color-primary)', bg: 'var(--color-primary-light)' },
-  connected:    { icon: 'fa-solid fa-circle', color: 'var(--color-success)', bg: 'rgba(34,197,94,0.1)' },
-  listening:    { icon: 'fa-solid fa-microphone', color: 'var(--color-success)', bg: 'rgba(34,197,94,0.1)' },
+  connected:    { icon: 'fa-solid fa-circle', color: 'var(--color-success)', bg: 'var(--color-success-light)' },
+  listening:    { icon: 'fa-solid fa-microphone', color: 'var(--color-success)', bg: 'var(--color-success-light)' },
   thinking:     { icon: 'fa-solid fa-brain fa-beat', color: 'var(--color-primary)', bg: 'var(--color-primary-light)' },
-  speaking:     { icon: 'fa-solid fa-volume-high fa-beat-fade', color: 'var(--color-accent)', bg: 'rgba(168,85,247,0.1)' },
+  speaking:     { icon: 'fa-solid fa-volume-high fa-beat-fade', color: 'var(--color-accent)', bg: 'var(--color-accent-light)' },
   error:        { icon: 'fa-solid fa-circle', color: 'var(--color-error)', bg: 'var(--color-error-light)' },
 }
 
 export default function Talk() {
   const { addToast } = useOutletContext()
+  const navigate = useNavigate()
 
   // Pipeline models
   const [pipelineModels, setPipelineModels] = useState([])
+  const pipelineModelNames = useMemo(() => pipelineModels.map(m => m.name), [pipelineModels])
   const [selectedModel, setSelectedModel] = useState('')
   const [modelsLoading, setModelsLoading] = useState(true)
 
@@ -72,7 +75,7 @@ export default function Talk() {
           if (!voiceEdited) setVoice(models[0].voice || '')
         }
       })
-      .catch(err => addToast(`Failed to load pipeline models: ${err.message}`, 'error'))
+      .catch(err => addToast(`Failed to load pipeline models: ${err.message}`, 'error', 5000, { link: { href: '/app/traces?tab=backend', text: 'View traces' } }))
       .finally(() => setModelsLoading(false))
   }, [])
 
@@ -459,6 +462,11 @@ export default function Talk() {
           }}>
             <i className={statusStyle.icon} style={{ color: statusStyle.color }} />
             <span style={{ fontWeight: 500, color: statusStyle.color }}>{statusText}</span>
+            {status === 'error' && (
+              <a href="/app/traces?tab=backend" className="chat-error-trace-link" style={{ marginLeft: 'auto' }}>
+                <i className="fas fa-wave-square" /> View traces
+              </a>
+            )}
           </div>
 
           {/* Info note */}
@@ -482,30 +490,29 @@ export default function Talk() {
             <label className="form-label" style={{ fontSize: '0.8125rem' }}>
               <i className="fas fa-brain" style={{ color: 'var(--color-primary)', marginRight: 4 }} /> Pipeline Model
             </label>
-            <select
-              className="model-selector"
+            <ModelSelector
               value={selectedModel}
-              onChange={(e) => {
-                setSelectedModel(e.target.value)
-                const m = pipelineModels.find(p => p.name === e.target.value)
+              onChange={(v) => {
+                setSelectedModel(v)
+                const m = pipelineModels.find(p => p.name === v)
                 if (m && !voiceEdited) setVoice(m.voice || '')
               }}
-              disabled={modelsLoading || isConnected}
-              style={{ width: '100%' }}
-            >
-              {modelsLoading && <option>Loading models...</option>}
-              {!modelsLoading && pipelineModels.length === 0 && <option>No pipeline models available</option>}
-              {pipelineModels.map(m => (
-                <option key={m.name} value={m.name}>{m.name}</option>
-              ))}
-            </select>
+              options={pipelineModelNames}
+              loading={modelsLoading}
+              disabled={isConnected}
+              searchPlaceholder="Search pipeline models..."
+            />
+            <button className="btn btn-secondary btn-sm" onClick={() => navigate('/app/pipeline-editor')}
+              style={{ marginTop: 'var(--spacing-xs)' }}>
+              <i className="fas fa-plus" style={{ marginRight: 'var(--spacing-xs)' }} /> Create Pipeline Model
+            </button>
           </div>
 
           {/* Pipeline details */}
           {selectedModelInfo && (
             <div style={{
               display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--spacing-xs)',
-              marginBottom: 'var(--spacing-md)', fontSize: '0.75rem',
+              marginBottom: 'var(--spacing-xs)', fontSize: '0.75rem',
             }}>
               {[
                 { label: 'VAD', value: selectedModelInfo.vad },
@@ -521,6 +528,13 @@ export default function Talk() {
                   <div style={{ fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.value}</div>
                 </div>
               ))}
+            </div>
+          )}
+          {selectedModelInfo && !isConnected && (
+            <div style={{ marginBottom: 'var(--spacing-md)' }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/app/pipeline-editor/${encodeURIComponent(selectedModel)}`)}>
+                <i className="fas fa-pen-to-square" style={{ marginRight: 'var(--spacing-xs)' }} /> Edit Pipeline
+              </button>
             </div>
           )}
 

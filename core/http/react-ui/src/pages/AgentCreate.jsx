@@ -1,7 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useParams, useNavigate, useLocation, useOutletContext } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, useOutletContext, useSearchParams } from 'react-router-dom'
 import { agentsApi } from '../utils/api'
 import SearchableModelSelect from '../components/SearchableModelSelect'
+import { CAP_CHAT, CAP_TRANSCRIPT, CAP_TTS } from '../utils/capabilities'
+import Toggle from '../components/Toggle'
+import SettingRow from '../components/SettingRow'
 
 // --- MCP STDIO helpers ---
 
@@ -48,53 +51,6 @@ function buildStdioJson(list) {
     mcpServers[key] = { command: item.command || '', args: item.args || [], env: envMap }
   })
   return JSON.stringify({ mcpServers }, null, 2)
-}
-
-// --- Shared UI components (same style as Settings page) ---
-
-function Toggle({ checked, onChange, disabled }) {
-  return (
-    <label style={{
-      position: 'relative', display: 'inline-block', width: 40, height: 22, cursor: disabled ? 'not-allowed' : 'pointer',
-      opacity: disabled ? 0.5 : 1,
-    }}>
-      <input
-        type="checkbox"
-        checked={checked || false}
-        onChange={(e) => onChange(e.target.checked)}
-        disabled={disabled}
-        style={{ display: 'none' }}
-      />
-      <span style={{
-        position: 'absolute', inset: 0, borderRadius: 22,
-        background: checked ? 'var(--color-primary)' : 'var(--color-toggle-off)',
-        transition: 'background 200ms',
-      }}>
-        <span style={{
-          position: 'absolute', top: 2, left: checked ? 20 : 2,
-          width: 18, height: 18, borderRadius: '50%',
-          background: '#fff', transition: 'left 200ms',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
-        }} />
-      </span>
-    </label>
-  )
-}
-
-function SettingRow({ label, description, children }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: 'var(--spacing-sm) 0',
-      borderBottom: '1px solid var(--color-border-subtle)',
-    }}>
-      <div style={{ flex: 1, marginRight: 'var(--spacing-md)' }}>
-        <div style={{ fontSize: '0.875rem', fontWeight: 500 }}>{label}</div>
-        {description && <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2 }}>{description}</div>}
-      </div>
-      <div style={{ flexShrink: 0 }}>{children}</div>
-    </div>
-  )
 }
 
 // --- Form field components ---
@@ -160,10 +116,10 @@ function FormField({ field, value, onChange, disabled }) {
       const isModelField = /^(model|multimodal_model|transcription_model|tts_model|embedding_model)$/.test(field.name)
       if (isModelField && !disabled && !field.disabled) {
         const capabilityMap = {
-          model: 'FLAG_CHAT',
-          multimodal_model: 'FLAG_CHAT',
-          transcription_model: 'FLAG_TRANSCRIPT',
-          tts_model: 'FLAG_TTS',
+          model: CAP_CHAT,
+          multimodal_model: CAP_CHAT,
+          transcription_model: CAP_TRANSCRIPT,
+          tts_model: CAP_TTS,
           embedding_model: undefined,
         }
         return (
@@ -314,6 +270,8 @@ export default function AgentCreate() {
   const navigate = useNavigate()
   const location = useLocation()
   const { addToast } = useOutletContext()
+  const [searchParams] = useSearchParams()
+  const userId = searchParams.get('user_id') || undefined
   const isEdit = !!name
   const importedConfig = location.state?.importedConfig || null
 
@@ -353,7 +311,7 @@ export default function AgentCreate() {
       try {
         const [metaData, config] = await Promise.all([
           agentsApi.configMeta().catch(() => null),
-          isEdit ? agentsApi.getConfig(name).catch(() => null) : Promise.resolve(null),
+          isEdit ? agentsApi.getConfig(name, userId).catch(() => null) : Promise.resolve(null),
         ])
         if (metaData) setMeta(metaData)
 
@@ -429,7 +387,7 @@ export default function AgentCreate() {
       }
 
       if (isEdit) {
-        await agentsApi.update(name, payload)
+        await agentsApi.update(name, payload, userId)
         addToast(`Agent "${form.name}" updated`, 'success')
       } else {
         await agentsApi.create(payload)

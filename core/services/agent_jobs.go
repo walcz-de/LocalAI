@@ -88,11 +88,6 @@ func NewAgentJobService(
 	configLoader *config.ModelConfigLoader,
 	evaluator *templates.Evaluator,
 ) *AgentJobService {
-	retentionDays := appConfig.AgentJobRetentionDays
-	if retentionDays == 0 {
-		retentionDays = 30 // Default
-	}
-
 	// Determine storage directory: DataPath > DynamicConfigsDir
 	tasksFile := ""
 	jobsFile := ""
@@ -103,6 +98,22 @@ func NewAgentJobService(
 	if dataDir != "" {
 		tasksFile = filepath.Join(dataDir, "agent_tasks.json")
 		jobsFile = filepath.Join(dataDir, "agent_jobs.json")
+	}
+
+	return NewAgentJobServiceWithPaths(appConfig, modelLoader, configLoader, evaluator, tasksFile, jobsFile)
+}
+
+// NewAgentJobServiceWithPaths creates a new AgentJobService with explicit file paths.
+func NewAgentJobServiceWithPaths(
+	appConfig *config.ApplicationConfig,
+	modelLoader *model.ModelLoader,
+	configLoader *config.ModelConfigLoader,
+	evaluator *templates.Evaluator,
+	tasksFile, jobsFile string,
+) *AgentJobService {
+	retentionDays := appConfig.AgentJobRetentionDays
+	if retentionDays == 0 {
+		retentionDays = 30 // Default
 	}
 
 	return &AgentJobService{
@@ -886,6 +897,35 @@ func (s *AgentJobService) executeJobInternal(job schema.Job, task schema.Task, c
 			}
 			job.Traces = append(job.Traces, trace)
 			s.jobs.Set(job.ID, job)
+		}),
+		cogito.WithStreamCallback(func(ev cogito.StreamEvent) {
+			switch ev.Type {
+			case cogito.StreamEventReasoning:
+				trace := schema.JobTrace{
+					Type:      "stream_reasoning",
+					Content:   ev.Content,
+					Timestamp: time.Now(),
+				}
+				job.Traces = append(job.Traces, trace)
+				s.jobs.Set(job.ID, job)
+			case cogito.StreamEventContent:
+				trace := schema.JobTrace{
+					Type:      "stream_content",
+					Content:   ev.Content,
+					Timestamp: time.Now(),
+				}
+				job.Traces = append(job.Traces, trace)
+				s.jobs.Set(job.ID, job)
+			case cogito.StreamEventToolCall:
+				trace := schema.JobTrace{
+					Type:     "stream_tool_call",
+					Content:  ev.ToolArgs,
+					ToolName: ev.ToolName,
+					Timestamp: time.Now(),
+				}
+				job.Traces = append(job.Traces, trace)
+				s.jobs.Set(job.ID, job)
+			}
 		}),
 	)
 

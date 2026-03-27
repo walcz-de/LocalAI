@@ -20,6 +20,7 @@ import (
 	"github.com/mudler/LocalAI/core/application"
 	"github.com/mudler/LocalAI/core/config"
 	"github.com/mudler/LocalAI/core/gallery"
+	"github.com/mudler/LocalAI/core/http/auth"
 	"github.com/mudler/LocalAI/core/http/endpoints/localai"
 	"github.com/mudler/LocalAI/core/http/middleware"
 	"github.com/mudler/LocalAI/core/p2p"
@@ -58,7 +59,7 @@ func getDirectorySize(path string) (int64, error) {
 }
 
 // RegisterUIAPIRoutes registers JSON API routes for the web UI
-func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model.ModelLoader, appConfig *config.ApplicationConfig, galleryService *services.GalleryService, opcache *services.OpCache, applicationInstance *application.Application) {
+func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model.ModelLoader, appConfig *config.ApplicationConfig, galleryService *services.GalleryService, opcache *services.OpCache, applicationInstance *application.Application, adminMiddleware echo.MiddlewareFunc) {
 
 	// Operations API - Get all current operations (models + backends)
 	app.GET("/api/operations", func(c echo.Context) error {
@@ -168,9 +169,9 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 		return c.JSON(200, map[string]interface{}{
 			"operations": operations,
 		})
-	})
+	}, adminMiddleware)
 
-	// Cancel operation endpoint
+	// Cancel operation endpoint (admin only)
 	app.POST("/api/operations/:jobID/cancel", func(c echo.Context) error {
 		jobID := c.Param("jobID")
 		xlog.Debug("API request to cancel operation", "jobID", jobID)
@@ -190,7 +191,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 			"success": true,
 			"message": "Operation cancelled",
 		})
-	})
+	}, adminMiddleware)
 
 	// Dismiss a failed operation (acknowledge the error and remove it from the list)
 	app.POST("/api/operations/:jobID/dismiss", func(c echo.Context) error {
@@ -204,11 +205,12 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 			"success": true,
 			"message": "Operation dismissed",
 		})
-	})
+	}, adminMiddleware)
 
-	// Model Gallery APIs
+	// Model Gallery APIs (admin only)
 	app.GET("/api/models", func(c echo.Context) error {
 		term := c.QueryParam("term")
+		tag := c.QueryParam("tag")
 		page := c.QueryParam("page")
 		if page == "" {
 			page = "1"
@@ -239,8 +241,36 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 		}
 		sort.Strings(tags)
 
+		// Get all available backends (before filtering so dropdown always shows all)
+		allBackendsMap := map[string]struct{}{}
+		for _, m := range models {
+			if b := m.Backend; b != "" {
+				allBackendsMap[b] = struct{}{}
+			}
+		}
+		backendNames := make([]string, 0, len(allBackendsMap))
+		for b := range allBackendsMap {
+			backendNames = append(backendNames, b)
+		}
+		sort.Strings(backendNames)
+
+		if tag != "" {
+			models = gallery.GalleryElements[*gallery.GalleryModel](models).FilterByTag(tag)
+		}
 		if term != "" {
 			models = gallery.GalleryElements[*gallery.GalleryModel](models).Search(term)
+		}
+
+		// Filter by backend if requested
+		backendFilter := c.QueryParam("backend")
+		if backendFilter != "" {
+			var filtered gallery.GalleryElements[*gallery.GalleryModel]
+			for _, m := range models {
+				if m.Backend == backendFilter {
+					filtered = append(filtered, m)
+				}
+			}
+			models = filtered
 		}
 
 		// Get model statuses
@@ -359,6 +389,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 				"isDeletion":      isDeletionOp,
 				"trustRemoteCode": trustRemoteCodeExists,
 				"additionalFiles": m.AdditionalFiles,
+				"backend":         m.Backend,
 			}
 
 			if hasWeightFiles(m.AdditionalFiles) {
@@ -449,6 +480,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 			"models":           modelsJSON,
 			"repositories":     appConfig.Galleries,
 			"allTags":          tags,
+			"allBackends":     backendNames,
 			"processingModels": processingModelsData,
 			"taskTypes":        taskTypes,
 			"availableModels":  totalModels,
@@ -461,7 +493,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 			"prevPage":         prevPage,
 			"nextPage":         nextPage,
 		})
-	})
+	}, adminMiddleware)
 
 	// Returns installed models with their capability flags for UI filtering
 	app.GET("/api/models/capabilities", func(c echo.Context) error {
@@ -471,6 +503,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 		type modelCapability struct {
 			ID           string   `json:"id"`
 			Capabilities []string `json:"capabilities"`
+			Backend      string   `json:"backend"`
 		}
 
 		result := make([]modelCapability, 0, len(modelConfigs)+len(modelsWithoutConfig))
@@ -478,6 +511,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 			result = append(result, modelCapability{
 				ID:           cfg.Name,
 				Capabilities: cfg.KnownUsecaseStrings,
+				Backend:      cfg.Backend,
 			})
 		}
 		for _, name := range modelsWithoutConfig {
@@ -485,6 +519,26 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 				ID:           name,
 				Capabilities: []string{},
 			})
+		}
+
+		// Filter by user's model allowlist if auth is enabled
+		if authDB := applicationInstance.AuthDB(); authDB != nil {
+			if user := auth.GetUser(c); user != nil && user.Role != auth.RoleAdmin {
+				perm, err := auth.GetCachedUserPermissions(c, authDB, user.ID)
+				if err == nil && perm.AllowedModels.Enabled {
+					allowed := map[string]bool{}
+					for _, m := range perm.AllowedModels.Models {
+						allowed[m] = true
+					}
+					filtered := make([]modelCapability, 0, len(result))
+					for _, mc := range result {
+						if allowed[mc.ID] {
+							filtered = append(filtered, mc)
+						}
+					}
+					result = filtered
+				}
+			}
 		}
 
 		return c.JSON(200, map[string]any{
@@ -532,7 +586,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 			"jobID":   uid,
 			"message": "Installation started",
 		})
-	})
+	}, adminMiddleware)
 
 	app.POST("/api/models/delete/:id", func(c echo.Context) error {
 		galleryID := c.Param("id")
@@ -582,7 +636,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 			"jobID":   uid,
 			"message": "Deletion started",
 		})
-	})
+	}, adminMiddleware)
 
 	app.POST("/api/models/config/:id", func(c echo.Context) error {
 		galleryID := c.Param("id")
@@ -626,7 +680,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 		return c.JSON(200, map[string]interface{}{
 			"message": "Configuration file saved",
 		})
-	})
+	}, adminMiddleware)
 
 	// Get installed model config as JSON (used by frontend for MCP detection, etc.)
 	app.GET("/api/models/config-json/:name", func(c echo.Context) error {
@@ -645,11 +699,14 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 		}
 
 		return c.JSON(http.StatusOK, modelConfig)
-	})
+	}, adminMiddleware)
 
 	// Get installed model YAML config for the React model editor
 	app.GET("/api/models/edit/:name", func(c echo.Context) error {
 		modelName := c.Param("name")
+		if decoded, err := url.PathUnescape(modelName); err == nil {
+			modelName = decoded
+		}
 		if modelName == "" {
 			return c.JSON(http.StatusBadRequest, map[string]interface{}{
 				"error": "model name is required",
@@ -681,7 +738,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 			"config": string(configData),
 			"name":   modelName,
 		})
-	})
+	}, adminMiddleware)
 
 	app.GET("/api/models/job/:uid", func(c echo.Context) error {
 		jobUID := c.Param("uid")
@@ -718,11 +775,12 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 		}
 
 		return c.JSON(200, response)
-	})
+	}, adminMiddleware)
 
 	// Backend Gallery APIs
 	app.GET("/api/backends", func(c echo.Context) error {
 		term := c.QueryParam("term")
+		tag := c.QueryParam("tag")
 		page := c.QueryParam("page")
 		if page == "" {
 			page = "1"
@@ -753,6 +811,9 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 		}
 		sort.Strings(tags)
 
+		if tag != "" {
+			backends = gallery.GalleryElements[*gallery.GalleryBackend](backends).FilterByTag(tag)
+		}
 		if term != "" {
 			backends = gallery.GalleryElements[*gallery.GalleryBackend](backends).Search(term)
 		}
@@ -872,7 +933,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 			"nextPage":           nextPage,
 			"systemCapability":   detectedCapability,
 		})
-	})
+	}, adminMiddleware)
 
 	app.POST("/api/backends/install/:id", func(c echo.Context) error {
 		backendID := c.Param("id")
@@ -913,7 +974,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 			"jobID":   uid,
 			"message": "Backend installation started",
 		})
-	})
+	}, adminMiddleware)
 
 	// Install backend from external source (OCI image, URL, or path)
 	app.POST("/api/backends/install-external", func(c echo.Context) error {
@@ -977,7 +1038,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 			"jobID":   uid,
 			"message": "External backend installation started",
 		})
-	})
+	}, adminMiddleware)
 
 	app.POST("/api/backends/delete/:id", func(c echo.Context) error {
 		backendID := c.Param("id")
@@ -1025,7 +1086,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 			"jobID":   uid,
 			"message": "Backend deletion started",
 		})
-	})
+	}, adminMiddleware)
 
 	app.GET("/api/backends/job/:uid", func(c echo.Context) error {
 		jobUID := c.Param("uid")
@@ -1062,7 +1123,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 		}
 
 		return c.JSON(200, response)
-	})
+	}, adminMiddleware)
 
 	// System Backend Deletion API (for installed backends on index page)
 	app.POST("/api/backends/system/delete/:name", func(c echo.Context) error {
@@ -1088,7 +1149,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 			"success": true,
 			"message": "Backend deleted successfully",
 		})
-	})
+	}, adminMiddleware)
 
 	// P2P APIs
 	app.GET("/api/p2p/workers", func(c echo.Context) error {
@@ -1129,7 +1190,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 			// Keep backward-compatible "nodes" key with llama.cpp workers
 			"nodes": llamaJSON,
 		})
-	})
+	}, adminMiddleware)
 
 	app.GET("/api/p2p/federation", func(c echo.Context) error {
 		nodes := p2p.GetAvailableNodes(p2p.NetworkID(appConfig.P2PNetworkID, p2p.FederatedID))
@@ -1149,7 +1210,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 		return c.JSON(200, map[string]interface{}{
 			"nodes": nodesJSON,
 		})
-	})
+	}, adminMiddleware)
 
 	app.GET("/api/p2p/stats", func(c echo.Context) error {
 		llamaCPPNodes := p2p.GetAvailableNodes(p2p.NetworkID(appConfig.P2PNetworkID, p2p.LlamaCPPWorkerID))
@@ -1191,7 +1252,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 				"total":  len(mlxWorkerNodes),
 			},
 		})
-	})
+	}, adminMiddleware)
 
 	// Resources API endpoint - unified memory info (GPU if available, otherwise RAM)
 	app.GET("/api/resources", func(c echo.Context) error {
@@ -1218,15 +1279,15 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 		}
 
 		return c.JSON(200, response)
-	})
+	}, adminMiddleware)
 
 	if !appConfig.DisableRuntimeSettings {
 		// Settings API
-		app.GET("/api/settings", localai.GetSettingsEndpoint(applicationInstance))
-		app.POST("/api/settings", localai.UpdateSettingsEndpoint(applicationInstance))
+		app.GET("/api/settings", localai.GetSettingsEndpoint(applicationInstance), adminMiddleware)
+		app.POST("/api/settings", localai.UpdateSettingsEndpoint(applicationInstance), adminMiddleware)
 	}
 
-	// Logs API
+	// Logs API (admin only)
 	app.GET("/api/traces", func(c echo.Context) error {
 		if !appConfig.EnableTracing {
 			return c.JSON(503, map[string]any{
@@ -1237,12 +1298,12 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 		return c.JSON(200, map[string]interface{}{
 			"traces": traces,
 		})
-	})
+	}, adminMiddleware)
 
 	app.POST("/api/traces/clear", func(c echo.Context) error {
 		middleware.ClearTraces()
 		return c.JSON(200, map[string]interface{}{
 			"message": "Traces cleared",
 		})
-	})
+	}, adminMiddleware)
 }
