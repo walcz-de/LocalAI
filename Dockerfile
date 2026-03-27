@@ -199,13 +199,14 @@ RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then 
         apt-get clean && \
         rm -rf /var/lib/apt/lists/* && \
         echo "amd-gfx1151" > /run/localai/capability && \
-        # ROCm 7.11 installs to /opt/rocm/core-7.11/ instead of /opt/rocm/
-        # Create compatibility symlinks expected by the build system (ROCM_HOME=/opt/rocm)
-        ln -sf /opt/rocm/core-7.11/lib/llvm /opt/rocm/llvm && \
-        ln -sf /opt/rocm/core-7.11/bin /opt/rocm/bin && \
-        ln -sf /opt/rocm/core-7.11 /opt/rocm/hip && \
-        ln -sf /opt/rocm/core-7.11/lib /opt/rocm/lib && \
-        ln -sf /opt/rocm/core-7.11/include /opt/rocm/include && \
+        # ROCm 7.x installs to /opt/rocm/core-7.XX/ with update-alternatives managing
+        # /opt/rocm/core-7 -> /opt/rocm/core-7.XX (e.g. core-7.12).
+        # Use core-7 so symlinks survive minor version bumps (7.11 → 7.12 etc.).
+        ln -sf /opt/rocm/core-7/lib/llvm /opt/rocm/llvm && \
+        ln -sf /opt/rocm/core-7/bin /opt/rocm/bin && \
+        ln -sf /opt/rocm/core-7 /opt/rocm/hip && \
+        ln -sf /opt/rocm/core-7/lib /opt/rocm/lib && \
+        ln -sf /opt/rocm/core-7/include /opt/rocm/include && \
         # ROCm lib packages don't trigger ldconfig - run it manually
         ldconfig \
     ; fi
