@@ -1,10 +1,11 @@
 services:
   localai:
-    # Custom LocalAI 4.0.0 build – ROCm 7.11.0 + gfx1151 (Strix Halo / Radeon 8060S)
-    # Gebaut aus: https://github.com/stefanwalcz/LocalAI feat/rocm7-gfx1151-v4-clean
+    # Custom LocalAI build – ROCm 7.x + gfx1151 (Strix Halo / Radeon 8060S)
+    # Gebaut aus: https://github.com/walcz-de/LocalAI feat/rocm7-gfx1151-v4-clean
     # Enthält: baked-in llama-cpp grpc-server (HIP UMA + rocWMMA FA), Dimensions-Fix
-    image: 192.168.178.127:5000/localai:4.0.0-rocm7.11-gfx1151
-    #image: pointblank.ddns.net:5556/localai:4.0.0-rocm7.11-gfx1151
+    # Tag-Schema: <upstream-version>-gfx1151-rocm<rocm-version>  oder  latest-gfx1151
+    image: 192.168.178.127:5000/localai:latest-gfx1151
+    #image: pointblank.ddns.net:5556/localai:latest-gfx1151
     deploy:
       resources:
         limits:

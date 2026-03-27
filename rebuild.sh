@@ -5,7 +5,8 @@
 set -euo pipefail
 
 REGISTRY="${REGISTRY:-192.168.178.127:5000}"
-TAG="${TAG:-4.0.0-rocm7.11-gfx1151}"
+ROCM_VERSION="${ROCM_VERSION:-7.12}"
+TAG="${TAG:-latest-gfx1151}"
 IMAGE="$REGISTRY/localai:$TAG"
 COMPOSE_DIR="${COMPOSE_DIR:-/opt/agntsio}"
 

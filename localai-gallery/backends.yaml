@@ -1,0 +1,128 @@
+## Local gfx1151 Backend Gallery
+# Serves gfx1151-optimized backend images from the local registry.
+# Tags use "latest-gfx1151" (rolling) — sync-upstream.sh pushes versioned tags too,
+# e.g. v4.0.0-gfx1151-rocm7.12 alongside latest-gfx1151.
+# These concrete backends are referenced by the meta backend overrides below,
+# which add the amd-gfx1151 capability so LocalAI selects them when
+# LOCALAI_FORCE_META_BACKEND_CAPABILITY=amd-gfx1151 is set.
+
+## concrete backends (gfx1151-specific, from local registry)
+
+- name: "gfx1151-llama-cpp"
+  uri: "192.168.178.127:5000/localai-backend/llama-cpp:latest-gfx1151"
+  license: mit
+  description: llama.cpp built for ROCm 7.x / gfx1151 (Strix Halo) with rocWMMA FlashAttention
+  tags:
+    - text-to-text
+    - LLM
+    - HIP
+    - gfx1151
+
+- name: "gfx1151-whisperx"
+  uri: "192.168.178.127:5000/localai-backend/whisperx:latest-gfx1151"
+  license: mit
+  description: WhisperX built for ROCm 7.x / gfx1151 (Strix Halo)
+  tags:
+    - audio-transcription
+    - HIP
+    - gfx1151
+
+- name: "gfx1151-transformers"
+  uri: "192.168.178.127:5000/localai-backend/transformers:latest-gfx1151"
+  license: apache-2.0
+  description: HuggingFace Transformers built for ROCm 7.x / gfx1151 (Strix Halo)
+  tags:
+    - text-to-text
+    - multimodal
+    - HIP
+    - gfx1151
+
+- name: "gfx1151-diffusers"
+  uri: "192.168.178.127:5000/localai-backend/diffusers:latest-gfx1151"
+  license: apache-2.0
+  description: HuggingFace Diffusers built for ROCm 7.x / gfx1151 (Strix Halo)
+  tags:
+    - image-generation
+    - HIP
+    - gfx1151
+
+- name: "gfx1151-sentencetransformers"
+  uri: "192.168.178.127:5000/localai-backend/sentencetransformers:latest-gfx1151"
+  license: apache-2.0
+  description: SentenceTransformers built for ROCm 7.x / gfx1151 (Strix Halo)
+  tags:
+    - embeddings
+    - HIP
+    - gfx1151
+
+- name: "gfx1151-rerankers"
+  uri: "192.168.178.127:5000/localai-backend/rerankers:latest-gfx1151"
+  license: apache-2.0
+  description: Rerankers built for ROCm 7.x / gfx1151 (Strix Halo)
+  tags:
+    - reranking
+    - HIP
+    - gfx1151
+
+- name: "gfx1151-vllm"
+  uri: "192.168.178.127:5000/localai-backend/vllm:latest-gfx1151"
+  license: apache-2.0
+  description: vLLM built for ROCm 7.x / gfx1151 (Strix Halo)
+  tags:
+    - text-to-text
+    - LLM
+    - HIP
+    - gfx1151
+
+## meta backend overrides — same name as upstream, adds amd-gfx1151 capability
+# LocalAI loads all galleries and the exact amd-gfx1151 match takes priority
+# over the upstream amd fallback when LOCALAI_FORCE_META_BACKEND_CAPABILITY=amd-gfx1151.
+
+- name: "llama-cpp"
+  alias: "llama-cpp"
+  license: mit
+  description: "LLM inference in C/C++ — gfx1151/Strix Halo optimised build"
+  capabilities:
+    amd-gfx1151: "gfx1151-llama-cpp"
+
+- name: "whisper"
+  alias: "whisper"
+  license: mit
+  description: "OpenAI Whisper port in C/C++ — gfx1151/Strix Halo optimised build"
+  capabilities:
+    amd-gfx1151: "gfx1151-whisperx"
+
+- name: "transformers"
+  alias: "transformers"
+  license: apache-2.0
+  description: "HuggingFace Transformers — gfx1151/Strix Halo optimised build"
+  capabilities:
+    amd-gfx1151: "gfx1151-transformers"
+
+- name: "diffusers"
+  alias: "diffusers"
+  license: apache-2.0
+  description: "HuggingFace Diffusers — gfx1151/Strix Halo optimised build"
+  capabilities:
+    amd-gfx1151: "gfx1151-diffusers"
+
+- name: "sentencetransformers"
+  alias: "sentencetransformers"
+  license: apache-2.0
+  description: "SentenceTransformers — gfx1151/Strix Halo optimised build"
+  capabilities:
+    amd-gfx1151: "gfx1151-sentencetransformers"
+
+- name: "rerankers"
+  alias: "rerankers"
+  license: apache-2.0
+  description: "Rerankers — gfx1151/Strix Halo optimised build"
+  capabilities:
+    amd-gfx1151: "gfx1151-rerankers"
+
+- name: "vllm"
+  alias: "vllm"
+  license: apache-2.0
+  description: "vLLM — gfx1151/Strix Halo optimised build"
+  capabilities:
+    amd-gfx1151: "gfx1151-vllm"
