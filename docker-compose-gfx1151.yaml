@@ -42,7 +42,7 @@ services:
       # für custom Backends (z.B. zukünftige gfx1151-spezifische Python-Backends).
       # WICHTIG: file:// URLs funktionieren NICHT (InTrustedRoot-Check blockt /var/lib/local-ai/).
       # Der baked-in llama-cpp wird via alias-Mechanismus gefunden (kein Download nötig).
-      - LOCALAI_BACKEND_GALLERIES=[{"name":"localai","url":"github:mudler/LocalAI/backend/index.yaml@master"},{"name":"local","url":"http://gallery-server:80/backends.yaml"}]
+      - LOCALAI_BACKEND_GALLERIES=[{"name":"local","url":"http://gallery-server:80/backends.yaml"},{"name":"localai","url":"github:mudler/LocalAI/backend/index.yaml@master"}]
       - DOCKER_HOST=tcp://dind:2375
 
       # Modelle beim Start direkt in den RAM/VRAM laden

@@ -513,9 +513,7 @@ ENV ROCBLAS_USE_HIPBLASLT=1
 ENV HSA_XNACK=1
 # Disable SDMA engine — known to cause hangs/errors on APU/iGPU configs.
 ENV HSA_ENABLE_SDMA=0
-# Enable HIP unified memory so GPU/CPU share the same physical pages (UMA).
-# Required for stable operation on Strix Halo (gfx1151) APU.
-ENV GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
+# GGML_CUDA_ENABLE_UNIFIED_MEMORY intentionally NOT set – use hipMalloc (96GB VRAM pool)
 # Enable rocWMMA-accelerated Flash Attention for RDNA 3.5.
 ENV GGML_HIP_ROCWMMA=1
 # libamd_comgr.so.3 depends on libLLVM.so.22.0git and libclang-cpp.so.22.0git from the
