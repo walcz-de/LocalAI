@@ -1,4 +1,62 @@
 ---
+- name: "gemma-4-26b-a4b-it-apex"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/mudler/gemma-4-26B-A4B-it-APEX-GGUF
+  description: |
+    AI model: gemma-4-26b-a4b-it-apex
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/gemma-4-26B-A4B-it-APEX-GGUF/gemma-4-26B-A4B-APEX-Quality.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/gemma-4-26B-A4B-it-APEX-GGUF/gemma-4-26B-A4B-APEX-Quality.gguf
+      sha256: e557146506ae45d155d498cf9098e61dc286550c8dcb1fc01a9d3f9708e75126
+      uri: https://huggingface.co/mudler/gemma-4-26B-A4B-it-APEX-GGUF/resolve/main/gemma-4-26B-A4B-APEX-Quality.gguf
+- name: "qwen3.5-35b-a3b-apex"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/mudler/Qwen3.5-35B-A3B-APEX-GGUF
+  description: |
+    Describe the model in a clear and concise way that can be shared in a model gallery.
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    mmproj: llama-cpp/mmproj/Qwen3.5-35B-A3B-APEX-GGUF/mmproj-F16.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      min_p: 0
+      model: llama-cpp/models/Qwen3.5-35B-A3B-APEX-GGUF/Qwen3.5-35B-A3B-APEX-Quality.gguf
+      presence_penalty: 1.5
+      repeat_penalty: 1
+      temperature: 0.7
+      top_k: 20
+      top_p: 0.8
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/mmproj/Qwen3.5-35B-A3B-APEX-GGUF/mmproj-F16.gguf
+      sha256: a516ab92e8240da4734d68352bdfba84c16e830ee40010b8fac80d69c77272ff
+      uri: https://huggingface.co/mudler/Qwen3.5-35B-A3B-APEX-GGUF/resolve/main/mmproj-F16.gguf
+    - filename: llama-cpp/models/Qwen3.5-35B-A3B-APEX-GGUF/Qwen3.5-35B-A3B-APEX-Quality.gguf
+      sha256: 50887b60c77ee5c95bc3657814ae993abcab7b2d71868b9af1e84d6badd09a57
+      uri: https://huggingface.co/mudler/Qwen3.5-35B-A3B-APEX-GGUF/resolve/main/Qwen3.5-35B-A3B-APEX-Quality.gguf
 - name: "qwen_qwen3.5-35b-a3b"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -50,6 +108,7 @@
     function:
       grammar:
         disable: true
+    mmproj: llama-cpp/mmproj/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-heretic.mmproj-f16.gguf
     description: Imported from https://huggingface.co/mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-heretic-i1-GGUF
     options:
       - use_jinja:true
@@ -57,6 +116,9 @@
     - filename: llama-cpp/models/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-heretic.i1-Q4_K_M.gguf
       sha256: af6c2ceae20d019624cd6ec48cfffb646b0309b0a7a82d9719754297394168e1
       uri: https://huggingface.co/mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-heretic-i1-GGUF/resolve/main/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-heretic.i1-Q4_K_M.gguf
+    - filename: llama-cpp/mmproj/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-heretic.mmproj-f16.gguf
+      sha256: 4068f60ebe62c4e191ce0a2bc184c608c4ab5f8ff0fcbf3978179aa1d74725cf
+      uri: https://huggingface.co/mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-heretic-GGUF/resolve/main/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-heretic.mmproj-f16.gguf
 - name: "qwen_qwen3.5-0.8b"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -175,6 +237,7 @@
     function:
       grammar:
         disable: true
+    mmproj: llama-cpp/mmproj/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled.mmproj-f16.gguf
     description: Imported from https://huggingface.co/mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-i1-GGUF
     options:
       - use_jinja:true
@@ -182,6 +245,9 @@
     - filename: llama-cpp/models/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled.i1-Q4_K_M.gguf
       sha256: 34b9bcd8021b95d86dee8e8aaa165f28c441c08dee85dbed297f0489bfa8b899
       uri: https://huggingface.co/mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-i1-GGUF/resolve/main/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled.i1-Q4_K_M.gguf
+    - filename: llama-cpp/mmproj/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled.mmproj-f16.gguf
+      sha256: adcc3bac7505c7e2b513cbbbe986626ac8a874ed20bfd0c1008eeedfcb9e85de
+      uri: https://huggingface.co/mradermacher/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF/resolve/main/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled.mmproj-f16.gguf
 - name: "qwen3.5-4b-claude-4.6-opus-reasoning-distilled"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -217,7 +283,7 @@
       uri: https://huggingface.co/Jackrong/Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-GGUF/resolve/main/Qwen3.5-4B.Q4_K_M.gguf
     - filename: llama-cpp/mmproj/Qwen3.5-4B.BF16-mmproj.gguf
       sha256: 5ce63ce0113f4bb7b87dc19d076fe0f951c94d4e593154c7a84f605b2f57d423
-      uri: https://huggingface.co/Jackrong/Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-GGUF/resolve/main/Qwen3.5-4B.BF16-mmproj.gguf
+      uri: https://huggingface.co/Jackrong/Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-GGUF/resolve/main/mmproj-BF16.gguf
 - name: "q3.5-bluestar-27b"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:

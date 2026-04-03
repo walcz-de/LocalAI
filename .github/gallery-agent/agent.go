@@ -133,6 +133,7 @@ func getRealReadme(ctx context.Context, repository string) (string, error) {
 	result, err := cogito.ExecuteTools(llm, fragment,
 		cogito.WithIterations(3),
 		cogito.WithMaxAttempts(3),
+		cogito.DisableSinkState,
 		cogito.WithTools(&HFReadmeTool{client: hfapi.NewClient()}))
 	if err != nil {
 		return "", err
@@ -406,7 +407,7 @@ func getHuggingFaceAvatarURL(author string) string {
 	}
 
 	// Parse the response to get avatar URL
-	var userInfo map[string]interface{}
+	var userInfo map[string]any
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return ""
