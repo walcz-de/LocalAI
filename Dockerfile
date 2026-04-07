@@ -278,6 +278,12 @@ perl -0777 -i -pe '
     $b
   }mge
 ' /var/lib/dpkg/status
+# Pass 2: remove tokens starting with '-' from any Conflicts field.
+# The Ubuntu cpp package has "Conflicts:-doc (<< 1:2.95.3)" (no space after colon);
+# the lookbehind (?:(?<=:)\s*|,\s*) handles both forms.
+perl -0777 -i -pe '
+  s{^(Conflicts:[^\n]*\n)}{my $c=$1;$c=~s{(?:(?<=:)\s*|,\s*)-\S+(?:\s*\([^)]*\))?}{}g;$c=~s{^Conflicts:\s*\n}{}m;$c}mge
+' /var/lib/dpkg/status
 # Remove stanzas for amdrocm-core*7.xx-gfxNNNN packages whose transitive deps
 # (amdrocm-ck/dnn/rccl/blas/fft/etc.) conflict with the Ubuntu build toolchain pin.
 # The binary/header files remain on disk so HIP compilation still works; we just
