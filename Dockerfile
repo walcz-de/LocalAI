@@ -159,14 +159,15 @@ RUN if [ "${BUILD_TYPE}" = "clblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then \
 
 RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then \
     if [ "${ROCM_VERSION}" = "7" ]; then \
-        # Pre-install Ubuntu build toolchain BEFORE adding the ROCm apt repo.
-        # amdrocm-llvm ships its own LLVM/Clang and may provide/conflict with
-        # Ubuntu's gcc, libhiredis, or pkgconf packages.  Pinning Ubuntu's versions
-        # first ensures apt doesn't remove them when resolving ROCm dependencies.
-        apt-get update && \
-        apt-get install -y --no-install-recommends \
-            gcc g++ make dpkg-dev pkgconf libhiredis-dev && \
-        apt-get clean && rm -rf /var/lib/apt/lists/* && \
+        # Pin Ubuntu build-toolchain packages at priority 1001 so apt always
+        # prefers the Ubuntu versions over any ROCm-provided alternatives.
+        # amdrocm-llvm ships its own LLVM/Clang and Provides: gcc without the
+        # epoch-4 prefix Ubuntu uses — so build-essential (Depends: gcc >= 4:12.3)
+        # would fail if the ROCm gcc shadows Ubuntu's.  The pin forces Ubuntu's
+        # gcc/g++/libhiredis/pkgconf to win even when the ROCm repo is active.
+        mkdir -p /etc/apt/preferences.d && \
+        printf 'Package: gcc gcc-12 gcc-13 g++ g++-12 g++-13 cpp cpp-12 cpp-13\nPin: release o=Ubuntu\nPin-Priority: 1001\n\nPackage: libhiredis-dev libhiredis1.1.0 libhiredis1.0.2\nPin: release o=Ubuntu\nPin-Priority: 1001\n\nPackage: pkgconf pkg-config dpkg-dev make\nPin: release o=Ubuntu\nPin-Priority: 1001\n' \
+            > /etc/apt/preferences.d/ubuntu-build-tools && \
         # ROCm 7.x ships under a new apt repo with renamed packages.
         # repo.amd.com/rocm/packages/ubuntu2404 uses amdrocm-* names; the old
         # hipblas-dev / rocblas-dev packages no longer exist.
