@@ -278,7 +278,21 @@ perl -0777 -i -pe '
     $b
   }mge
 ' /var/lib/dpkg/status
-echo "dpkg/status Conflicts patch applied" >&2
+# Remove stanzas for amdrocm-core*7.xx-gfxNNNN packages whose transitive deps
+# (amdrocm-ck/dnn/rccl/blas/fft/etc.) conflict with the Ubuntu build toolchain pin.
+# The binary/header files remain on disk so HIP compilation still works; we just
+# prevent apt from seeing them as "installed with broken deps" which causes apt to
+# refuse to install build-essential and gcc in the next layer.
+# Remove ALL amdrocm-*7.xx-gfxNNNN stanzas: these GPU-specific metapackages have
+# transitive deps (ck/dnn/rccl/blas/fft/...) that conflict with Ubuntu build toolchain
+# pins (gcc, libhiredis, pkgconf).  Their binaries/headers remain on disk for HIP
+# compilation; we only strip them from dpkg's database so apt can install build-essential.
+# Match both versioned names (amdrocm-core7.12-gfxNNNN) and
+# versionless metapackage names (amdrocm-core-sdk-gfxNNNN).
+perl -0777 -i -pe '
+  s{^Package: amdrocm-\S+-gfx\d+\S*\n(?:(?!^Package:)[^\n]*\n)*}{}mg
+' /var/lib/dpkg/status
+echo "dpkg/status Conflicts+broken-core-sdk patch applied" >&2
 PEOF
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \

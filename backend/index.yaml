@@ -1189,8 +1189,10 @@
     - localai/localai-backends:latest-gpu-nvidia-cuda-12-llama-cpp
 - !!merge <<: *llamacpp
   name: "rocm-llama-cpp"
-  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-llama-cpp"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-llama-cpp"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-llama-cpp
+    - quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-llama-cpp
     - localai/localai-backends:latest-gpu-rocm-hipblas-llama-cpp
 - !!merge <<: *llamacpp
   name: "intel-sycl-f32-llama-cpp"
@@ -1229,8 +1231,10 @@
     - localai/localai-backends:master-gpu-nvidia-cuda-12-llama-cpp
 - !!merge <<: *llamacpp
   name: "rocm-llama-cpp-development"
-  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-llama-cpp"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-llama-cpp"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-llama-cpp
+    - quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-llama-cpp
     - localai/localai-backends:master-gpu-rocm-hipblas-llama-cpp
 - !!merge <<: *llamacpp
   name: "intel-sycl-f32-llama-cpp-development"
@@ -1466,8 +1470,10 @@
     - localai/localai-backends:latest-gpu-nvidia-cuda-12-vllm
 - !!merge <<: *vllm
   name: "rocm-vllm"
-  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-vllm"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-vllm"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-vllm
+    - quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-vllm
     - localai/localai-backends:latest-gpu-rocm-hipblas-vllm
 - !!merge <<: *vllm
   name: "intel-vllm"
@@ -1481,8 +1487,10 @@
     - localai/localai-backends:master-gpu-nvidia-cuda-12-vllm
 - !!merge <<: *vllm
   name: "rocm-vllm-development"
-  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-vllm"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-vllm"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-vllm
+    - quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-vllm
     - localai/localai-backends:master-gpu-rocm-hipblas-vllm
 - !!merge <<: *vllm
   name: "intel-vllm-development"
@@ -1503,8 +1511,10 @@
     - localai/localai-backends:latest-gpu-nvidia-cuda-12-vllm-omni
 - !!merge <<: *vllm-omni
   name: "rocm-vllm-omni"
-  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-vllm-omni"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-vllm-omni"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-vllm-omni
+    - quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-vllm-omni
     - localai/localai-backends:latest-gpu-rocm-hipblas-vllm-omni
 - !!merge <<: *vllm-omni
   name: "cuda12-vllm-omni-development"
@@ -1513,8 +1523,10 @@
     - localai/localai-backends:master-gpu-nvidia-cuda-12-vllm-omni
 - !!merge <<: *vllm-omni
   name: "rocm-vllm-omni-development"
-  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-vllm-omni"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-vllm-omni"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-vllm-omni
+    - quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-vllm-omni
     - localai/localai-backends:master-gpu-rocm-hipblas-vllm-omni
 # rfdetr
 - !!merge <<: *rfdetr
@@ -1623,8 +1635,10 @@
     - localai/localai-backends:latest-gpu-intel-rerankers
 - !!merge <<: *rerankers
   name: "rocm-rerankers"
-  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-rerankers"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-rerankers"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-rerankers
+    - quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-rerankers
     - localai/localai-backends:latest-gpu-rocm-hipblas-rerankers
 - !!merge <<: *rerankers
   name: "cuda12-rerankers-development"
@@ -1633,8 +1647,10 @@
     - localai/localai-backends:master-gpu-nvidia-cuda-12-rerankers
 - !!merge <<: *rerankers
   name: "rocm-rerankers-development"
-  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-rerankers"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-rerankers"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-rerankers
+    - quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-rerankers
     - localai/localai-backends:master-gpu-rocm-hipblas-rerankers
 - !!merge <<: *rerankers
   name: "intel-rerankers-development"
@@ -1677,8 +1693,10 @@
     - localai/localai-backends:latest-gpu-nvidia-cuda-12-transformers
 - !!merge <<: *transformers
   name: "rocm-transformers"
-  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-transformers"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-transformers"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-transformers
+    - quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-transformers
     - localai/localai-backends:latest-gpu-rocm-hipblas-transformers
 - !!merge <<: *transformers
   name: "intel-transformers"
@@ -1692,8 +1710,10 @@
     - localai/localai-backends:master-gpu-nvidia-cuda-12-transformers
 - !!merge <<: *transformers
   name: "rocm-transformers-development"
-  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-transformers"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-transformers"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-transformers
+    - quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-transformers
     - localai/localai-backends:master-gpu-rocm-hipblas-transformers
 - !!merge <<: *transformers
   name: "intel-transformers-development"
@@ -1768,8 +1788,10 @@
     - localai/localai-backends:latest-gpu-nvidia-cuda-12-diffusers
 - !!merge <<: *diffusers
   name: "rocm-diffusers"
-  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-diffusers"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-diffusers"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-diffusers
+    - quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-diffusers
     - localai/localai-backends:latest-gpu-rocm-hipblas-diffusers
 - !!merge <<: *diffusers
   name: "intel-diffusers"
@@ -1783,8 +1805,10 @@
     - localai/localai-backends:master-gpu-nvidia-cuda-12-diffusers
 - !!merge <<: *diffusers
   name: "rocm-diffusers-development"
-  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-diffusers"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-diffusers"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-diffusers
+    - quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-diffusers
     - localai/localai-backends:master-gpu-rocm-hipblas-diffusers
 - !!merge <<: *diffusers
   name: "intel-diffusers-development"
@@ -1844,13 +1868,17 @@
     - localai/localai-backends:master-gpu-nvidia-cuda-13-ace-step
 - !!merge <<: *ace-step
   name: "rocm-ace-step"
-  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-ace-step"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-ace-step"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-ace-step
+    - quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-ace-step
     - localai/localai-backends:latest-gpu-rocm-hipblas-ace-step
 - !!merge <<: *ace-step
   name: "rocm-ace-step-development"
-  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-ace-step"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-ace-step"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-ace-step
+    - quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-ace-step
     - localai/localai-backends:master-gpu-rocm-hipblas-ace-step
 - !!merge <<: *ace-step
   name: "intel-ace-step"
@@ -1989,8 +2017,10 @@
     - localai/localai-backends:master-gpu-nvidia-cuda-12-kokoro
 - !!merge <<: *kokoro
   name: "rocm-kokoro-development"
-  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-kokoro"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-kokoro"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-kokoro
+    - quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-kokoro
     - localai/localai-backends:master-gpu-rocm-hipblas-kokoro
 - !!merge <<: *kokoro
   name: "intel-kokoro"
@@ -2019,8 +2049,10 @@
     - localai/localai-backends:latest-gpu-nvidia-cuda-12-kokoro
 - !!merge <<: *kokoro
   name: "rocm-kokoro"
-  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-kokoro"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-kokoro"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-kokoro
+    - quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-kokoro
     - localai/localai-backends:latest-gpu-rocm-hipblas-kokoro
 - !!merge <<: *kokoro
   name: "cuda13-kokoro"
@@ -2058,8 +2090,10 @@
     - localai/localai-backends:master-gpu-nvidia-cuda-12-faster-whisper
 - !!merge <<: *faster-whisper
   name: "rocm-faster-whisper-development"
-  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-faster-whisper"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-faster-whisper"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-faster-whisper
+    - quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-faster-whisper
     - localai/localai-backends:master-gpu-rocm-hipblas-faster-whisper
 - !!merge <<: *faster-whisper
   name: "intel-faster-whisper"
@@ -2171,13 +2205,17 @@
     - localai/localai-backends:master-gpu-nvidia-cuda-12-whisperx
 - !!merge <<: *whisperx
   name: "rocm-whisperx"
-  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-whisperx"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-whisperx"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-whisperx
+    - quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-whisperx
     - localai/localai-backends:latest-gpu-rocm-hipblas-whisperx
 - !!merge <<: *whisperx
   name: "rocm-whisperx-development"
-  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-whisperx"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-whisperx"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-whisperx
+    - quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-whisperx
     - localai/localai-backends:master-gpu-rocm-hipblas-whisperx
 - !!merge <<: *whisperx
   name: "cuda13-whisperx"
@@ -2220,8 +2258,10 @@
     - localai/localai-backends:master-gpu-nvidia-cuda-12-coqui
 - !!merge <<: *coqui
   name: "rocm-coqui-development"
-  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-coqui"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-coqui"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-coqui
+    - quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-coqui
     - localai/localai-backends:master-gpu-rocm-hipblas-coqui
 - !!merge <<: *coqui
   name: "intel-coqui"
@@ -2235,8 +2275,10 @@
     - localai/localai-backends:master-gpu-intel-coqui
 - !!merge <<: *coqui
   name: "rocm-coqui"
-  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-coqui"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-coqui"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-coqui
+    - quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-coqui
     - localai/localai-backends:latest-gpu-rocm-hipblas-coqui
 - !!merge <<: *coqui
   name: "metal-coqui"
@@ -2402,13 +2444,17 @@
     - localai/localai-backends:master-gpu-intel-vibevoice
 - !!merge <<: *vibevoice
   name: "rocm-vibevoice"
-  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-vibevoice"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-vibevoice"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-vibevoice
+    - quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-vibevoice
     - localai/localai-backends:latest-gpu-rocm-hipblas-vibevoice
 - !!merge <<: *vibevoice
   name: "rocm-vibevoice-development"
-  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-vibevoice"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-vibevoice"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-vibevoice
+    - quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-vibevoice
     - localai/localai-backends:master-gpu-rocm-hipblas-vibevoice
 - !!merge <<: *vibevoice
   name: "nvidia-l4t-vibevoice"
@@ -2496,13 +2542,17 @@
     - localai/localai-backends:master-gpu-intel-qwen-tts
 - !!merge <<: *qwen-tts
   name: "rocm-qwen-tts"
-  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-qwen-tts"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-qwen-tts"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-qwen-tts
+    - quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-qwen-tts
     - localai/localai-backends:latest-gpu-rocm-hipblas-qwen-tts
 - !!merge <<: *qwen-tts
   name: "rocm-qwen-tts-development"
-  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-qwen-tts"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-qwen-tts"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-qwen-tts
+    - quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-qwen-tts
     - localai/localai-backends:master-gpu-rocm-hipblas-qwen-tts
 - !!merge <<: *qwen-tts
   name: "nvidia-l4t-qwen-tts"
@@ -2590,13 +2640,17 @@
     - localai/localai-backends:master-gpu-intel-fish-speech
 - !!merge <<: *fish-speech
   name: "rocm-fish-speech"
-  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-fish-speech"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-fish-speech"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-fish-speech
+    - quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-fish-speech
     - localai/localai-backends:latest-gpu-rocm-hipblas-fish-speech
 - !!merge <<: *fish-speech
   name: "rocm-fish-speech-development"
-  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-fish-speech"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-fish-speech"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-fish-speech
+    - quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-fish-speech
     - localai/localai-backends:master-gpu-rocm-hipblas-fish-speech
 - !!merge <<: *fish-speech
   name: "nvidia-l4t-fish-speech"
@@ -2735,13 +2789,17 @@
     - localai/localai-backends:master-gpu-intel-qwen-asr
 - !!merge <<: *qwen-asr
   name: "rocm-qwen-asr"
-  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-qwen-asr"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-qwen-asr"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-qwen-asr
+    - quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-qwen-asr
     - localai/localai-backends:latest-gpu-rocm-hipblas-qwen-asr
 - !!merge <<: *qwen-asr
   name: "rocm-qwen-asr-development"
-  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-qwen-asr"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-qwen-asr"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-qwen-asr
+    - quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-qwen-asr
     - localai/localai-backends:master-gpu-rocm-hipblas-qwen-asr
 - !!merge <<: *qwen-asr
   name: "nvidia-l4t-qwen-asr"
@@ -2826,13 +2884,17 @@
     - localai/localai-backends:master-gpu-intel-nemo
 - !!merge <<: *nemo
   name: "rocm-nemo"
-  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-nemo"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-nemo"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-nemo
+    - quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-nemo
     - localai/localai-backends:latest-gpu-rocm-hipblas-nemo
 - !!merge <<: *nemo
   name: "rocm-nemo-development"
-  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-nemo"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-nemo"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-nemo
+    - quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-nemo
     - localai/localai-backends:master-gpu-rocm-hipblas-nemo
 - !!merge <<: *nemo
   name: "metal-nemo"
@@ -2897,13 +2959,17 @@
     - localai/localai-backends:master-gpu-intel-voxcpm
 - !!merge <<: *voxcpm
   name: "rocm-voxcpm"
-  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-voxcpm"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-voxcpm"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-voxcpm
+    - quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-voxcpm
     - localai/localai-backends:latest-gpu-rocm-hipblas-voxcpm
 - !!merge <<: *voxcpm
   name: "rocm-voxcpm-development"
-  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-voxcpm"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-voxcpm"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-voxcpm
+    - quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-voxcpm
     - localai/localai-backends:master-gpu-rocm-hipblas-voxcpm
 - !!merge <<: *voxcpm
   name: "metal-voxcpm"
@@ -2971,13 +3037,17 @@
     - localai/localai-backends:master-gpu-intel-pocket-tts
 - !!merge <<: *pocket-tts
   name: "rocm-pocket-tts"
-  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-pocket-tts"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-pocket-tts"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-pocket-tts
+    - quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-pocket-tts
     - localai/localai-backends:latest-gpu-rocm-hipblas-pocket-tts
 - !!merge <<: *pocket-tts
   name: "rocm-pocket-tts-development"
-  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-pocket-tts"
+  uri: "192.168.178.127:5000/localai-backends:rocm7-pocket-tts"
   mirrors:
+    - pointblank.ddns.net:5556/localai-backends:rocm7-pocket-tts
+    - quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-pocket-tts
     - localai/localai-backends:master-gpu-rocm-hipblas-pocket-tts
 - !!merge <<: *pocket-tts
   name: "nvidia-l4t-pocket-tts"
