@@ -259,15 +259,16 @@ ARG CMAKE_FROM_SOURCE=false
 ARG TARGETARCH
 ARG TARGETVARIANT
 
-# ROCm 7.x: temporarily hide the AMD apt repo so that apt-get update only sees
-# Ubuntu packages.  amdrocm-llvm ships a gcc wrapper without the epoch-4 prefix
-# Ubuntu uses, which makes apt refuse to install build-essential (Depends: gcc
-# >= 4:12.3).  The ROCm packages are already in the filesystem from the
-# requirements-drivers stage — we don't need the repo for resolution here.
-RUN if [ -f /etc/apt/sources.list.d/rocm.list ]; then \
-        mv /etc/apt/sources.list.d/rocm.list /etc/apt/sources.list.d/rocm.list.disabled; \
-    fi && \
-    apt-get update && \
+# ROCm 7.x: amdrocm-llvm declares Conflicts against Ubuntu gcc/g++/libhiredis/pkgconf.
+# Work around by force-installing Ubuntu's gcc et al. ignoring the conflict declarations,
+# then installing build-essential which will find gcc already present.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends --download-only \
+        gcc g++ cpp make dpkg-dev pkgconf libhiredis-dev libhiredis1.1.0 2>/dev/null || true && \
+    find /var/cache/apt/archives -name 'gcc_*.deb' -o -name 'g++_*.deb' \
+         -o -name 'cpp_*.deb' -o -name 'make_*.deb' -o -name 'dpkg-dev_*.deb' \
+         -o -name 'pkgconf_*.deb' -o -name 'libhiredis*.deb' 2>/dev/null \
+      | xargs --no-run-if-empty dpkg --force-all -i && \
     apt-get install -y --no-install-recommends \
         build-essential \
         ccache \
@@ -278,10 +279,7 @@ RUN if [ -f /etc/apt/sources.list.d/rocm.list ]; then \
         libopus-dev pkg-config \
         unzip upx-ucl python3 python-is-python3 && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    if [ -f /etc/apt/sources.list.d/rocm.list.disabled ]; then \
-        mv /etc/apt/sources.list.d/rocm.list.disabled /etc/apt/sources.list.d/rocm.list; \
-    fi
+    rm -rf /var/lib/apt/lists/*
 
 # Install CMake (the version in 22.04 is too old)
 RUN <<EOT bash
