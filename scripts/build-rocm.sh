@@ -15,6 +15,7 @@
 #   bash scripts/build-rocm.sh               # build all + push
 #   bash scripts/build-rocm.sh --no-push     # build all, no registry push
 #   bash scripts/build-rocm.sh --no-backends # main image only
+#   bash scripts/build-rocm.sh --rebuild-base # force rebuild of python-rocm7-base
 #   ROCM_VERSION=7.13 bash scripts/build-rocm.sh
 #   ROCM_ARCH=gfx1150,gfx1151 bash scripts/build-rocm.sh  # faster local build
 # =============================================================================
@@ -26,15 +27,53 @@ ROCM_VERSION="${ROCM_VERSION:-7.12}"
 ROCM_ARCH="${ROCM_ARCH:-gfx803,gfx900,gfx906,gfx1012,gfx1030,gfx1031,gfx1032,gfx1100,gfx1101,gfx1102,gfx1103,gfx1150,gfx1151,gfx1152,gfx1200,gfx1201}"
 NO_PUSH=false
 NO_BACKENDS=false
+REBUILD_BASE=false
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BOLD='\033[1m'; NC='\033[0m'
 
 for arg in "$@"; do
     case $arg in
-        --no-push)     NO_PUSH=true ;;
-        --no-backends) NO_BACKENDS=true ;;
+        --no-push)      NO_PUSH=true ;;
+        --no-backends)  NO_BACKENDS=true ;;
+        --rebuild-base) REBUILD_BASE=true ;;
     esac
 done
+
+# ---------------------------------------------------------------------------
+# Python-ROCm7 base image — built once, reused by all 18 Python backends.
+# Contains: Ubuntu 24.04 + ROCm 7.x (amdrocm-llvm + core-sdk) + dpkg patches
+#           + build-essential + python3 + uv + rust + grpcio-tools
+# Eliminates ~500 MB ROCm download + Rust/uv install per backend build.
+# ---------------------------------------------------------------------------
+BASE_IMAGE_NAME="localai-python-rocm7-base"
+# Tag encodes ROCm minor version so a version bump auto-triggers a rebuild.
+BASE_IMAGE_TAG="rocm${ROCM_VERSION}"
+BASE_LOCAL="${BASE_IMAGE_NAME}:${BASE_IMAGE_TAG}"
+
+_base_exists() {
+    docker image inspect "${BASE_LOCAL}" &>/dev/null
+}
+
+echo -e "\n${BOLD}=== Python-ROCm7 base image ===${NC}"
+if [ "${REBUILD_BASE}" = "true" ] || ! _base_exists; then
+    echo -e "  Building ${YELLOW}${BASE_LOCAL}${NC} (ROCM_ARCH=${ROCM_ARCH})..."
+    docker build \
+        --build-arg ROCM_ARCH="${ROCM_ARCH}" \
+        -f Dockerfile.python-rocm7-base \
+        -t "${BASE_LOCAL}" \
+        . 2>&1 | tee /tmp/localai-build-base.log
+    echo -e "  ${GREEN}✓ Base image ready: ${BASE_LOCAL}${NC}"
+
+    if [ "${NO_PUSH}" = "false" ]; then
+        for REG in "$REGISTRY" "$REGISTRY2"; do
+            docker tag "${BASE_LOCAL}" "${REG}/${BASE_IMAGE_NAME}:${BASE_IMAGE_TAG}"
+            docker push "${REG}/${BASE_IMAGE_NAME}:${BASE_IMAGE_TAG}" \
+                && echo -e "  ${GREEN}✓ Pushed ${REG}/${BASE_IMAGE_NAME}:${BASE_IMAGE_TAG}${NC}"
+        done
+    fi
+else
+    echo -e "  ${GREEN}✓ Already exists: ${BASE_LOCAL} (use --rebuild-base to force)${NC}"
+fi
 
 # ---------------------------------------------------------------------------
 # Backend list — keep in sync with sync-upstream.sh
@@ -102,8 +141,18 @@ if [ "$NO_BACKENDS" = "false" ]; then
         dftype="${entry##*|}"
 
         case "$dftype" in
-            llama-cpp) dockerfile="backend/Dockerfile.llama-cpp"; backend_arg="" ;;
-            *)         dockerfile="backend/Dockerfile.python";    backend_arg="--build-arg BACKEND=${backend}" ;;
+            llama-cpp)
+                dockerfile="backend/Dockerfile.llama-cpp"
+                backend_arg=""
+                # llama-cpp has its own ROCm compilation — use standard build
+                base_args=""
+                ;;
+            *)
+                dockerfile="backend/Dockerfile.python"
+                backend_arg="--build-arg BACKEND=${backend}"
+                # Python backends: use pre-built base to skip ROCm re-download
+                base_args="--build-arg BASE_IMAGE=${BASE_LOCAL} --build-arg SKIP_DRIVERS=true"
+                ;;
         esac
 
         local_tag="localai-backends:${OUR_SUFFIX}-${backend}"
@@ -115,6 +164,7 @@ if [ "$NO_BACKENDS" = "false" ]; then
                 --build-arg ROCM_VERSION=7 \
                 --build-arg ROCM_ARCH="${ROCM_ARCH}" \
                 $backend_arg \
+                $base_args \
                 -f "$dockerfile" \
                 -t "$local_tag" \
                 . 2>&1 | tee "/tmp/localai-build-${backend}.log"; then
