@@ -263,36 +263,23 @@ ARG TARGETVARIANT
 # metadata. This blocks apt from installing build-essential even after the ROCm apt repo
 # is removed, because dpkg/status still records the Conflicts field.
 #
-# Fix: use a BuildKit Python heredoc to strip those package names from every Conflicts:
-# field in /var/lib/dpkg/status (handles both single-line and multi-line continuation
-# fields).  After patching, apt sees no conflicts and installs normally.
-RUN <<'PYEOF' python3
-import re, pathlib, subprocess, sys
-
-p = pathlib.Path('/var/lib/dpkg/status')
-text = p.read_text()
-
-# Packages we need to un-conflict.  These are listed in amdrocm-llvm's Conflicts field.
-BAD = re.compile(
-    r',?\s*(?:gcc|g\+\+|cpp|make|dpkg-dev|pkgconf|libhiredis[^,\s(]*)\s*(?:\([^)]*\))?',
-    re.IGNORECASE,
-)
-
-# A Conflicts: field in dpkg/status may span multiple lines:
-# "Conflicts: foo, bar,\n bar2\n" (continuation lines start with exactly one space).
-CONFLICTS_FIELD = re.compile(r'^(Conflicts:(?:.*\n(?: .*\n)*)+)', re.MULTILINE)
-
-def strip_field(m):
-    cleaned = BAD.sub('', m.group())
-    # Fix leading comma after "Conflicts: " if first item was removed
-    cleaned = re.sub(r'^(Conflicts:)\s*,\s*', r'\1 ', cleaned, flags=re.MULTILINE)
-    return cleaned
-
-patched = CONFLICTS_FIELD.sub(strip_field, text)
-p.write_text(patched)
-print(f"Patched {text.count('Conflicts:') - patched.count('Conflicts:')} field(s) removed, "
-      f"{patched.count('Conflicts:')} remaining.", file=sys.stderr)
-PYEOF
+# Fix: use perl (always present in ubuntu:24.04 base) to strip those package names from
+# every Conflicts: field in /var/lib/dpkg/status.  perl -0777 slurps the whole file,
+# the substitution handles multi-line continuation fields (lines starting with a space).
+RUN <<'PEOF' bash
+# Strip conflicting package names from Conflicts: fields in dpkg/status.
+# Pattern: "Conflicts:" on one line, optional continuation lines (start with a space).
+# The outer group does NOT repeat — otherwise it eats subsequent fields (Depends: etc.)
+# and corrupts dpkg/status.
+perl -0777 -i -pe '
+  s{^(Conflicts:[^\n]*\n(?:[ \t][^\n]*\n)*)}{
+    (my $b = $1) =~ s{,?\s*(?:gcc|g\+\+|cpp|make|dpkg-dev|pkgconf|libhiredis\S*)\s*(?:\([^)]*\))?}{}gi;
+    $b =~ s{^(Conflicts:)\s*,\s*}{$1 }m;
+    $b
+  }mge
+' /var/lib/dpkg/status
+echo "dpkg/status Conflicts patch applied" >&2
+PEOF
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
