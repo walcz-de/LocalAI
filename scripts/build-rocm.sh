@@ -2,30 +2,28 @@
 # =============================================================================
 # LocalAI ROCm 7.x Rebuild Script
 # =============================================================================
-# Builds (and optionally pushes) the main LocalAI image plus all ROCm 7.x
-# backend images. No git sync — use sync-upstream.sh for merge + build + push.
+# Builds (and optionally pushes) the main LocalAI image plus backend images.
+# No git sync — use sync-upstream.sh for merge + tag + build + push.
 #
-# Tags use the scheme rocm<ROCM_VERSION> (e.g. rocm7.12), not a GPU-specific
-# name, because ROCm 7.x is a distinct build/install paradigm vs. ROCm 6.x and
-# the resulting images support all rocWMMA-capable architectures.
-#
-# By default builds for ALL GPU architectures supported by ROCm 7.12.
-# Override ROCM_ARCH to a subset for faster/smaller local builds, e.g.:
-#   ROCM_ARCH=gfx1151 bash scripts/build-rocm.sh
+# Naming convention:
+#   Git tag / binary version:  v{upstream}-rocm{major}.{minor}   e.g. v4.1.3-rocm7.12
+#   Image tags (immutable):    {reg}/localai:v4.1.3-rocm7.12
+#   Image tags (mutable):      {reg}/localai:rocm7
+#   Always pushed to both registries.
 #
 # Usage:
 #   bash scripts/build-rocm.sh               # build all + push
 #   bash scripts/build-rocm.sh --no-push     # build all, no registry push
 #   bash scripts/build-rocm.sh --no-backends # main image only
 #   ROCM_VERSION=7.13 bash scripts/build-rocm.sh
-#   ROCM_ARCH=gfx1150,gfx1151 bash scripts/build-rocm.sh
+#   ROCM_ARCH=gfx1150,gfx1151 bash scripts/build-rocm.sh  # faster local build
 # =============================================================================
 set -euo pipefail
 
 REGISTRY="${REGISTRY:-192.168.178.127:5000}"
 REGISTRY2="${REGISTRY2:-pointblank.ddns.net:5556}"
 ROCM_VERSION="${ROCM_VERSION:-7.12}"
-ROCM_ARCH="${ROCM_ARCH:-gfx803,gfx900,gfx906,gfx908,gfx90a,gfx942,gfx950,gfx1012,gfx1030,gfx1031,gfx1032,gfx1100,gfx1101,gfx1102,gfx1103,gfx1150,gfx1151,gfx1152,gfx1200,gfx1201}"
+ROCM_ARCH="${ROCM_ARCH:-gfx803,gfx900,gfx906,gfx1012,gfx1030,gfx1031,gfx1032,gfx1100,gfx1101,gfx1102,gfx1103,gfx1150,gfx1151,gfx1152,gfx1200,gfx1201}"
 NO_PUSH=false
 NO_BACKENDS=false
 
@@ -40,7 +38,6 @@ done
 
 # ---------------------------------------------------------------------------
 # Backend list — keep in sync with sync-upstream.sh
-# Format: "BACKEND_NAME|DOCKERFILE_TYPE"
 # ---------------------------------------------------------------------------
 BACKENDS=(
     "rerankers|python"
@@ -63,20 +60,22 @@ BACKENDS=(
     "coqui|python"
 )
 
-# Tag suffix: rocm<version> reflects the ROCm 7.x build paradigm
-# (new amdrocm-* packages, different install path) not a specific GPU arch.
+ROCM_MAJOR="${ROCM_VERSION%%.*}"
 OUR_SUFFIX="rocm${ROCM_VERSION}"
+
+# Derive version tag from git: expects a tag like v4.1.3-rocm7.12 at HEAD.
+# If HEAD is exactly at a fork tag use it; otherwise fall back to
+# v{nearest-upstream-tag}-rocm{version}-{sha} so the binary is always traceable.
+VERSION_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null || \
+    echo "$(git describe --tags --abbrev=0 upstream/master 2>/dev/null || echo 'dev')-${OUR_SUFFIX}-$(git rev-parse --short HEAD)")
 BUILD_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "local")
-UPSTREAM_VERSION=$(git describe --tags --abbrev=0 upstream/master 2>/dev/null \
-                    || git describe --tags --abbrev=0 2>/dev/null \
-                    || echo "dev")
-IMAGE_TAG="${UPSTREAM_VERSION}-${OUR_SUFFIX}-${BUILD_SHA}"
+FORK_LD_FLAGS="-s -w -X github.com/mudler/LocalAI/internal.Version=${VERSION_TAG} -X github.com/mudler/LocalAI/internal.Commit=${BUILD_SHA}"
 LOCAL_IMAGE="localai:${OUR_SUFFIX}"
 
 echo -e "${BOLD}LocalAI ROCm Rebuild${NC}"
-echo -e "  ROCm:    ${YELLOW}$ROCM_VERSION / $ROCM_ARCH${NC}"
-echo -e "  Tag:     ${YELLOW}$IMAGE_TAG${NC}"
-echo -e "  Push:    $( [ "$NO_PUSH" = "true" ] && echo "${YELLOW}disabled${NC}" || echo "${GREEN}enabled → $REGISTRY${NC}" )"
+echo -e "  ROCm:     ${YELLOW}$ROCM_VERSION / $ROCM_ARCH${NC}"
+echo -e "  Version:  ${YELLOW}$VERSION_TAG${NC}"
+echo -e "  Push:     $( [ "$NO_PUSH" = "true" ] && echo "${YELLOW}disabled${NC}" || echo "${GREEN}→ $REGISTRY + $REGISTRY2${NC}" )"
 echo -e "  Backends: $( [ "$NO_BACKENDS" = "true" ] && echo "${YELLOW}skipped${NC}" || echo "${GREEN}${#BACKENDS[@]} images${NC}" )"
 
 # ---------------------------------------------------------------------------
@@ -87,6 +86,7 @@ docker build \
     --build-arg ROCM_VERSION=7 \
     --build-arg ROCM_ARCH="${ROCM_ARCH}" \
     --build-arg GPU_TARGETS="${ROCM_ARCH}" \
+    --build-arg LD_FLAGS="${FORK_LD_FLAGS}" \
     -t "$LOCAL_IMAGE" \
     . 2>&1 | tee /tmp/localai-build-main.log
 
@@ -127,7 +127,6 @@ if [ "$NO_BACKENDS" = "false" ]; then
 
     if [ "${#FAILED_BACKENDS[@]}" -gt 0 ]; then
         echo -e "\n${RED}${BOLD}Failed backends:${NC} ${FAILED_BACKENDS[*]}"
-        echo -e "${YELLOW}Continuing push for successfully built images.${NC}"
     else
         echo -e "\n  ${GREEN}✓ All backends built${NC}"
     fi
@@ -135,32 +134,28 @@ fi
 
 # ---------------------------------------------------------------------------
 if [ "$NO_PUSH" = "true" ]; then
-    echo -e "\n${YELLOW}--no-push set — done (no registry push).${NC}"
+    echo -e "\n${YELLOW}--no-push set — done.${NC}"
+    echo -e "  To push later: ${YELLOW}bash scripts/build-rocm.sh --no-backends${NC} won't rebuild, just re-push existing local tags."
     exit 0
 fi
 
 # ---------------------------------------------------------------------------
-echo -e "\n${BOLD}=== Push main image ===${NC}"
-
-ROCM_MAJOR="${ROCM_VERSION%%.*}"   # e.g. "7" from "7.12"
-
 push_image() {
     local local_tag="$1" remote_tag="$2"
     docker tag "$local_tag" "$remote_tag"
     docker push "$remote_tag" && echo -e "  ${GREEN}✓ $remote_tag${NC}"
 }
 
+# ---------------------------------------------------------------------------
+echo -e "\n${BOLD}=== Push main image ===${NC}"
 for REG in "$REGISTRY" "$REGISTRY2"; do
-    push_image "$LOCAL_IMAGE" "${REG}/localai:${IMAGE_TAG}"
-    push_image "$LOCAL_IMAGE" "${REG}/localai:latest-rocm${ROCM_MAJOR}"
+    push_image "$LOCAL_IMAGE" "${REG}/localai:${VERSION_TAG}"       # immutable
+    push_image "$LOCAL_IMAGE" "${REG}/localai:rocm${ROCM_MAJOR}"    # mutable channel
 done
-REGISTRY_IMAGE="${REGISTRY}/localai:${IMAGE_TAG}"
-REGISTRY_LATEST="${REGISTRY}/localai:latest-rocm${ROCM_MAJOR}"
 
 # ---------------------------------------------------------------------------
 if [ "$NO_BACKENDS" = "false" ]; then
     echo -e "\n${BOLD}=== Push backend images ===${NC}"
-
     for entry in "${BACKENDS[@]}"; do
         backend="${entry%%|*}"
         local_tag="localai-backends:${OUR_SUFFIX}-${backend}"
@@ -171,19 +166,20 @@ if [ "$NO_BACKENDS" = "false" ]; then
         fi
 
         for REG in "$REGISTRY" "$REGISTRY2"; do
-            push_image "$local_tag" "${REG}/localai-backends:${IMAGE_TAG}-${backend}"
-            push_image "$local_tag" "${REG}/localai-backends:latest-rocm${ROCM_MAJOR}-${backend}"
+            push_image "$local_tag" "${REG}/localai-backends:${VERSION_TAG}-${backend}"
+            push_image "$local_tag" "${REG}/localai-backends:rocm${ROCM_MAJOR}-${backend}"
         done
     done
 fi
 
 # ---------------------------------------------------------------------------
 echo -e "\n${GREEN}${BOLD}=== Done ===${NC}"
-echo -e "  Main image: ${GREEN}$REGISTRY_IMAGE${NC}"
-echo -e "  Latest:     ${GREEN}$REGISTRY_LATEST${NC}"
-if [ "$NO_BACKENDS" = "false" ]; then
-    echo -e "  Backends:   ${GREEN}${#BACKENDS[@]} images tagged as latest-rocm${ROCM_MAJOR}-<name>${NC}"
-fi
+echo -e "  Version: ${GREEN}$VERSION_TAG${NC}"
+echo -e "  ${REGISTRY}/localai:${VERSION_TAG}"
+echo -e "  ${REGISTRY2}/localai:${VERSION_TAG}"
 echo ""
-echo -e "  Deploy:"
+echo -e "  ${BOLD}Update docker-compose.yaml:${NC}"
+echo -e "  ${YELLOW}image: ${REGISTRY}/localai:${VERSION_TAG}${NC}"
+echo ""
+echo -e "  ${BOLD}Deploy:${NC}"
 echo -e "  ${YELLOW}docker compose pull localai && docker compose up -d localai --force-recreate${NC}"
