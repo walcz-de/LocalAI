@@ -259,12 +259,41 @@ ARG CMAKE_FROM_SOURCE=false
 ARG TARGETARCH
 ARG TARGETVARIANT
 
-# ROCm 7.x: amdrocm-llvm declares Conflicts: gcc, g++, libhiredis, pkgconf in dpkg metadata.
-# apt refuses to install these even after the ROCm repo is removed (conflict is in dpkg/status).
-# Fix: one-liner python3 strips those entries from Conflicts lines in /var/lib/dpkg/status,
-# then apt-get install proceeds normally.
+# ROCm 7.x: amdrocm-llvm declares Conflicts: gcc, g++, libhiredis, pkgconf in its dpkg
+# metadata. This blocks apt from installing build-essential even after the ROCm apt repo
+# is removed, because dpkg/status still records the Conflicts field.
+#
+# Fix: use a BuildKit Python heredoc to strip those package names from every Conflicts:
+# field in /var/lib/dpkg/status (handles both single-line and multi-line continuation
+# fields).  After patching, apt sees no conflicts and installs normally.
+RUN <<'PYEOF' python3
+import re, pathlib, subprocess, sys
+
+p = pathlib.Path('/var/lib/dpkg/status')
+text = p.read_text()
+
+# Packages we need to un-conflict.  These are listed in amdrocm-llvm's Conflicts field.
+BAD = re.compile(
+    r',?\s*(?:gcc|g\+\+|cpp|make|dpkg-dev|pkgconf|libhiredis[^,\s(]*)\s*(?:\([^)]*\))?',
+    re.IGNORECASE,
+)
+
+# A Conflicts: field in dpkg/status may span multiple lines:
+# "Conflicts: foo, bar,\n bar2\n" (continuation lines start with exactly one space).
+CONFLICTS_FIELD = re.compile(r'^(Conflicts:(?:.*\n(?: .*\n)*)+)', re.MULTILINE)
+
+def strip_field(m):
+    cleaned = BAD.sub('', m.group())
+    # Fix leading comma after "Conflicts: " if first item was removed
+    cleaned = re.sub(r'^(Conflicts:)\s*,\s*', r'\1 ', cleaned, flags=re.MULTILINE)
+    return cleaned
+
+patched = CONFLICTS_FIELD.sub(strip_field, text)
+p.write_text(patched)
+print(f"Patched {text.count('Conflicts:') - patched.count('Conflicts:')} field(s) removed, "
+      f"{patched.count('Conflicts:')} remaining.", file=sys.stderr)
+PYEOF
 RUN apt-get update && \
-    python3 -c "import re,pathlib; p=pathlib.Path('/var/lib/dpkg/status'); t=p.read_text(); bad=r'gcc|g\+\+|cpp|make|dpkg-dev|pkgconf|libhiredis\S*'; t=re.sub(r'(Conflicts:[^\n]+)', lambda m: re.sub(r',?\s*(?:' + bad + r')\s*(?:\([^)]*\))?', '', m.group()), t); p.write_text(t)" && \
     apt-get install -y --no-install-recommends \
         build-essential \
         ccache \
