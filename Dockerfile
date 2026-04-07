@@ -259,24 +259,12 @@ ARG CMAKE_FROM_SOURCE=false
 ARG TARGETARCH
 ARG TARGETVARIANT
 
-# ROCm 7.x: amdrocm-llvm declares Conflicts against Ubuntu gcc/g++/libhiredis/pkgconf.
-# apt-get install --download-only still runs conflict resolution and fails.
-# Fix: patch /var/lib/dpkg/status to remove those Conflict declarations first,
-# then apt installs gcc/build-essential without issues.
+# ROCm 7.x: amdrocm-llvm declares Conflicts: gcc, g++, libhiredis, pkgconf in dpkg metadata.
+# apt refuses to install these even after the ROCm repo is removed (conflict is in dpkg/status).
+# Fix: one-liner python3 strips those entries from Conflicts lines in /var/lib/dpkg/status,
+# then apt-get install proceeds normally.
 RUN apt-get update && \
-    python3 -c "
-import re, pathlib
-p = pathlib.Path('/var/lib/dpkg/status')
-t = p.read_text()
-# Remove specific packages from Conflicts lines so apt allows them to be installed
-bad = r'gcc|g\+\+|cpp|make|dpkg-dev|pkgconf|libhiredis[^\s,]*'
-def strip_conflicts(m):
-    line = re.sub(r',?\s*(?:' + bad + r')\s*(?:\([^)]*\))?', '', m.group())
-    line = re.sub(r'Conflicts:\s*,\s*', 'Conflicts: ', line)
-    return line if line.strip() != 'Conflicts:' else ''
-t = re.sub(r'Conflicts:[^\n]+', strip_conflicts, t)
-p.write_text(t)
-" && \
+    python3 -c "import re,pathlib; p=pathlib.Path('/var/lib/dpkg/status'); t=p.read_text(); bad=r'gcc|g\+\+|cpp|make|dpkg-dev|pkgconf|libhiredis\S*'; t=re.sub(r'(Conflicts:[^\n]+)', lambda m: re.sub(r',?\s*(?:' + bad + r')\s*(?:\([^)]*\))?', '', m.group()), t); p.write_text(t)" && \
     apt-get install -y --no-install-recommends \
         build-essential \
         ccache \
