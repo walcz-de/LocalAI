@@ -29,7 +29,7 @@ set -euo pipefail
 
 REGISTRY="${REGISTRY:-192.168.178.127:5000}"
 REGISTRY2="${REGISTRY2:-pointblank.ddns.net:5556}"
-ROCM_VERSION="${ROCM_VERSION:-7.13}"
+ROCM_VERSION="${ROCM_VERSION:-7.12}"
 # CDNA data-center arches (gfx908/gfx90a=MI100, gfx942=MI300, gfx950) removed:
 # they ship amdrocm-ck/dnn/rccl packages that conflict with build-essential
 # after repo updates. We only run RDNA consumer/prosumer hardware.
