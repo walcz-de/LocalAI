@@ -40,6 +40,13 @@ for arg in "$@"; do
 done
 
 # ---------------------------------------------------------------------------
+push_image() {
+    local local_tag="$1" remote_tag="$2"
+    docker tag "$local_tag" "$remote_tag"
+    docker push "$remote_tag" && echo -e "  ${GREEN}✓ $remote_tag${NC}"
+}
+
+# ---------------------------------------------------------------------------
 # Python-ROCm7 base image — built once, reused by all 18 Python backends.
 # Contains: Ubuntu 24.04 + ROCm 7.x (amdrocm-llvm + core-sdk) + dpkg patches
 #           + build-essential + python3 + uv + rust + grpcio-tools
@@ -66,9 +73,9 @@ if [ "${REBUILD_BASE}" = "true" ] || ! _base_exists; then
 
     if [ "${NO_PUSH}" = "false" ]; then
         for REG in "$REGISTRY" "$REGISTRY2"; do
-            docker tag "${BASE_LOCAL}" "${REG}/${BASE_IMAGE_NAME}:${BASE_IMAGE_TAG}"
-            docker push "${REG}/${BASE_IMAGE_NAME}:${BASE_IMAGE_TAG}" \
-                && echo -e "  ${GREEN}✓ Pushed ${REG}/${BASE_IMAGE_NAME}:${BASE_IMAGE_TAG}${NC}"
+            push_image "${BASE_LOCAL}" "${REG}/${BASE_IMAGE_NAME}:${BASE_IMAGE_TAG}"          # rocm7.12
+            push_image "${BASE_LOCAL}" "${REG}/${BASE_IMAGE_NAME}:rocm${ROCM_MAJOR}"          # rocm7
+            push_image "${BASE_LOCAL}" "${REG}/${BASE_IMAGE_NAME}:latest"                     # latest
         done
     fi
 else
@@ -102,18 +109,30 @@ BACKENDS=(
 ROCM_MAJOR="${ROCM_VERSION%%.*}"
 OUR_SUFFIX="rocm${ROCM_VERSION}"
 
-# Derive version tag from git: expects a tag like v4.1.3-rocm7.12 at HEAD.
-# If HEAD is exactly at a fork tag use it; otherwise fall back to
-# v{nearest-upstream-tag}-rocm{version}-{sha} so the binary is always traceable.
-VERSION_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null || \
-    echo "$(git describe --tags --abbrev=0 upstream/master 2>/dev/null || echo 'dev')-${OUR_SUFFIX}-$(git rev-parse --short HEAD)")
+# Version tags — two separate concepts:
+#
+#   VERSION_TAG   = stable, mutable — always updated on every build.
+#                   This is what docker-compose.yaml references.
+#                   Format: v{upstream}-rocm{major}.{minor}
+#                   e.g.    v4.1.3-rocm7.12
+#
+#   IMMUTABLE_TAG = SHA-pinned, never changes after creation.
+#                   For audit trails and rollback only.
+#                   Format: v{upstream}-rocm{major}.{minor}-{sha}
+#                   e.g.    v4.1.3-rocm7.12-8a9c47e4
+#
+UPSTREAM_VERSION=$(git describe --tags --abbrev=0 upstream/master 2>/dev/null || echo 'dev')
 BUILD_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "local")
+VERSION_TAG="${UPSTREAM_VERSION}-${OUR_SUFFIX}"          # e.g. v4.1.3-rocm7.12
+IMMUTABLE_TAG="${VERSION_TAG}-${BUILD_SHA}"              # e.g. v4.1.3-rocm7.12-8a9c47e4
+
 FORK_LD_FLAGS="-s -w -X github.com/mudler/LocalAI/internal.Version=${VERSION_TAG} -X github.com/mudler/LocalAI/internal.Commit=${BUILD_SHA}"
 LOCAL_IMAGE="localai:${OUR_SUFFIX}"
 
 echo -e "${BOLD}LocalAI ROCm Rebuild${NC}"
 echo -e "  ROCm:     ${YELLOW}$ROCM_VERSION / $ROCM_ARCH${NC}"
-echo -e "  Version:  ${YELLOW}$VERSION_TAG${NC}"
+echo -e "  Version:  ${YELLOW}$VERSION_TAG${NC}  (stable tag, always updated)"
+echo -e "  Immutable:${YELLOW}$IMMUTABLE_TAG${NC} (SHA-pinned, never changes)"
 echo -e "  Push:     $( [ "$NO_PUSH" = "true" ] && echo "${YELLOW}disabled${NC}" || echo "${GREEN}→ $REGISTRY + $REGISTRY2${NC}" )"
 echo -e "  Backends: $( [ "$NO_BACKENDS" = "true" ] && echo "${YELLOW}skipped${NC}" || echo "${GREEN}${#BACKENDS[@]} images${NC}" )"
 
@@ -190,17 +209,12 @@ if [ "$NO_PUSH" = "true" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-push_image() {
-    local local_tag="$1" remote_tag="$2"
-    docker tag "$local_tag" "$remote_tag"
-    docker push "$remote_tag" && echo -e "  ${GREEN}✓ $remote_tag${NC}"
-}
-
-# ---------------------------------------------------------------------------
 echo -e "\n${BOLD}=== Push main image ===${NC}"
 for REG in "$REGISTRY" "$REGISTRY2"; do
-    push_image "$LOCAL_IMAGE" "${REG}/localai:${VERSION_TAG}"       # immutable
-    push_image "$LOCAL_IMAGE" "${REG}/localai:rocm${ROCM_MAJOR}"    # mutable channel
+    push_image "$LOCAL_IMAGE" "${REG}/localai:${IMMUTABLE_TAG}"      # SHA-pinned, never changes
+    push_image "$LOCAL_IMAGE" "${REG}/localai:${VERSION_TAG}"        # stable version, always latest
+    push_image "$LOCAL_IMAGE" "${REG}/localai:rocm${ROCM_MAJOR}"     # channel tag  (rocm7)
+    push_image "$LOCAL_IMAGE" "${REG}/localai:latest"                # absolute latest
 done
 
 # ---------------------------------------------------------------------------
@@ -216,20 +230,24 @@ if [ "$NO_BACKENDS" = "false" ]; then
         fi
 
         for REG in "$REGISTRY" "$REGISTRY2"; do
-            push_image "$local_tag" "${REG}/localai-backends:${VERSION_TAG}-${backend}"
-            push_image "$local_tag" "${REG}/localai-backends:rocm${ROCM_MAJOR}-${backend}"
+            push_image "$local_tag" "${REG}/localai-backends:${IMMUTABLE_TAG}-${backend}"  # SHA-pinned
+            push_image "$local_tag" "${REG}/localai-backends:${VERSION_TAG}-${backend}"    # stable version
+            push_image "$local_tag" "${REG}/localai-backends:rocm${ROCM_MAJOR}-${backend}" # channel tag
         done
     done
 fi
 
 # ---------------------------------------------------------------------------
 echo -e "\n${GREEN}${BOLD}=== Done ===${NC}"
-echo -e "  Version: ${GREEN}$VERSION_TAG${NC}"
-echo -e "  ${REGISTRY}/localai:${VERSION_TAG}"
-echo -e "  ${REGISTRY2}/localai:${VERSION_TAG}"
 echo ""
-echo -e "  ${BOLD}Update docker-compose.yaml:${NC}"
-echo -e "  ${YELLOW}image: ${REGISTRY}/localai:${VERSION_TAG}${NC}"
+echo -e "  ${BOLD}Tag overview:${NC}"
+echo -e "  ${GREEN}${REGISTRY}/localai:latest${NC}              ← always the newest build"
+echo -e "  ${GREEN}${REGISTRY}/localai:rocm${ROCM_MAJOR}${NC}               ← latest on this ROCm major"
+echo -e "  ${GREEN}${REGISTRY}/localai:${VERSION_TAG}${NC}   ← latest build for this version (use in docker-compose)"
+echo -e "  ${YELLOW}${REGISTRY}/localai:${IMMUTABLE_TAG}${NC}  ← SHA-pinned, immutable"
+echo ""
+echo -e "  ${BOLD}docker-compose.yaml (no change needed — tag is already stable):${NC}"
+echo -e "  ${CYAN}image: ${REGISTRY}/localai:${VERSION_TAG}${NC}"
 echo ""
 echo -e "  ${BOLD}Deploy:${NC}"
-echo -e "  ${YELLOW}docker compose pull localai && docker compose up -d localai --force-recreate${NC}"
+echo -e "  ${CYAN}docker compose pull localai && docker compose up -d localai --force-recreate${NC}"
