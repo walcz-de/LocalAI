@@ -260,15 +260,23 @@ ARG TARGETARCH
 ARG TARGETVARIANT
 
 # ROCm 7.x: amdrocm-llvm declares Conflicts against Ubuntu gcc/g++/libhiredis/pkgconf.
-# Work around by force-installing Ubuntu's gcc et al. ignoring the conflict declarations,
-# then installing build-essential which will find gcc already present.
+# apt-get install --download-only still runs conflict resolution and fails.
+# Fix: patch /var/lib/dpkg/status to remove those Conflict declarations first,
+# then apt installs gcc/build-essential without issues.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends --download-only \
-        gcc g++ cpp make dpkg-dev pkgconf libhiredis-dev libhiredis1.1.0 2>/dev/null || true && \
-    find /var/cache/apt/archives -name 'gcc_*.deb' -o -name 'g++_*.deb' \
-         -o -name 'cpp_*.deb' -o -name 'make_*.deb' -o -name 'dpkg-dev_*.deb' \
-         -o -name 'pkgconf_*.deb' -o -name 'libhiredis*.deb' 2>/dev/null \
-      | xargs --no-run-if-empty dpkg --force-all -i && \
+    python3 -c "
+import re, pathlib
+p = pathlib.Path('/var/lib/dpkg/status')
+t = p.read_text()
+# Remove specific packages from Conflicts lines so apt allows them to be installed
+bad = r'gcc|g\+\+|cpp|make|dpkg-dev|pkgconf|libhiredis[^\s,]*'
+def strip_conflicts(m):
+    line = re.sub(r',?\s*(?:' + bad + r')\s*(?:\([^)]*\))?', '', m.group())
+    line = re.sub(r'Conflicts:\s*,\s*', 'Conflicts: ', line)
+    return line if line.strip() != 'Conflicts:' else ''
+t = re.sub(r'Conflicts:[^\n]+', strip_conflicts, t)
+p.write_text(t)
+" && \
     apt-get install -y --no-install-recommends \
         build-essential \
         ccache \
