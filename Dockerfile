@@ -159,6 +159,14 @@ RUN if [ "${BUILD_TYPE}" = "clblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then \
 
 RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then \
     if [ "${ROCM_VERSION}" = "7" ]; then \
+        # Pre-install Ubuntu build toolchain BEFORE adding the ROCm apt repo.
+        # amdrocm-llvm ships its own LLVM/Clang and may provide/conflict with
+        # Ubuntu's gcc, libhiredis, or pkgconf packages.  Pinning Ubuntu's versions
+        # first ensures apt doesn't remove them when resolving ROCm dependencies.
+        apt-get update && \
+        apt-get install -y --no-install-recommends \
+            gcc g++ make dpkg-dev pkgconf libhiredis-dev && \
+        apt-get clean && rm -rf /var/lib/apt/lists/* && \
         # ROCm 7.x ships under a new apt repo with renamed packages.
         # repo.amd.com/rocm/packages/ubuntu2404 uses amdrocm-* names; the old
         # hipblas-dev / rocblas-dev packages no longer exist.

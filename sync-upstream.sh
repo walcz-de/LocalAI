@@ -29,8 +29,11 @@ set -euo pipefail
 
 REGISTRY="${REGISTRY:-192.168.178.127:5000}"
 REGISTRY2="${REGISTRY2:-pointblank.ddns.net:5556}"
-ROCM_VERSION="${ROCM_VERSION:-7.12}"
-ROCM_ARCH="${ROCM_ARCH:-gfx803,gfx900,gfx906,gfx908,gfx90a,gfx942,gfx950,gfx1012,gfx1030,gfx1031,gfx1032,gfx1100,gfx1101,gfx1102,gfx1103,gfx1150,gfx1151,gfx1152,gfx1200,gfx1201}"
+ROCM_VERSION="${ROCM_VERSION:-7.13}"
+# CDNA data-center arches (gfx908/gfx90a=MI100, gfx942=MI300, gfx950) removed:
+# they ship amdrocm-ck/dnn/rccl packages that conflict with build-essential
+# after repo updates. We only run RDNA consumer/prosumer hardware.
+ROCM_ARCH="${ROCM_ARCH:-gfx803,gfx900,gfx906,gfx1012,gfx1030,gfx1031,gfx1032,gfx1100,gfx1101,gfx1102,gfx1103,gfx1150,gfx1151,gfx1152,gfx1200,gfx1201}"
 UPSTREAM_REMOTE="${UPSTREAM_REMOTE:-upstream}"
 UPSTREAM_BRANCH="${UPSTREAM_BRANCH:-master}"
 DRY_RUN=false
@@ -149,6 +152,7 @@ echo -e "  Version tag: ${YELLOW}$VERSION_TAG${NC}"
 echo -e "  Latest tag:  ${YELLOW}latest-rocm${ROCM_VERSION%%.*}${NC}"
 
 docker build \
+    --no-cache \
     --build-arg BUILD_TYPE=hipblas \
     --build-arg ROCM_VERSION=7 \
     --build-arg ROCM_ARCH="${ROCM_ARCH}" \
@@ -177,6 +181,7 @@ if [ "$NO_BACKENDS" = "false" ]; then
 
         # shellcheck disable=SC2086
         if docker build \
+                --no-cache \
                 --build-arg BUILD_TYPE=hipblas \
                 --build-arg ROCM_VERSION=7 \
                 --build-arg ROCM_ARCH="${ROCM_ARCH}" \
