@@ -1,2 +1,8 @@
 *.sh text eol=lf
 backend/cpp/llama/*.hpp linguist-vendored
+
+# ROCm fork: keep our versions of these files on upstream merges.
+# The 'ours-rocm' driver is registered in .git/config by scripts/install-hooks.sh.
+backend/index.yaml                   merge=ours-rocm
+Dockerfile.python-rocm7-base         merge=ours-rocm
+docker-compose.yaml                  merge=ours-rocm
