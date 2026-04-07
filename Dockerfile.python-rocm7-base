@@ -63,8 +63,14 @@ https://repo.amd.com/rocm/packages/ubuntu2404 stable main' \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ── 3. dpkg/status patches — strip broken gfx stanzas so build-essential works
+#   Pass 1: strip gcc/cpp/make etc. from ROCm package Conflicts fields
+#   Pass 2: strip any token starting with '-' from Conflicts fields (e.g. -doc)
+#   Pass 3: remove entire amdrocm-*-gfxNNNN package stanzas
 RUN perl -0777 -i -pe \
       's{^(Conflicts:[^\n]*\n(?:[ \t][^\n]*\n)*)}{(my $b=$1)=~s{,?\s*(?:gcc|g\+\+|cpp|make|dpkg-dev|pkgconf|libhiredis\S*)\s*(?:\([^)]*\))?}{}gi;$b=~s{^(Conflicts:)\s*,\s*}{$1 }m;$b}mge' \
+      /var/lib/dpkg/status && \
+    perl -0777 -i -pe \
+      's{^(Conflicts:[^\n]*\n(?:[ \t][^\n]*\n)*)}{(my $b=$1)=~s{,?\s+-\S+(?:\s*\([^)]*\))?}{}g;$b=~s{^(Conflicts:)\s*,\s*}{$1 }m;$b}mge' \
       /var/lib/dpkg/status && \
     perl -0777 -i -pe \
       's{^Package: amdrocm-\S+-gfx\d+\S*\n(?:(?!^Package:)[^\n]*\n)*}{}mg' \
