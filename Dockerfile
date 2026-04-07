@@ -259,7 +259,15 @@ ARG CMAKE_FROM_SOURCE=false
 ARG TARGETARCH
 ARG TARGETVARIANT
 
-RUN apt-get update && \
+# ROCm 7.x: temporarily hide the AMD apt repo so that apt-get update only sees
+# Ubuntu packages.  amdrocm-llvm ships a gcc wrapper without the epoch-4 prefix
+# Ubuntu uses, which makes apt refuse to install build-essential (Depends: gcc
+# >= 4:12.3).  The ROCm packages are already in the filesystem from the
+# requirements-drivers stage — we don't need the repo for resolution here.
+RUN if [ -f /etc/apt/sources.list.d/rocm.list ]; then \
+        mv /etc/apt/sources.list.d/rocm.list /etc/apt/sources.list.d/rocm.list.disabled; \
+    fi && \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
         ccache \
@@ -270,7 +278,10 @@ RUN apt-get update && \
         libopus-dev pkg-config \
         unzip upx-ucl python3 python-is-python3 && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    if [ -f /etc/apt/sources.list.d/rocm.list.disabled ]; then \
+        mv /etc/apt/sources.list.d/rocm.list.disabled /etc/apt/sources.list.d/rocm.list; \
+    fi
 
 # Install CMake (the version in 22.04 is too old)
 RUN <<EOT bash
