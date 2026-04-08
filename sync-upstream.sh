@@ -234,19 +234,30 @@ if [ "$NO_PUSH" = "true" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-push_image() {
-    local local_tag="$1" remote_tag="$2"
+# push_image_to_reg <local_tag> <remote_tag> [required=true]
+# Registry1 (REGISTRY) is required — failure aborts the script.
+# Registry2 (REGISTRY2) is optional — failure prints a warning and continues.
+push_image_to_reg() {
+    local local_tag="$1" remote_tag="$2" required="${3:-true}"
     docker tag "$local_tag" "$remote_tag"
-    docker push "$remote_tag" && echo -e "  ${GREEN}✓ $remote_tag${NC}"
+    if docker push "$remote_tag"; then
+        echo -e "  ${GREEN}✓ $remote_tag${NC}"
+    elif [ "$required" = "false" ]; then
+        echo -e "  ${YELLOW}⚠ $remote_tag — push failed (registry unreachable, non-fatal)${NC}"
+        return 0
+    else
+        echo -e "  ${RED}✗ $remote_tag — push failed${NC}"
+        return 1
+    fi
 }
 
 # ---------------------------------------------------------------------------
 echo -e "\n${BOLD}=== 7. Push main image ===${NC}"
 
-for REG in "$REGISTRY" "$REGISTRY2"; do
-    push_image "$LOCAL_IMAGE" "${REG}/localai:${VERSION_TAG}"   # immutable: v4.1.3-rocm7.12
-    push_image "$LOCAL_IMAGE" "${REG}/localai:rocm${ROCM_MAJOR}"  # mutable channel: rocm7
-done
+push_image_to_reg "$LOCAL_IMAGE" "${REGISTRY}/localai:${VERSION_TAG}"     # immutable, required
+push_image_to_reg "$LOCAL_IMAGE" "${REGISTRY}/localai:rocm${ROCM_MAJOR}"  # mutable,   required
+push_image_to_reg "$LOCAL_IMAGE" "${REGISTRY2}/localai:${VERSION_TAG}"    "false"  # optional
+push_image_to_reg "$LOCAL_IMAGE" "${REGISTRY2}/localai:rocm${ROCM_MAJOR}" "false"  # optional
 
 # ---------------------------------------------------------------------------
 if [ "$NO_BACKENDS" = "false" ]; then
@@ -261,10 +272,10 @@ if [ "$NO_BACKENDS" = "false" ]; then
             continue
         fi
 
-        for REG in "$REGISTRY" "$REGISTRY2"; do
-            push_image "$local_tag" "${REG}/localai-backends:${VERSION_TAG}-${backend}"   # immutable
-            push_image "$local_tag" "${REG}/localai-backends:rocm${ROCM_MAJOR}-${backend}"  # mutable
-        done
+        push_image_to_reg "$local_tag" "${REGISTRY}/localai-backends:${VERSION_TAG}-${backend}"    # required
+        push_image_to_reg "$local_tag" "${REGISTRY}/localai-backends:rocm${ROCM_MAJOR}-${backend}" # required
+        push_image_to_reg "$local_tag" "${REGISTRY2}/localai-backends:${VERSION_TAG}-${backend}"   "false"  # optional
+        push_image_to_reg "$local_tag" "${REGISTRY2}/localai-backends:rocm${ROCM_MAJOR}-${backend}" "false" # optional
     done
 fi
 

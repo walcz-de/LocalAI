@@ -187,8 +187,16 @@ RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then 
         # amdrocm-core-sdk-gfxNNNN provides pre-compiled BLAS/CK/DNN kernels for
         # that GPU family. Packages for old GCN arches (gfx803/900/906) may not
         # exist in the ROCm 7.x repo; the || true skips unavailable packages.
+        # --force-overwrite: gfx115x packages share common files (libhipfft.so,
+        # headers, READMEs) with adjacent arches (e.g. gfx1150 vs gfx1151).
+        # Without this flag dpkg refuses to install a second arch because it would
+        # "overwrite" files already owned by the first arch package.  The files
+        # are identical across arch variants; only the GPU-specific kernel objects
+        # in separate subdirectories differ.
         for _arch in $(echo "${ROCM_ARCH}" | tr ',' ' '); do \
-            apt-get install -y --no-install-recommends "amdrocm-core-sdk-${_arch}" || \
+            apt-get install -y --no-install-recommends \
+                -o Dpkg::Options::="--force-overwrite" \
+                "amdrocm-core-sdk-${_arch}" || \
             echo "Note: amdrocm-core-sdk-${_arch} not available in ROCm 7.x repo, skipping" >&2 ; \
         done && \
         apt-get clean && \
