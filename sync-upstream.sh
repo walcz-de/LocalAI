@@ -222,8 +222,11 @@ if [ "$NO_BACKENDS" = "false" ]; then
         echo -e "\n  [${backend}] Building..."
 
         # shellcheck disable=SC2086
+        # No --no-cache here: Docker layer cache is intentional for backends.
+        # The ROCm install layer (before ARG BACKEND) is shared across all
+        # backends and can be reused. Only the main image uses --no-cache to
+        # guarantee a clean build after upstream merges.
         if docker build \
-                --no-cache \
                 --build-arg BUILD_TYPE=hipblas \
                 --build-arg ROCM_VERSION=7 \
                 --build-arg ROCM_ARCH="${ROCM_ARCH}" \
