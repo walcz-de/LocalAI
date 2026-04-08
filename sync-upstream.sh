@@ -3,11 +3,13 @@
 # LocalAI Upstream Sync — ROCm 7.x Fork
 # =============================================================================
 # Usage:
-#   bash sync-upstream.sh               # fetch + merge + build all + push
-#   bash sync-upstream.sh --dry-run     # fetch + merge only (no build)
-#   bash sync-upstream.sh --no-push     # build but no registry push
-#   bash sync-upstream.sh --no-backends # main image only, skip backend images
+#   bash sync-upstream.sh                  # fetch + merge + build all + push
+#   bash sync-upstream.sh --dry-run        # fetch + merge only (no build)
+#   bash sync-upstream.sh --no-push        # build but no registry push
+#   bash sync-upstream.sh --no-backends    # main image only, skip backend images
+#   bash sync-upstream.sh --backends-only  # backend images only, skip main image
 #   ROCM_VERSION=7.13 bash sync-upstream.sh
+#   ROCM_ARCH=gfx1151 bash sync-upstream.sh --backends-only  # single-arch backends
 #
 # Naming convention:
 #   Git tag:   v{upstream}-rocm{major}.{minor}   e.g. v4.1.3-rocm7.12
@@ -32,14 +34,16 @@ UPSTREAM_BRANCH="${UPSTREAM_BRANCH:-master}"
 DRY_RUN=false
 NO_PUSH=false
 NO_BACKENDS=false
+BACKENDS_ONLY=false
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BOLD='\033[1m'; NC='\033[0m'
 
 for arg in "$@"; do
     case $arg in
-        --dry-run)     DRY_RUN=true ;;
-        --no-push)     NO_PUSH=true ;;
-        --no-backends) NO_BACKENDS=true ;;
+        --dry-run)        DRY_RUN=true ;;
+        --no-push)        NO_PUSH=true ;;
+        --no-backends)    NO_BACKENDS=true ;;
+        --backends-only)  BACKENDS_ONLY=true; NO_BACKENDS=false ;;
     esac
 done
 
@@ -72,6 +76,15 @@ ROCM_MAJOR="${ROCM_VERSION%%.*}"   # "7" from "7.12"
 OUR_SUFFIX="rocm${ROCM_VERSION}"
 
 # ---------------------------------------------------------------------------
+if [ "$BACKENDS_ONLY" = "true" ]; then
+    # Skip fetch/merge/tag — use current HEAD as-is.
+    UPSTREAM_VERSION=$(git describe --tags --abbrev=0 "$UPSTREAM_REMOTE/$UPSTREAM_BRANCH" 2>/dev/null || \
+                       git describe --tags --abbrev=0 HEAD 2>/dev/null || echo "dev")
+    echo -e "${BOLD}=== Backends-only mode ===${NC}"
+    echo -e "  Skipping fetch, merge, and main image build."
+    echo -e "  Version: ${GREEN}$UPSTREAM_VERSION${NC} / ROCm: ${YELLOW}$ROCM_VERSION${NC} / arch: ${YELLOW}$ROCM_ARCH${NC}"
+else
+
 echo -e "${BOLD}=== 1. Upstream fetch ===${NC}"
 git fetch "$UPSTREAM_REMOTE"
 
@@ -114,6 +127,8 @@ if [ "$DRY_RUN" = "true" ]; then
     echo -e "  ${YELLOW}git tag ${UPSTREAM_VERSION}-${OUR_SUFFIX}${NC}"
     exit 0
 fi
+
+fi  # end if not BACKENDS_ONLY
 
 # ---------------------------------------------------------------------------
 echo -e "\n${BOLD}=== 3. Version tag ===${NC}"
@@ -168,21 +183,26 @@ fi
 LOCAL_IMAGE="localai:${OUR_SUFFIX}"
 FORK_LD_FLAGS="-s -w -X github.com/mudler/LocalAI/internal.Version=${VERSION_TAG} -X github.com/mudler/LocalAI/internal.Commit=${BUILD_SHA}"
 
-echo -e "\n${BOLD}=== 5. Build main image ===${NC}"
-echo -e "  Local:       ${YELLOW}$LOCAL_IMAGE${NC}"
-echo -e "  Push tags:   ${YELLOW}$VERSION_TAG${NC}  +  ${YELLOW}rocm${ROCM_MAJOR}${NC}  (both registries)"
+if [ "$BACKENDS_ONLY" = "true" ]; then
+    echo -e "\n${BOLD}=== 5. Build main image ===${NC}"
+    echo -e "  ${YELLOW}Skipped (--backends-only)${NC}"
+else
+    echo -e "\n${BOLD}=== 5. Build main image ===${NC}"
+    echo -e "  Local:       ${YELLOW}$LOCAL_IMAGE${NC}"
+    echo -e "  Push tags:   ${YELLOW}$VERSION_TAG${NC}  +  ${YELLOW}rocm${ROCM_MAJOR}${NC}  (both registries)"
 
-docker build \
-    --no-cache \
-    --build-arg BUILD_TYPE=hipblas \
-    --build-arg ROCM_VERSION=7 \
-    --build-arg ROCM_ARCH="${ROCM_ARCH}" \
-    --build-arg GPU_TARGETS="${ROCM_ARCH}" \
-    --build-arg LD_FLAGS="${FORK_LD_FLAGS}" \
-    -t "$LOCAL_IMAGE" \
-    . 2>&1 | tee /tmp/localai-build-main.log
+    docker build \
+        --no-cache \
+        --build-arg BUILD_TYPE=hipblas \
+        --build-arg ROCM_VERSION=7 \
+        --build-arg ROCM_ARCH="${ROCM_ARCH}" \
+        --build-arg GPU_TARGETS="${ROCM_ARCH}" \
+        --build-arg LD_FLAGS="${FORK_LD_FLAGS}" \
+        -t "$LOCAL_IMAGE" \
+        . 2>&1 | tee /tmp/localai-build-main.log
 
-echo -e "  ${GREEN}✓ Main image built${NC}"
+    echo -e "  ${GREEN}✓ Main image built${NC}"
+fi
 
 # ---------------------------------------------------------------------------
 if [ "$NO_BACKENDS" = "false" ]; then
@@ -254,10 +274,14 @@ push_image_to_reg() {
 # ---------------------------------------------------------------------------
 echo -e "\n${BOLD}=== 7. Push main image ===${NC}"
 
-push_image_to_reg "$LOCAL_IMAGE" "${REGISTRY}/localai:${VERSION_TAG}"     # immutable, required
-push_image_to_reg "$LOCAL_IMAGE" "${REGISTRY}/localai:rocm${ROCM_MAJOR}"  # mutable,   required
-push_image_to_reg "$LOCAL_IMAGE" "${REGISTRY2}/localai:${VERSION_TAG}"    "false"  # optional
-push_image_to_reg "$LOCAL_IMAGE" "${REGISTRY2}/localai:rocm${ROCM_MAJOR}" "false"  # optional
+if [ "$BACKENDS_ONLY" = "true" ]; then
+    echo -e "  ${YELLOW}Skipped (--backends-only)${NC}"
+else
+    push_image_to_reg "$LOCAL_IMAGE" "${REGISTRY}/localai:${VERSION_TAG}"     # immutable, required
+    push_image_to_reg "$LOCAL_IMAGE" "${REGISTRY}/localai:rocm${ROCM_MAJOR}"  # mutable,   required
+    push_image_to_reg "$LOCAL_IMAGE" "${REGISTRY2}/localai:${VERSION_TAG}"    "false"  # optional
+    push_image_to_reg "$LOCAL_IMAGE" "${REGISTRY2}/localai:rocm${ROCM_MAJOR}" "false"  # optional
+fi
 
 # ---------------------------------------------------------------------------
 if [ "$NO_BACKENDS" = "false" ]; then
