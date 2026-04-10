@@ -195,7 +195,8 @@ RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then 
         apt-get update && \
         apt-get install -y --no-install-recommends \
             amdrocm-llvm \
-            amdrocm-core-sdk-gfx1151 && \
+            amdrocm-core-sdk-gfx1151 \
+            amdrocm-blas7.12-gfx1151 && \
         apt-get clean && \
         rm -rf /var/lib/apt/lists/* && \
         echo "amd-gfx1151" > /run/localai/capability && \
