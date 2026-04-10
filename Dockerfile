@@ -216,6 +216,19 @@ RUN if [ "${BUILD_TYPE}" = "hipblas" ]; then \
     ln -sf /opt/rocm/llvm/lib/libomp.so /usr/lib/libomp.so \
     ; fi
 
+# Install gfx1151-specific hipBLASLt + rocBLAS kernel files.
+# amdrocm-blas7.12-gfx1151 contains the .hsaco kernel files required by
+# ROCBLAS_USE_HIPBLASLT=1.  This is separate from amdrocm-core-sdk-gfx1151
+# and must be installed explicitly — the ROCm apt repo is already configured
+# in the base image so this works even with SKIP_DRIVERS=true.
+RUN if [ "${BUILD_TYPE}" = "hipblas" ]; then \
+        apt-get update && \
+        apt-get install -y --no-install-recommends \
+            amdrocm-blas7.12-gfx1151 && \
+        apt-get clean && \
+        rm -rf /var/lib/apt/lists/* \
+    ; fi
+
 RUN expr "${BUILD_TYPE}" = intel && echo "intel" > /run/localai/capability || echo "not intel"
 
 # Cuda
