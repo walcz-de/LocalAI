@@ -10,6 +10,13 @@ backend/go/*/build
 backend/go/*/.cache
 backend/go/*/sources
 backend/go/*/package
+# Stale llama-cpp build dirs — contain old grpc-server.cpp / llama.cpp that
+# confuse prepare.sh into using the wrong file version during Docker build
+backend/cpp/llama-cpp-fallback-build/
+backend/cpp/llama-cpp-grpc-build/
+backend/cpp/llama-cpp-avx-build/
+backend/cpp/llama-cpp-avx2-build/
+backend/cpp/llama-cpp-avx512-build/
 examples/rwkv/models
 examples/**/models
 Dockerfile*
