@@ -21,6 +21,18 @@ cp -r grpc-server.cpp llama.cpp/tools/grpc-server/
 cp -rfv llama.cpp/vendor/nlohmann/json.hpp llama.cpp/tools/grpc-server/
 cp -rfv llama.cpp/vendor/cpp-httplib/httplib.h llama.cpp/tools/grpc-server/
 
+# Copy common/ headers into the grpc-server staging directory so that
+# grpc-server.cpp can include chat-auto-parser.h and its transitive deps
+# (chat.h, jinja/caps.h, peg-parser.h, …) directly without relying on cmake
+# include-path propagation, which proved fragile across build variants.
+cp -f llama.cpp/common/*.h llama.cpp/tools/grpc-server/ 2>/dev/null || true
+for _subdir in jinja minja; do
+    if [ -d "llama.cpp/common/$_subdir" ]; then
+        cp -rf "llama.cpp/common/$_subdir" llama.cpp/tools/grpc-server/
+    fi
+done
+unset _subdir
+
 set +e
 if grep -q "grpc-server" llama.cpp/tools/CMakeLists.txt; then
     echo "grpc-server already added"

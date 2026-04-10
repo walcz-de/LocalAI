@@ -201,14 +201,25 @@ RUN if [ "${BUILD_TYPE}" = "clblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then \
     ; fi
 
 RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then \
+        mkdir -p /etc/apt/keyrings && \
+        apt-get update && \
+        apt-get install -y --no-install-recommends wget gpg && \
+        wget -qO- https://repo.amd.com/rocm/packages/gpg/rocm.gpg | gpg --dearmor > /etc/apt/keyrings/amdrocm.gpg && \
+        echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/amdrocm.gpg] https://repo.amd.com/rocm/packages/ubuntu2404 stable main' > /etc/apt/sources.list.d/rocm.list && \
         apt-get update && \
         apt-get install -y --no-install-recommends \
-            hipblas-dev \
-            rocblas-dev && \
+            amdrocm-llvm \
+            amdrocm-core-sdk-gfx1151 && \
         apt-get clean && \
         rm -rf /var/lib/apt/lists/* && \
-        # I have no idea why, but the ROCM lib packages don't trigger ldconfig after they install, which results in local-ai and others not being able
-        # to locate the libraries. We run ldconfig ourselves to work around this packaging deficiency
+        # ROCm 7.x installs to /opt/rocm/core-7.XX/ with update-alternatives managing
+        # /opt/rocm/core-7 -> /opt/rocm/core-7.XX. Use core-7 so symlinks survive minor bumps.
+        ln -sf /opt/rocm/core-7/lib/llvm /opt/rocm/llvm && \
+        ln -sf /opt/rocm/core-7/bin /opt/rocm/bin && \
+        ln -sf /opt/rocm/core-7 /opt/rocm/hip && \
+        ln -sf /opt/rocm/core-7/lib /opt/rocm/lib && \
+        ln -sf /opt/rocm/core-7/include /opt/rocm/include && \
+        # ROCm lib packages don't trigger ldconfig - run it manually
         ldconfig \
     ; fi
 
@@ -247,6 +258,27 @@ COPY --from=grpc /opt/grpc /usr/local
 
 
 COPY . /LocalAI
+
+# Install rocWMMA headers from source (rocwmma-dev is not in ROCm 7.11 apt repo)
+RUN if [ "${BUILD_TYPE}" = "hipblas" ]; then \
+        git clone --depth 1 https://github.com/ROCm/rocWMMA /tmp/rocwmma && \
+        mkdir -p /opt/rocm/include/rocwmma && \
+        cp -r /tmp/rocwmma/library/include/rocwmma/. /opt/rocm/include/rocwmma/ && \
+        rm -rf /tmp/rocwmma ; \
+    fi
+# Write rocwmma-version.hpp with known content (avoids cmake configure_file dependency)
+RUN <<'EOT' bash
+if [ "${BUILD_TYPE}" = "hipblas" ]; then
+    cat > /opt/rocm/include/rocwmma/rocwmma-version.hpp << 'ROCWMMA_EOF'
+#ifndef ROCWMMA_API_VERSION_HPP
+#define ROCWMMA_API_VERSION_HPP
+#define ROCWMMA_VERSION_MAJOR 2
+#define ROCWMMA_VERSION_MINOR 2
+#define ROCWMMA_VERSION_PATCH 0
+#endif
+ROCWMMA_EOF
+fi
+EOT
 
 RUN <<'EOT' bash
 set -euxo pipefail

@@ -3,6 +3,47 @@ ARG GRPC_BASE_IMAGE=${BASE_IMAGE}
 ARG INTEL_BASE_IMAGE=${BASE_IMAGE}
 ARG UBUNTU_CODENAME=noble
 
+###################################
+# gRPC stage — builds gRPC C++ library for use by llama-cpp backend builder
+# Same approach as backend/Dockerfile.llama-cpp so the main image can bake in
+# the llama-cpp backend without an external stage reference.
+FROM ${GRPC_BASE_IMAGE} AS llama-grpc
+
+ARG GRPC_MAKEFLAGS="-j4 -Otarget"
+ARG GRPC_VERSION=v1.65.0
+ARG CMAKE_FROM_SOURCE=false
+ARG CMAKE_VERSION=3.31.10
+
+ENV MAKEFLAGS=${GRPC_MAKEFLAGS}
+WORKDIR /build
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        build-essential curl libssl-dev \
+        git wget && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN <<EOT bash
+    if [ "${CMAKE_FROM_SOURCE}" = "true" ]; then
+        curl -L -s https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}.tar.gz -o cmake.tar.gz && tar xvf cmake.tar.gz && cd cmake-${CMAKE_VERSION} && ./configure && make && make install
+    else
+        apt-get update && apt-get install -y cmake && apt-get clean && rm -rf /var/lib/apt/lists/*
+    fi
+EOT
+
+RUN git clone --recurse-submodules --jobs 4 -b ${GRPC_VERSION} --depth 1 --shallow-submodules https://github.com/grpc/grpc && \
+    mkdir -p /build/grpc/cmake/build && \
+    cd /build/grpc/cmake/build && \
+    sed -i "216i\  TESTONLY" "../../third_party/abseil-cpp/absl/container/CMakeLists.txt" && \
+    cmake -DgRPC_INSTALL=ON -DgRPC_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX:PATH=/opt/grpc ../.. && \
+    make && \
+    make install && \
+    rm -rf /build
+
+###################################
+
 FROM ${BASE_IMAGE} AS requirements
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -146,20 +187,32 @@ RUN if [ "${BUILD_TYPE}" = "clblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then \
     ; fi
 
 RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then \
+        mkdir -p /etc/apt/keyrings && \
+        apt-get update && \
+        apt-get install -y --no-install-recommends wget gpg && \
+        wget -qO- https://repo.amd.com/rocm/packages/gpg/rocm.gpg | gpg --dearmor > /etc/apt/keyrings/amdrocm.gpg && \
+        echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/amdrocm.gpg] https://repo.amd.com/rocm/packages/ubuntu2404 stable main' > /etc/apt/sources.list.d/rocm.list && \
         apt-get update && \
         apt-get install -y --no-install-recommends \
-            hipblas-dev \
-            rocblas-dev && \
+            amdrocm-llvm \
+            amdrocm-core-sdk-gfx1151 && \
         apt-get clean && \
         rm -rf /var/lib/apt/lists/* && \
-        echo "amd" > /run/localai/capability && \
-        # I have no idea why, but the ROCM lib packages don't trigger ldconfig after they install, which results in local-ai and others not being able
-        # to locate the libraries. We run ldconfig ourselves to work around this packaging deficiency
+        echo "amd-gfx1151" > /run/localai/capability && \
+        # ROCm 7.x installs to /opt/rocm/core-7.XX/ with update-alternatives managing
+        # /opt/rocm/core-7 -> /opt/rocm/core-7.XX (e.g. core-7.12).
+        # Use core-7 so symlinks survive minor version bumps (7.11 → 7.12 etc.).
+        ln -sf /opt/rocm/core-7/lib/llvm /opt/rocm/llvm && \
+        ln -sf /opt/rocm/core-7/bin /opt/rocm/bin && \
+        ln -sf /opt/rocm/core-7 /opt/rocm/hip && \
+        ln -sf /opt/rocm/core-7/lib /opt/rocm/lib && \
+        ln -sf /opt/rocm/core-7/include /opt/rocm/include && \
+        # ROCm lib packages don't trigger ldconfig - run it manually
         ldconfig \
     ; fi
 
 RUN if [ "${BUILD_TYPE}" = "hipblas" ]; then \
-    ln -s /opt/rocm-**/lib/llvm/lib/libomp.so /usr/lib/libomp.so \
+    ln -sf /opt/rocm/llvm/lib/libomp.so /usr/lib/libomp.so \
     ; fi
 
 RUN expr "${BUILD_TYPE}" = intel && echo "intel" > /run/localai/capability || echo "not intel"
@@ -342,6 +395,88 @@ RUN make build
 ###################################
 ###################################
 
+# Build llama-cpp backend with hipblas/ROCm 7.11 for gfx1151 — baked into the main image
+# so no gallery download is needed at runtime.
+FROM build-requirements AS llama-cpp-hipblas-builder
+ARG BUILD_TYPE
+ARG SKIP_DRIVERS=false
+# GPU_TARGETS allows callers to restrict which GPU architectures are compiled.
+# When set (e.g. GPU_TARGETS=gfx1151) it is forwarded as AMDGPU_TARGETS to the
+# llama-cpp make invocations below.  Without an explicit override the cmake
+# command is built up from multiple recursive $(MAKE) calls which can result in
+# -DAMDGPU_TARGETS being specified more than once; cmake uses the LAST value,
+# so if any sub-make appends a stale default the desired targets are silently
+# dropped.  Passing AMDGPU_TARGETS on the command line prevents this by
+# overriding the ?= assignment in every recursive Makefile call.
+ARG GPU_TARGETS
+
+# Install grpc (needed by the grpc-server build target)
+COPY --from=llama-grpc /opt/grpc /usr/local
+
+WORKDIR /build
+
+# Copy the backend source (includes llama.cpp submodule and build scripts)
+COPY ./backend ./backend
+COPY ./scripts ./scripts
+
+# Install rocWMMA headers from source (rocwmma-dev is not in ROCm 7.11 apt repo).
+# Install to /opt/rocwmma-headers to avoid /opt/rocm/include symlink/path issues.
+# CPATH is extended below so the compiler finds the headers without ROCm path gymnastics.
+RUN if [ "${BUILD_TYPE}" = "hipblas" ]; then \
+        git clone --depth 1 https://github.com/ROCm/rocWMMA /tmp/rocwmma && \
+        mkdir -p /opt/rocwmma-headers/rocwmma && \
+        cp -r /tmp/rocwmma/library/include/rocwmma/. /opt/rocwmma-headers/rocwmma/ && \
+        rm -rf /tmp/rocwmma ; \
+    fi
+# Write rocwmma-version.hpp with known content (avoids cmake configure_file dependency)
+RUN <<'EOT' bash
+if [ "${BUILD_TYPE}" = "hipblas" ]; then
+    cat > /opt/rocwmma-headers/rocwmma/rocwmma-version.hpp << 'ROCWMMA_EOF'
+#ifndef ROCWMMA_API_VERSION_HPP
+#define ROCWMMA_API_VERSION_HPP
+#define ROCWMMA_VERSION_MAJOR 2
+#define ROCWMMA_VERSION_MINOR 2
+#define ROCWMMA_VERSION_PATCH 0
+#endif
+ROCWMMA_EOF
+fi
+EOT
+ENV CPATH=/opt/rocwmma-headers:${CPATH:-}
+
+RUN <<'EOT' bash
+set -euxo pipefail
+if [ "${BUILD_TYPE}" = "hipblas" ]; then
+  cd /build/backend/cpp/llama-cpp
+  # Remove any llama.cpp directory that came from the COPY context.
+  # The Makefile's `llama.cpp` target clones at LLAMA_VERSION, which is the
+  # correct commit (with common/chat-auto-parser.h).  If the directory already
+  # exists from COPY, make considers the dependency satisfied and skips the
+  # clone — potentially leaving us with the wrong commit.
+  rm -rf llama.cpp
+  # Also remove stale llama.cpp checkouts inside the build variant directories.
+  # These directories are copied from the host build context and may contain an
+  # old llama.cpp commit that lacks common/chat-auto-parser.h.  Removing them
+  # forces each variant Makefile to re-clone at the correct LLAMA_VERSION.
+  rm -rf ../llama-cpp-fallback-build/llama.cpp
+  rm -rf ../llama-cpp-grpc-build/llama.cpp
+  # Pass AMDGPU_TARGETS explicitly on the make command line so it propagates
+  # through all recursive $(MAKE) calls without being overridden by the ?=
+  # default in sub-Makefiles.  Without this, cmake receives -DAMDGPU_TARGETS
+  # multiple times and the last (stale) value silently wins.
+  MAKE_TARGETS="AMDGPU_TARGETS=${GPU_TARGETS:-gfx1151}"
+  make llama-cpp-fallback ${MAKE_TARGETS}
+  make llama-cpp-grpc ${MAKE_TARGETS}
+  make llama-cpp-rpc-server
+  make package
+else
+  # Create empty package dir for non-hipblas builds so COPY doesn't fail
+  mkdir -p /build/backend/cpp/llama-cpp/package
+fi
+EOT
+
+###################################
+###################################
+
 # The devcontainer target is not used on CI. It is a target for developers to use locally -
 # rather than copying files it mounts them locally and leaves building to the developer
 
@@ -372,9 +507,43 @@ ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 ENV NVIDIA_REQUIRE_CUDA="cuda>=${CUDA_MAJOR_VERSION}.0"
 ENV NVIDIA_VISIBLE_DEVICES=all
 
+# AMD gfx1151 (Strix Halo / RDNA 3.5) runtime requirements
+ARG BUILD_TYPE
+ENV HSA_OVERRIDE_GFX_VERSION=11.5.1
+# Prefer hipBLASLt over rocBLAS for GEMM (avoids rocBLAS Kernels.so lookup).
+ENV ROCBLAS_USE_HIPBLASLT=1
+# Enable XNACK (memory fault retry) for APU unified memory (Strix Halo).
+ENV HSA_XNACK=1
+# Disable SDMA engine — known to cause hangs/errors on APU/iGPU configs.
+ENV HSA_ENABLE_SDMA=0
+# GGML_CUDA_ENABLE_UNIFIED_MEMORY intentionally NOT set – use hipMalloc (96GB VRAM pool)
+# Enable rocWMMA-accelerated Flash Attention for RDNA 3.5.
+ENV GGML_HIP_ROCWMMA=1
+# libamd_comgr.so.3 depends on libLLVM.so.22.0git and libclang-cpp.so.22.0git from the
+# ROCm LLVM toolchain.  These libs live in /opt/rocm/llvm/lib which is NOT searched by
+# default.  Setting LD_LIBRARY_PATH here ensures backend subprocesses (run.sh prepends
+# their own lib/ then inherits this) can find the LLVM shared libraries via dlopen.
+ENV LD_LIBRARY_PATH=/opt/rocm/llvm/lib
+# hipBLASLt and rocBLAS ship kernel data (TensileLibrary + Kernels.so) in arch-specific
+# subdirectories relative to their library.  When backends run in isolation using the
+# packaged lib/ directory, the library can't find its own data via dladdr.  Point both
+# libraries explicitly to the system data path so gfx1151 kernels are always found.
+ENV HIPBLASLT_TENSILE_LIBPATH=/opt/rocm/lib/hipblaslt/library
+ENV ROCBLAS_TENSILE_LIBPATH=/opt/rocm/lib/rocblas/library
+
 WORKDIR /
 
 COPY ./entrypoint.sh .
+
+# Use the default upstream gallery URL (github:mudler/LocalAI/backend/index.yaml@master).
+# We intentionally do NOT set LOCALAI_BACKEND_GALLERIES here because the file:// URI
+# handler in the downloader checks that the target file is inside BackendsPath (/backends)
+# via InTrustedRoot — a path like /var/lib/local-ai/backend-index.yaml is outside that
+# trusted root and the check fails, returning an empty gallery.
+#
+# The baked-in rocm-gfx1151-llama-cpp backend is still used for inference via the alias
+# mechanism: its metadata.json carries alias=llama-cpp, so ListSystemBackends resolves
+# "llama-cpp" to the baked-in backend before any gallery download is attempted.
 
 # Copy the binary
 COPY --from=builder /build/local-ai ./
@@ -384,6 +553,17 @@ RUN --mount=from=builder,src=/build/,dst=/mnt/build \
 
 # Make sure the models directory exists
 RUN mkdir -p /models /backends /data
+
+# Bake in llama-cpp backend into BackendsSystemPath (/var/lib/local-ai/backends) rather than
+# /backends — the VOLUME instruction makes /backends overrideable by user mounts, which would
+# hide baked-in content. BackendsSystemPath is not a Docker VOLUME, so it's always visible.
+RUN --mount=from=llama-cpp-hipblas-builder,src=/build/backend/cpp/llama-cpp/package,dst=/mnt/llama-pkg \
+    if [ -n "$(ls -A /mnt/llama-pkg 2>/dev/null)" ]; then \
+        mkdir -p /var/lib/local-ai/backends/rocm-gfx1151-llama-cpp && \
+        cp -a /mnt/llama-pkg/. /var/lib/local-ai/backends/rocm-gfx1151-llama-cpp/ && \
+        printf '{"alias":"llama-cpp","name":"rocm-gfx1151-llama-cpp"}' > /var/lib/local-ai/backends/rocm-gfx1151-llama-cpp/metadata.json && \
+        echo "llama-cpp backend baked in at /var/lib/local-ai/backends/rocm-gfx1151-llama-cpp/" ; \
+    fi
 
 # Define the health check command
 HEALTHCHECK --interval=1m --timeout=10m --retries=10 \

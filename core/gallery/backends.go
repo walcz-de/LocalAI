@@ -405,19 +405,71 @@ func ListSystemBackends(systemState *system.SystemState) (SystemBackends, error)
 	backends := make(SystemBackends)
 
 	// System-provided backends
+	// We collect system-backend alias groups separately so they can be resolved
+	// the same way as user-managed backends below.
+	systemAliasGroups := make(map[string][]backendCandidate)
+	systemMetaMap := make(map[string]*BackendMetadata)
 	if systemBackends, err := os.ReadDir(systemState.Backend.BackendsSystemPath); err == nil {
 		for _, systemBackend := range systemBackends {
 			if systemBackend.IsDir() {
 				run := filepath.Join(systemState.Backend.BackendsSystemPath, systemBackend.Name(), runFile)
 				if _, err := os.Stat(run); err == nil {
+					// Read metadata so alias mappings work for system backends too.
+					var metadata *BackendMetadata
+					if m, merr := readBackendMetadata(filepath.Join(systemState.Backend.BackendsSystemPath, systemBackend.Name())); merr == nil && m != nil {
+						metadata = m
+					} else {
+						metadata = &BackendMetadata{Name: systemBackend.Name()}
+					}
+					systemMetaMap[systemBackend.Name()] = metadata
 					backends[systemBackend.Name()] = SystemBackend{
 						Name:     systemBackend.Name(),
 						RunFile:  run,
 						IsMeta:   false,
 						IsSystem: true,
-						Metadata: nil,
+						Metadata: metadata,
+					}
+					if metadata.Alias != "" {
+						systemAliasGroups[metadata.Alias] = append(systemAliasGroups[metadata.Alias], backendCandidate{name: systemBackend.Name(), runFile: run})
 					}
 				}
+			}
+		}
+		// Resolve system-backend aliases using the same capability-preference logic used
+		// for user-managed backends (see below).  We do this first so user-managed backends
+		// can still override system ones.
+		tokens := systemState.BackendPreferenceTokens()
+		for alias, cands := range systemAliasGroups {
+			chosen := backendCandidate{}
+			for _, t := range tokens {
+				for _, c := range cands {
+					if strings.Contains(strings.ToLower(c.name), t) && c.runFile != "" {
+						chosen = c
+						break
+					}
+				}
+				if chosen.runFile != "" {
+					break
+				}
+			}
+			if chosen.runFile == "" {
+				for _, c := range cands {
+					if c.runFile != "" {
+						chosen = c
+						break
+					}
+				}
+			}
+			if chosen.runFile == "" {
+				continue
+			}
+			md := systemMetaMap[chosen.name]
+			backends[alias] = SystemBackend{
+				Name:     alias,
+				RunFile:  chosen.runFile,
+				IsMeta:   false,
+				IsSystem: true,
+				Metadata: md,
 			}
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {

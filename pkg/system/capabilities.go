@@ -72,6 +72,16 @@ func (s *SystemState) Capability(capMap map[string]string) string {
 		return reportedCapability
 	}
 
+	// Try parent capabilities by stripping trailing components (e.g. "amd-gfx1151" → "amd")
+	parts := strings.Split(reportedCapability, "-")
+	for i := len(parts) - 1; i > 0; i-- {
+		parent := strings.Join(parts[:i], "-")
+		if _, exists := capMap[parent]; exists {
+			xlog.Debug("Using parent capability as fallback", "reportedCapability", reportedCapability, "parentCapability", parent, "capMap", capMap)
+			return parent
+		}
+	}
+
 	xlog.Debug("The requested capability was not found, using default capability", "reportedCapability", reportedCapability, "capMap", capMap)
 	// Otherwise, return the default capability (catch-all)
 	return defaultCapability
@@ -147,7 +157,10 @@ func (s *SystemState) getSystemCapabilities() string {
 	}
 
 	// GPU detected but insufficient VRAM → default with warning
-	if s.VRAM <= 4*1024*1024*1024 {
+	// Only apply this check when VRAM was actually detected (>0); a zero value means
+	// detection failed (e.g. UMA devices where the VRAM pool isn't visible to ghw/rocm-smi
+	// until the container has /dev/kfd access), not that there truly is no VRAM.
+	if s.VRAM > 0 && s.VRAM <= 4*1024*1024*1024 {
 		xlog.Warn("VRAM is less than 4GB, defaulting to CPU", "env", capabilityEnv)
 		s.systemCapabilities = defaultCapability
 		return s.systemCapabilities
@@ -240,7 +253,7 @@ func (s *SystemState) IsBackendCompatible(name, uri string) bool {
 		strings.Contains(combined, backendTokenHIP) ||
 		strings.Contains(combined, AMD)
 	if isAMDBackend {
-		return capability == AMD
+		return strings.HasPrefix(capability, AMD)
 	}
 
 	// Check for Intel/SYCL-specific backends

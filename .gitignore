@@ -16,6 +16,12 @@ protoc
 
 *.log
 
+# Local deployment artifacts
+benchmark_*.csv
+benchmark.sh
+.env.orig
+scripts/build-rocm.sh
+
 go-ggml-transformers
 go-gpt2
 whisper.cpp
