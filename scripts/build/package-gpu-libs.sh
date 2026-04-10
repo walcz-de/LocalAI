@@ -166,8 +166,14 @@ package_rocm_libs() {
         "/opt/rocm/hip/lib"
     )
 
-    # Find the actual ROCm versioned directory
+    # Find the actual ROCm versioned directory (handles both /opt/rocm-X.Y.Z and
+    # ROCm 7.11's new /opt/rocm/core-X.Y layout).
     for rocm_dir in /opt/rocm-*; do
+        if [ -d "$rocm_dir/lib" ]; then
+            rocm_lib_paths+=("$rocm_dir/lib")
+        fi
+    done
+    for rocm_dir in /opt/rocm/core-*; do
         if [ -d "$rocm_dir/lib" ]; then
             rocm_lib_paths+=("$rocm_dir/lib")
         fi
@@ -177,6 +183,7 @@ package_rocm_libs() {
     local rocm_libs=(
         "libamdhip64.so*"
         "libhipblas.so*"
+        "libhipblaslt.so*"
         "librocblas.so*"
         "librocrand.so*"
         "librocsparse.so*"
@@ -186,8 +193,11 @@ package_rocm_libs() {
         "libroctx64.so*"
         "libhsa-runtime64.so*"
         "libamd_comgr.so*"
+        "libamd_comgr_loader.so*"
+        "librocroller.so*"
         "libhip_hcc.so*"
         "libhiprtc.so*"
+        "librocprofiler-register.so*"
     )
 
     for lib_path in "${rocm_lib_paths[@]}"; do
@@ -195,6 +205,12 @@ package_rocm_libs() {
             for lib_pattern in "${rocm_libs[@]}"; do
                 copy_libs_glob "${lib_path}/${lib_pattern}"
             done
+        fi
+        # ROCm 7.11+ bundles system-level deps under rocm_sysdeps/ to avoid
+        # host-library version mismatches. Bundled ld.so doesn't resolve
+        # $ORIGIN via symlinks, so these must be explicitly bundled.
+        if [ -d "${lib_path}/rocm_sysdeps/lib" ]; then
+            copy_libs_glob "${lib_path}/rocm_sysdeps/lib/librocm_sysdeps_*.so*"
         fi
     done
 
