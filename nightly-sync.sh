@@ -14,7 +14,7 @@ set -euo pipefail
 REPO_DIR="/home/stefanwalcz/Repo/LocalAI"
 UPSTREAM_REMOTE="upstream"
 UPSTREAM_BRANCH="master"
-APPRISE_URL="http://localhost:8000/notify/apprise"
+APPRISE_URL="http://localhost:8085/notify/apprise"
 
 _notify() {
     curl -sf -X POST "$APPRISE_URL" \
