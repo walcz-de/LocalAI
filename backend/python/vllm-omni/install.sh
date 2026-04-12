@@ -28,27 +28,41 @@ installRequirements
 
 # Install vllm based on build type
 if [ "x${BUILD_TYPE}" == "xhipblas" ]; then
-    # ROCm: AMD gfx1151-native torch first, then vllm ROCm wheel without deps.
-    # torch==2.9.1 + vllm==0.16.0 per AMD ROCm 7.12 release for gfx1151.
-    # --index-strategy unsafe-best-match: needed so uv searches AMD index for torch,
-    #   not just PyPI (default "first-match" stops at PyPI and never finds AMD wheels).
+    # ROCm / HIP build for gfx1151 (Strix Halo):
+    #
+    # AMD provides ROCm-native vllm wheels at rocm.frameworks.amd.com/whl/gfx1151/.
+    # The PyPI vllm wheel is CUDA-only (_C.abi3.so links against libcudart.so.12
+    # which does NOT exist on ROCm systems) — never use PyPI for vllm on ROCm!
+    #
+    # Install order:
+    # 1. AMD gfx1151-native torch (repo.amd.com) — must come first
+    # 2. AMD ROCm vllm (rocm.frameworks.amd.com) — includes ROCm _C.abi3.so
+    #    Use unsafe-first-match so AMD's index is preferred over PyPI
+    # 3. Set PYTHONPATH for amdsmi (needed for vllm ROCm platform detection)
     AMD_GFX1151="https://repo.amd.com/rocm/whl/gfx1151/"
-    ROCM_VLLM_INDEX="https://wheels.vllm.ai/rocm/0.16.0/rocm712"
+    AMD_FRAMEWORKS="https://rocm.frameworks.amd.com/whl/gfx1151/"
     if [ "x${USE_PIP}" == "xtrue" ]; then
+        # Step 1: AMD gfx1151-native torch
         pip install --index-url "${AMD_GFX1151}" --extra-index-url https://pypi.org/simple/ \
             "torch==2.9.1" "torchaudio==2.9.1"
-        pip install vllm --index-url "${ROCM_VLLM_INDEX}" --extra-index-url https://pypi.org/simple/ --no-deps
-        pip install amd-aiter flash-attn triton --index-url "${ROCM_VLLM_INDEX}" \
-            --extra-index-url https://pypi.org/simple/ 2>/dev/null || true
+        # Step 2: AMD ROCm vllm wheel (includes ROCm-compiled _C.abi3.so — NOT PyPI CUDA wheel)
+        pip install vllm --index-url "${AMD_FRAMEWORKS}" --extra-index-url https://pypi.org/simple/
+        # Step 3: grpcio + protobuf (vllm may have updated versions)
+        pip install "grpcio>=1.60.0" protobuf 2>/dev/null || true
     else
-        uv pip install --index-url "${AMD_GFX1151}" --extra-index-url https://pypi.org/simple/ \
+        # Step 1: AMD gfx1151-native torch
+        uv pip install --index-url "${AMD_GFX1151}" \
+            --extra-index-url https://pypi.org/simple/ \
             --index-strategy unsafe-best-match \
             "torch==2.9.1" "torchaudio==2.9.1"
-        uv pip install vllm --index-url "${ROCM_VLLM_INDEX}" --extra-index-url https://pypi.org/simple/ \
-            --index-strategy unsafe-best-match --no-deps
-        uv pip install amd-aiter flash-attn triton --index-url "${ROCM_VLLM_INDEX}" \
+        # Step 2: AMD ROCm vllm wheel (includes ROCm-compiled _C.abi3.so — NOT PyPI CUDA wheel)
+        # unsafe-first-match: take from AMD index first, fall back to PyPI for non-vllm deps
+        uv pip install --index-url "${AMD_FRAMEWORKS}" \
             --extra-index-url https://pypi.org/simple/ \
-            --index-strategy unsafe-best-match 2>/dev/null || true
+            --index-strategy unsafe-first-match \
+            vllm
+        # Step 3: grpcio + protobuf (vllm may have updated versions)
+        uv pip install "grpcio>=1.60.0" protobuf 2>/dev/null || true
     fi
 elif [ "x${BUILD_TYPE}" == "xcublas" ] || [ "x${BUILD_TYPE}" == "x" ]; then
     # CUDA (default) or CPU
