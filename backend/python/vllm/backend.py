@@ -255,7 +255,59 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
 
         # If tokenizer template is enabled and messages are provided instead of prompt, apply the tokenizer template
         if not request.Prompt and request.UseTokenizerTemplate and request.Messages:
-            prompt = self.tokenizer.apply_chat_template(request.Messages, tokenize=False, add_generation_prompt=True)
+            # Convert protobuf Messages to dicts for apply_chat_template
+            messages_for_template = []
+            for msg in request.Messages:
+                entry = {"role": msg.role, "content": msg.content}
+                if msg.tool_call_id:
+                    entry["tool_call_id"] = msg.tool_call_id
+                if msg.name:
+                    entry["name"] = msg.name
+                if msg.tool_calls:
+                    import json as _json
+                    try:
+                        entry["tool_calls"] = _json.loads(msg.tool_calls)
+                    except Exception:
+                        pass
+                messages_for_template.append(entry)
+            # Parse tools from request if present (JSON array of OpenAI tool defs)
+            tools_for_template = None
+            if request.Tools:
+                import json as _json
+                try:
+                    tools_for_template = _json.loads(request.Tools)
+                except Exception as e:
+                    print(f"Failed to parse request.Tools: {e}", file=sys.stderr)
+            # Apply template with tools if available
+            try:
+                if tools_for_template:
+                    prompt = self.tokenizer.apply_chat_template(
+                        messages_for_template, tools=tools_for_template,
+                        tokenize=False, add_generation_prompt=True
+                    )
+                else:
+                    prompt = self.tokenizer.apply_chat_template(
+                        messages_for_template, tokenize=False, add_generation_prompt=True
+                    )
+            except Exception:
+                # Fall back to original messages if conversion failed
+                prompt = self.tokenizer.apply_chat_template(
+                    request.Messages, tokenize=False, add_generation_prompt=True
+                )
+        elif request.Prompt and request.Tools:
+            # LocalAI sends raw user message in Prompt + tools separately in Tools.
+            # Apply the model's chat template so it sees tool definitions before generating.
+            import json as _json
+            try:
+                tools_for_template = _json.loads(request.Tools)
+                prompt = self.tokenizer.apply_chat_template(
+                    [{"role": "user", "content": request.Prompt}],
+                    tools=tools_for_template,
+                    tokenize=False,
+                    add_generation_prompt=True,
+                )
+            except Exception as e:
+                print(f"Tool template application failed: {e}, using raw prompt", file=sys.stderr)
 
         # Generate text using the LLM engine
         request_id = random_uuid()
