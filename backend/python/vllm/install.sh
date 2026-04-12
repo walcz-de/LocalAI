@@ -84,6 +84,41 @@ elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
         # Step 3: grpcio + protogen re-run (vllm may have updated grpcio version)
         uv pip install --python "${EDIR}/venv/bin/python" \
             "grpcio>=1.60.0" protobuf 2>/dev/null || true
+        # Step 4: Patch vllm platform detection for ROCm container environments
+        # (a) __init__.py: fall back to torch.version.hip when amdsmi is unavailable
+        # (b) rocm.py: replace logger.warning_once with logger.debug to avoid
+        #              circular import at module load (warning_once pulls in
+        #              vllm.distributed.parallel_state before current_platform resolves)
+        VLLM_PLATFORMS="${EDIR}/venv/lib/python3.12/site-packages/vllm/platforms"
+        # Patch (a): __init__.py — torch.version.hip fallback when amdsmi absent
+        VLLM_INIT="${VLLM_PLATFORMS}/__init__.py"
+        VLLM_ROCM="${VLLM_PLATFORMS}/rocm.py"
+        export VLLM_INIT VLLM_ROCM
+        "${EDIR}/venv/bin/python" -c "
+import os, sys
+path = os.environ['VLLM_INIT']
+src = open(path).read()
+old = '    except Exception as e:\n        logger.debug(\"ROCm platform is not available because: %s\", str(e))\n\n    return \"vllm.platforms.rocm.RocmPlatform\" if is_rocm else None'
+new = '    except Exception as e:\n        logger.debug(\"amdsmi check failed (%s); falling back to torch.version.hip\", str(e))\n\n    if not is_rocm:\n        try:\n            import torch\n            if getattr(torch.version, \"hip\", None) is not None:\n                is_rocm = True\n                logger.debug(\"Confirmed ROCm platform via torch.version.hip.\")\n        except Exception:\n            pass\n\n    return \"vllm.platforms.rocm.RocmPlatform\" if is_rocm else None'
+if old in src:
+    open(path, 'w').write(src.replace(old, new, 1))
+    print('Patched __init__.py: torch.version.hip fallback added')
+else:
+    print('__init__.py: already patched or pattern not found, skipping')
+" 2>&1 || true
+        # Patch (b): rocm.py — warning_once → debug to avoid circular import at module load
+        "${EDIR}/venv/bin/python" -c "
+import os, sys
+path = os.environ['VLLM_ROCM']
+src = open(path).read()
+old = '        logger.warning_once(\n            \"Failed to get GCN arch via amdsmi, falling back to torch.cuda. \"\n            \"This will initialize CUDA and may cause \"\n            \"issues if CUDA_VISIBLE_DEVICES is not set yet.\"\n        )'
+new = '        logger.debug(\n            \"Failed to get GCN arch via amdsmi; falling back to torch.cuda.\"\n        )'
+if old in src:
+    open(path, 'w').write(src.replace(old, new, 1))
+    print('Patched rocm.py: warning_once replaced with debug')
+else:
+    print('rocm.py: already patched or pattern not found, skipping')
+" 2>&1 || true
     else
         installRequirements
 fi

@@ -182,6 +182,7 @@ package_rocm_libs() {
     # Core ROCm/HIP runtime libraries
     local rocm_libs=(
         "libamdhip64.so*"
+        "libcudart.so*"
         "libhipblas.so*"
         "libhipblaslt.so*"
         "librocblas.so*"
