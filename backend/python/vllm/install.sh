@@ -65,11 +65,18 @@ elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
         AMD_GFX1151="https://repo.amd.com/rocm/whl/gfx1151/"
         AMD_FRAMEWORKS="https://rocm.frameworks.amd.com/whl/gfx1151/"
         # Step 1: AMD ROCm torch (HIP variant, links libtorch_hip.so / libc10_hip.so)
-        uv pip install --python "${EDIR}/venv/bin/python" \
+        # NOTE: AMD vllm 0.16.1 was built against torch 2.9.1, NOT 2.10.0.
+        # torch 2.10.0 changed c10_hip_check_implementation signature (int→unsigned int),
+        # causing ABI mismatch: vllm._C.abi3.so expects _ZN3c103hip28c10_hip_check_implementationEiPKcS2_ib
+        # but torch 2.10.0 exports _ZN3c103hip28c10_hip_check_implementationEiPKcS2_jb.
+        # Use torch 2.9.1+rocm7.12.0 + matching torchvision 0.24.0.
+        pip3 install \
+            --target="${EDIR}/venv/lib/python3.12/site-packages/" \
+            --upgrade \
             --index-url "${AMD_GFX1151}" \
-            --index-strategy first-match \
-            "torch==2.10.0" \
-            "torchaudio==2.10.0"
+            --extra-index-url "https://pypi.org/simple/" \
+            "torch==2.9.1+rocm7.12.0" \
+            "torchvision==0.24.0+rocm7.12.0"
         # Step 2: AMD ROCm vllm (pre-release — requires --pre; deps from PyPI fallback)
         # unsafe-first-match: AMD frameworks index first, PyPI fallback for other packages
         uv pip install --python "${EDIR}/venv/bin/python" \
@@ -79,9 +86,12 @@ elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
             --pre \
             vllm
         # Step 3: AMD flash-attn (pure-py wheel at AMD frameworks index)
+        # Note: use uv with --no-build-isolation since flash-attn tries to build
+        # from source when resolved via PyPI; the AMD index has a pre-built pure-py wheel
         uv pip install --python "${EDIR}/venv/bin/python" \
             --index-url "${AMD_FRAMEWORKS}" \
             --index-strategy first-match \
+            --no-build-isolation \
             "flash-attn==2.8.3"
         # Step 4: grpcio + protobuf for LocalAI gRPC backend protocol
         uv pip install --python "${EDIR}/venv/bin/python" \
@@ -122,6 +132,32 @@ if old in src:
 else:
     print('rocm.py: already patched or pattern not found, skipping')
 " 2>&1 || true
+        # Patch (c): torch_c_dlpack_ext — use cpu variant on AMD ROCm
+        # flashinfer autotuner calls torch_c_dlpack_ext which selects "cuda" when
+        # torch.cuda.is_available() is True (it is on AMD ROCm), but the cuda variant
+        # uses c10::cuda::getCurrentCUDAStream which doesn't exist in AMD HIP.
+        DLPACK_CORE="${EDIR}/venv/lib/python3.12/site-packages/torch_c_dlpack_ext/core.py"
+        export DLPACK_CORE
+        if [ -f "${DLPACK_CORE}" ]; then
+            "${EDIR}/venv/bin/python" -c "
+import os
+path = os.environ['DLPACK_CORE']
+src = open(path).read()
+old = '    suffix = \"cuda\" if torch.cuda.is_available() else \"cpu\"'
+new = '    is_rocm = getattr(torch.version, \"hip\", None) is not None\n    suffix = \"cpu\" if is_rocm else (\"cuda\" if torch.cuda.is_available() else \"cpu\")'
+if old in src:
+    open(path, 'w').write(src.replace(old, new, 1))
+    print('Patched torch_c_dlpack_ext/core.py: use cpu variant on AMD ROCm')
+else:
+    print('torch_c_dlpack_ext/core.py: already patched or pattern not found, skipping')
+" 2>&1 || true
+        fi
+        # Create libtorch_cuda.so / libc10_cuda.so symlinks pointing to HIP equivalents.
+        # Some code paths (e.g. subprocess LD_LIBRARY_PATH resolution in EngineCore_DP0)
+        # look for CUDA-named libs; AMD torch only ships libtorch_hip.so / libc10_hip.so.
+        TORCH_LIB="${EDIR}/venv/lib/python3.12/site-packages/torch/lib"
+        ln -sf "${TORCH_LIB}/libtorch_hip.so" "${TORCH_LIB}/libtorch_cuda.so" 2>/dev/null || true
+        ln -sf "${TORCH_LIB}/libc10_hip.so"   "${TORCH_LIB}/libc10_cuda.so"   2>/dev/null || true
     else
         installRequirements
 fi

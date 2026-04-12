@@ -42,9 +42,9 @@ if [ "x${BUILD_TYPE}" == "xhipblas" ]; then
     AMD_GFX1151="https://repo.amd.com/rocm/whl/gfx1151/"
     AMD_FRAMEWORKS="https://rocm.frameworks.amd.com/whl/gfx1151/"
     if [ "x${USE_PIP}" == "xtrue" ]; then
-        # Step 1: AMD ROCm torch (HIP variant)
+        # Step 1: AMD ROCm torch (HIP variant) — must match AMD vllm 0.16.1 ABI (torch 2.9.1)
         pip install --index-url "${AMD_GFX1151}" \
-            "torch==2.10.0" "torchaudio==2.10.0"
+            "torch==2.9.1+rocm7.12.0"
         # Step 2: AMD ROCm vllm (pre-release, --pre required)
         pip install --index-url "${AMD_FRAMEWORKS}" \
             --extra-index-url https://pypi.org/simple/ \
@@ -55,9 +55,11 @@ if [ "x${BUILD_TYPE}" == "xhipblas" ]; then
         pip install "grpcio>=1.60.0" protobuf 2>/dev/null || true
     else
         # Step 1: AMD ROCm torch (HIP variant)
+        # NOTE: AMD vllm 0.16.1 was built against torch 2.9.1+rocm7.12.0.
+        # torch 2.10.0 changed c10_hip_check_implementation signature (ABI break).
         uv pip install --index-url "${AMD_GFX1151}" \
             --index-strategy first-match \
-            "torch==2.10.0" "torchaudio==2.10.0"
+            "torch==2.9.1+rocm7.12.0"
         # Step 2: AMD ROCm vllm (pre-release — requires --pre; deps from PyPI fallback)
         uv pip install --index-url "${AMD_FRAMEWORKS}" \
             --extra-index-url https://pypi.org/simple/ \
@@ -115,6 +117,27 @@ if old in src:
 else:
     print('rocm.py: already patched or pattern not found, skipping')
 " 2>&1 || true
+    # Patch (c): torch_c_dlpack_ext — use cpu variant on AMD ROCm
+    DLPACK_CORE="${EDIR}/venv/lib/python3.12/site-packages/torch_c_dlpack_ext/core.py"
+    export DLPACK_CORE
+    if [ -f "${DLPACK_CORE}" ]; then
+        "${EDIR}/venv/bin/python" -c "
+import os
+path = os.environ['DLPACK_CORE']
+src = open(path).read()
+old = '    suffix = \"cuda\" if torch.cuda.is_available() else \"cpu\"'
+new = '    is_rocm = getattr(torch.version, \"hip\", None) is not None\n    suffix = \"cpu\" if is_rocm else (\"cuda\" if torch.cuda.is_available() else \"cpu\")'
+if old in src:
+    open(path, 'w').write(src.replace(old, new, 1))
+    print('Patched torch_c_dlpack_ext/core.py: use cpu variant on AMD ROCm')
+else:
+    print('torch_c_dlpack_ext/core.py: already patched or pattern not found, skipping')
+" 2>&1 || true
+    fi
+    # Create libtorch_cuda.so / libc10_cuda.so symlinks pointing to HIP equivalents
+    TORCH_LIB="${EDIR}/venv/lib/python3.12/site-packages/torch/lib"
+    ln -sf "${TORCH_LIB}/libtorch_hip.so" "${TORCH_LIB}/libtorch_cuda.so" 2>/dev/null || true
+    ln -sf "${TORCH_LIB}/libc10_hip.so"   "${TORCH_LIB}/libc10_cuda.so"   2>/dev/null || true
 fi
 
 # Clone and install vllm-omni from source
