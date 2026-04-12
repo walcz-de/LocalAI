@@ -222,12 +222,17 @@ RUN cd /${BACKEND} && PORTABLE_PYTHON=true make
 
 # For gfx1151: attempt to upgrade torch to AMD prerelease wheels (gfx1151-native).
 # AMD prerelease index has cp311+ wheels only.
-# - vllm/vllm-omni use Python 3.12 → upgrade succeeds, torch becomes rocm7.12.0rc+ (gfx1151-native)
-# - Other backends use Python 3.10 → upgrade fails silently, keeping their rocm6.4 torch
+# - Non-vllm backends use Python 3.10 → upgrade fails silently, keeping rocm6.4 torch
+# - vllm/vllm-omni use Python 3.12 BUT are skipped: their C extensions link against
+#   the specific ROCm torch from wheels.vllm.ai; replacing torch would break the ABI.
 # torchvision is excluded from the upgrade (AMD prerelease torchvision lacks cp310 wheels).
 RUN <<EOT bash
     if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${ROCM_ARCH}" = "gfx1151" ]; then
-        if [ -f "/${BACKEND}/venv/bin/python" ]; then
+        # Skip torch upgrade for vllm and vllm-omni — their .so files are ABI-pinned to
+        # the torch version from wheels.vllm.ai/rocm/. Replacing torch breaks them.
+        if [ "${BACKEND}" = "vllm" ] || [ "${BACKEND}" = "vllm-omni" ]; then
+            echo "Skipping torch prerelease upgrade for ${BACKEND} (ABI-pinned to vllm ROCm wheel)"
+        elif [ -f "/${BACKEND}/venv/bin/python" ]; then
             uv pip install --python "/${BACKEND}/venv/bin/python" --pre torch \
                 --index-url https://rocm.prereleases.amd.com/whl/gfx1151/ || \
             echo "gfx1151 prerelease torch not available for this Python version, keeping rocm6.4 torch"
