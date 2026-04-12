@@ -14,8 +14,8 @@ export MAX_JOBS=1
 # Switch the portable Python to 3.12 so we can use the pre-built ROCm wheel.
 if [ "x${BUILD_TYPE}" == "xhipblas" ]; then
     PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
-    PYTHON_PATCH="${PYTHON_PATCH:-13}"
-    PY_STANDALONE_TAG="${PY_STANDALONE_TAG:-20250818}"
+    PYTHON_PATCH="${PYTHON_PATCH:-12}"
+    PY_STANDALONE_TAG="${PY_STANDALONE_TAG:-20251120}"
 fi
 
 backend_dir=$(dirname $0)
