@@ -52,48 +52,51 @@ elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
         # ROCm / HIP build for gfx1151 (Strix Halo):
         #
         # AMD provides ROCm-native vllm wheels at rocm.frameworks.amd.com/whl/gfx1151/.
-        # The PyPI vllm wheel is CUDA-only (_C.abi3.so links against libcudart.so.12
-        # which does NOT exist on ROCm systems) — never use PyPI for vllm on ROCm!
+        # The AMD vllm is a DEV/pre-release (0.16.1.dev10+rocm712) that links against
+        # libtorch_hip.so — NO libcudart.so.12 needed. Never use PyPI vllm on ROCm:
+        # the PyPI vllm wheel links against libcudart.so.12 (NVIDIA CUDA) which doesn't
+        # exist on AMD systems.
         #
-        # CRITICAL: AMD vllm requires torch==2.10.0. AMD's GFX1151 index has
-        # torch-2.10.0+rocm7.12.0 (ROCm). PyPI also has torch==2.10.0+cu128 (CUDA).
-        # Install order matters: install vllm first (gets CUDA torch from PyPI),
-        # then REINSTALL torch from AMD's GFX1151 index to force the ROCm variant.
-        # Without --reinstall the ROCm torch would be skipped (already "satisfied").
+        # AMD vllm does NOT declare torch as a Requires-Dist, so we install torch
+        # explicitly from AMD's GFX1151 index (torch-2.10.0+rocm7.12.0).
+        # flash-attn==2.8.3 is required by AMD vllm and has an AMD-specific pure-py wheel.
         ensureVenv
         runProtogen
         AMD_GFX1151="https://repo.amd.com/rocm/whl/gfx1151/"
         AMD_FRAMEWORKS="https://rocm.frameworks.amd.com/whl/gfx1151/"
-        # Step 1: AMD ROCm vllm wheel + all deps (torch==2.10.0 gets CUDA here — fixed in Step 2)
-        # unsafe-first-match: AMD index first, fall back to PyPI for non-vllm deps
-        uv pip install --python "${EDIR}/venv/bin/python" \
-            --index-url "${AMD_FRAMEWORKS}" \
-            --extra-index-url "${AMD_GFX1151}" \
-            --extra-index-url https://pypi.org/simple/ \
-            --index-strategy unsafe-first-match \
-            vllm
-        # Step 2: Force-reinstall torch from AMD's ROCm GFX1151 index (replaces CUDA torch)
-        # AMD has torch-2.10.0+rocm7.12.0 at repo.amd.com/rocm/whl/gfx1151/
-        # --reinstall is required because torch==2.10.0 is already "satisfied" by +cu128
+        # Step 1: AMD ROCm torch (HIP variant, links libtorch_hip.so / libc10_hip.so)
         uv pip install --python "${EDIR}/venv/bin/python" \
             --index-url "${AMD_GFX1151}" \
             --index-strategy first-match \
-            --reinstall \
             "torch==2.10.0" \
             "torchaudio==2.10.0"
-        # Step 3: grpcio + protogen re-run (vllm may have updated grpcio version)
+        # Step 2: AMD ROCm vllm (pre-release — requires --pre; deps from PyPI fallback)
+        # unsafe-first-match: AMD frameworks index first, PyPI fallback for other packages
+        uv pip install --python "${EDIR}/venv/bin/python" \
+            --index-url "${AMD_FRAMEWORKS}" \
+            --extra-index-url https://pypi.org/simple/ \
+            --index-strategy unsafe-first-match \
+            --pre \
+            vllm
+        # Step 3: AMD flash-attn (pure-py wheel at AMD frameworks index)
+        uv pip install --python "${EDIR}/venv/bin/python" \
+            --index-url "${AMD_FRAMEWORKS}" \
+            --index-strategy first-match \
+            "flash-attn==2.8.3"
+        # Step 4: grpcio + protobuf for LocalAI gRPC backend protocol
         uv pip install --python "${EDIR}/venv/bin/python" \
             "grpcio>=1.60.0" protobuf 2>/dev/null || true
-        # Step 4: Patch vllm platform detection for ROCm container environments
+        # Step 5: Patch vllm platform detection for ROCm container environments
         # (a) __init__.py: fall back to torch.version.hip when amdsmi is unavailable
+        #     (amdsmi is NOT installed in the LocalAI backend container)
         # (b) rocm.py: replace logger.warning_once with logger.debug to avoid
         #              circular import at module load (warning_once pulls in
         #              vllm.distributed.parallel_state before current_platform resolves)
         VLLM_PLATFORMS="${EDIR}/venv/lib/python3.12/site-packages/vllm/platforms"
-        # Patch (a): __init__.py — torch.version.hip fallback when amdsmi absent
         VLLM_INIT="${VLLM_PLATFORMS}/__init__.py"
         VLLM_ROCM="${VLLM_PLATFORMS}/rocm.py"
         export VLLM_INIT VLLM_ROCM
+        # Patch (a): __init__.py — torch.version.hip fallback when amdsmi absent
         "${EDIR}/venv/bin/python" -c "
 import os, sys
 path = os.environ['VLLM_INIT']

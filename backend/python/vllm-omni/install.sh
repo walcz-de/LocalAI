@@ -31,42 +31,44 @@ if [ "x${BUILD_TYPE}" == "xhipblas" ]; then
     # ROCm / HIP build for gfx1151 (Strix Halo):
     #
     # AMD provides ROCm-native vllm wheels at rocm.frameworks.amd.com/whl/gfx1151/.
-    # The PyPI vllm wheel is CUDA-only (_C.abi3.so links against libcudart.so.12
-    # which does NOT exist on ROCm systems) — never use PyPI for vllm on ROCm!
+    # The AMD vllm is a DEV/pre-release (0.16.1.dev10+rocm712) that links against
+    # libtorch_hip.so — NO libcudart.so.12 needed. Never use PyPI vllm on ROCm:
+    # the PyPI vllm wheel links against libcudart.so.12 (NVIDIA CUDA) which doesn't
+    # exist on AMD systems.
     #
-    # Install order:
-    # 1. AMD gfx1151-native torch (repo.amd.com) — must come first
-    # 2. AMD ROCm vllm (rocm.frameworks.amd.com) — includes ROCm _C.abi3.so
-    #    Use unsafe-first-match so AMD's index is preferred over PyPI
-    # 3. Set PYTHONPATH for amdsmi (needed for vllm ROCm platform detection)
+    # AMD vllm does NOT declare torch as a Requires-Dist, so we install torch
+    # explicitly from AMD's GFX1151 index (torch-2.10.0+rocm7.12.0).
+    # flash-attn==2.8.3 is required by AMD vllm and has an AMD-specific pure-py wheel.
     AMD_GFX1151="https://repo.amd.com/rocm/whl/gfx1151/"
     AMD_FRAMEWORKS="https://rocm.frameworks.amd.com/whl/gfx1151/"
     if [ "x${USE_PIP}" == "xtrue" ]; then
-        # Step 1: AMD ROCm vllm wheel + all deps (torch==2.10.0 gets CUDA here — fixed in Step 2)
-        pip install vllm --index-url "${AMD_FRAMEWORKS}" \
-            --extra-index-url "${AMD_GFX1151}" \
-            --extra-index-url https://pypi.org/simple/
-        # Step 2: Force-reinstall torch from AMD ROCm GFX1151 index (replaces CUDA torch)
+        # Step 1: AMD ROCm torch (HIP variant)
         pip install --index-url "${AMD_GFX1151}" \
+            "torch==2.10.0" "torchaudio==2.10.0"
+        # Step 2: AMD ROCm vllm (pre-release, --pre required)
+        pip install --index-url "${AMD_FRAMEWORKS}" \
             --extra-index-url https://pypi.org/simple/ \
-            --force-reinstall "torch==2.10.0" "torchaudio==2.10.0"
-        # Step 3: grpcio + protobuf (vllm may have updated versions)
+            --pre vllm
+        # Step 3: AMD flash-attn
+        pip install --index-url "${AMD_FRAMEWORKS}" "flash-attn==2.8.3"
+        # Step 4: grpcio + protobuf
         pip install "grpcio>=1.60.0" protobuf 2>/dev/null || true
     else
-        # Step 1: AMD ROCm vllm wheel + all deps (torch==2.10.0 gets CUDA here — fixed in Step 2)
-        # unsafe-first-match: AMD index first, fall back to PyPI for non-vllm deps
-        uv pip install --index-url "${AMD_FRAMEWORKS}" \
-            --extra-index-url "${AMD_GFX1151}" \
-            --extra-index-url https://pypi.org/simple/ \
-            --index-strategy unsafe-first-match \
-            vllm
-        # Step 2: Force-reinstall torch from AMD ROCm GFX1151 index (replaces CUDA torch)
-        # AMD has torch-2.10.0+rocm7.12.0; --reinstall forces it even though ==2.10.0 is "satisfied"
+        # Step 1: AMD ROCm torch (HIP variant)
         uv pip install --index-url "${AMD_GFX1151}" \
             --index-strategy first-match \
-            --reinstall \
             "torch==2.10.0" "torchaudio==2.10.0"
-        # Step 3: grpcio + protobuf (vllm may have updated versions)
+        # Step 2: AMD ROCm vllm (pre-release — requires --pre; deps from PyPI fallback)
+        uv pip install --index-url "${AMD_FRAMEWORKS}" \
+            --extra-index-url https://pypi.org/simple/ \
+            --index-strategy unsafe-first-match \
+            --pre \
+            vllm
+        # Step 3: AMD flash-attn (pure-py wheel at AMD frameworks index)
+        uv pip install --index-url "${AMD_FRAMEWORKS}" \
+            --index-strategy first-match \
+            "flash-attn==2.8.3"
+        # Step 4: grpcio + protobuf
         uv pip install "grpcio>=1.60.0" protobuf 2>/dev/null || true
     fi
 elif [ "x${BUILD_TYPE}" == "xcublas" ] || [ "x${BUILD_TYPE}" == "x" ]; then
@@ -79,6 +81,40 @@ elif [ "x${BUILD_TYPE}" == "xcublas" ] || [ "x${BUILD_TYPE}" == "x" ]; then
 else
     echo "Unsupported build type: ${BUILD_TYPE}" >&2
     exit 1
+fi
+
+# Patch vllm platform detection for ROCm container environments (hipblas only)
+# (a) __init__.py: fall back to torch.version.hip when amdsmi is unavailable
+# (b) rocm.py: replace logger.warning_once with logger.debug to avoid circular import
+if [ "x${BUILD_TYPE}" == "xhipblas" ]; then
+    VLLM_PLATFORMS="${EDIR}/venv/lib/python3.12/site-packages/vllm/platforms"
+    VLLM_INIT="${VLLM_PLATFORMS}/__init__.py"
+    VLLM_ROCM="${VLLM_PLATFORMS}/rocm.py"
+    export VLLM_INIT VLLM_ROCM
+    "${EDIR}/venv/bin/python" -c "
+import os, sys
+path = os.environ['VLLM_INIT']
+src = open(path).read()
+old = '    except Exception as e:\n        logger.debug(\"ROCm platform is not available because: %s\", str(e))\n\n    return \"vllm.platforms.rocm.RocmPlatform\" if is_rocm else None'
+new = '    except Exception as e:\n        logger.debug(\"amdsmi check failed (%s); falling back to torch.version.hip\", str(e))\n\n    if not is_rocm:\n        try:\n            import torch\n            if getattr(torch.version, \"hip\", None) is not None:\n                is_rocm = True\n                logger.debug(\"Confirmed ROCm platform via torch.version.hip.\")\n        except Exception:\n            pass\n\n    return \"vllm.platforms.rocm.RocmPlatform\" if is_rocm else None'
+if old in src:
+    open(path, 'w').write(src.replace(old, new, 1))
+    print('Patched __init__.py: torch.version.hip fallback added')
+else:
+    print('__init__.py: already patched or pattern not found, skipping')
+" 2>&1 || true
+    "${EDIR}/venv/bin/python" -c "
+import os, sys
+path = os.environ['VLLM_ROCM']
+src = open(path).read()
+old = '        logger.warning_once(\n            \"Failed to get GCN arch via amdsmi, falling back to torch.cuda. \"\n            \"This will initialize CUDA and may cause \"\n            \"issues if CUDA_VISIBLE_DEVICES is not set yet.\"\n        )'
+new = '        logger.debug(\n            \"Failed to get GCN arch via amdsmi; falling back to torch.cuda.\"\n        )'
+if old in src:
+    open(path, 'w').write(src.replace(old, new, 1))
+    print('Patched rocm.py: warning_once replaced with debug')
+else:
+    print('rocm.py: already patched or pattern not found, skipping')
+" 2>&1 || true
 fi
 
 # Clone and install vllm-omni from source
