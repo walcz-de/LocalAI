@@ -29,20 +29,26 @@ installRequirements
 # Install vllm based on build type
 if [ "x${BUILD_TYPE}" == "xhipblas" ]; then
     # ROCm: AMD gfx1151-native torch first, then vllm ROCm wheel without deps.
-    AMD_GFX1151="https://rocm.prereleases.amd.com/whl/gfx1151/"
-    ROCM_VLLM_INDEX="https://wheels.vllm.ai/rocm/0.19.0/rocm721"
+    # torch==2.9.1 + vllm==0.16.0 per AMD ROCm 7.12 release for gfx1151.
+    # --index-strategy unsafe-best-match: needed so uv searches AMD index for torch,
+    #   not just PyPI (default "first-match" stops at PyPI and never finds AMD wheels).
+    AMD_GFX1151="https://repo.amd.com/rocm/whl/gfx1151/"
+    ROCM_VLLM_INDEX="https://wheels.vllm.ai/rocm/0.16.0/rocm712"
     if [ "x${USE_PIP}" == "xtrue" ]; then
         pip install --index-url "${AMD_GFX1151}" --extra-index-url https://pypi.org/simple/ \
-            "torch==2.10.0+rocm7.12.0rc1" "torchaudio==2.10.0+rocm7.12.0rc1"
-        pip install vllm --index-url "${ROCM_VLLM_INDEX}" --no-deps
+            "torch==2.9.1" "torchaudio==2.9.1"
+        pip install vllm --index-url "${ROCM_VLLM_INDEX}" --extra-index-url https://pypi.org/simple/ --no-deps
         pip install amd-aiter flash-attn triton --index-url "${ROCM_VLLM_INDEX}" \
             --extra-index-url https://pypi.org/simple/ 2>/dev/null || true
     else
         uv pip install --index-url "${AMD_GFX1151}" --extra-index-url https://pypi.org/simple/ \
-            "torch==2.10.0+rocm7.12.0rc1" "torchaudio==2.10.0+rocm7.12.0rc1"
-        uv pip install vllm --index-url "${ROCM_VLLM_INDEX}" --no-deps
+            --index-strategy unsafe-best-match \
+            "torch==2.9.1" "torchaudio==2.9.1"
+        uv pip install vllm --index-url "${ROCM_VLLM_INDEX}" --extra-index-url https://pypi.org/simple/ \
+            --index-strategy unsafe-best-match --no-deps
         uv pip install amd-aiter flash-attn triton --index-url "${ROCM_VLLM_INDEX}" \
-            --extra-index-url https://pypi.org/simple/ 2>/dev/null || true
+            --extra-index-url https://pypi.org/simple/ \
+            --index-strategy unsafe-best-match 2>/dev/null || true
     fi
 elif [ "x${BUILD_TYPE}" == "xcublas" ] || [ "x${BUILD_TYPE}" == "x" ]; then
     # CUDA (default) or CPU

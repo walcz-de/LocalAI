@@ -51,27 +51,26 @@ if [ "x${BUILD_TYPE}" == "x" ] && [ "x${FROM_SOURCE:-}" == "xtrue" ]; then
 elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
         # ROCm / HIP build for gfx1151 (Strix Halo):
         #
-        # Step 1: Install AMD's gfx1151-native torch (rocm7.12.0rc1) first.
-        #   AMD provides pre-built cp312 wheels at rocm.prereleases.amd.com/whl/gfx1151/.
-        #   This is the correct, hardware-native torch — better than the generic rocm7.x wheels.
+        # Step 1: Install AMD's gfx1151-native torch (ROCm 7.12) first.
+        #   AMD provides pre-built cp312 wheels at repo.amd.com/rocm/whl/gfx1151/.
+        #   torch==2.9.1, vllm==0.16.0 per AMD ROCm 7.12 release.
         #
-        # Step 2: Install vllm 0.19.0 ROCm wheel from wheels.vllm.ai with --no-deps
-        #   so it does NOT pull its own torch. The AMD gfx1151 torch already installed
-        #   satisfies vllm's Requires-Dist: torch==2.10.0 (PEP 440: local versions excluded
-        #   from version comparisons, so 2.10.0+rocm7.12.0rc1 == 2.10.0 is TRUE).
+        # Step 2: Install vllm 0.16.0 ROCm wheel from wheels.vllm.ai with --no-deps
+        #   so it does NOT pull its own torch.
         #
-        # The PyPI vllm wheel is CUDA-only. vllm C extensions from wheels.vllm.ai/rocm721
-        # link against libtorch_hip and ROCm runtime libs — ABI-compatible with AMD's torch.
+        # --index-strategy unsafe-best-match: needed because torch is AMD-only;
+        #   default "first-match" stops at PyPI and never reaches the AMD index.
         ensureVenv
         runProtogen
-        AMD_GFX1151="https://rocm.prereleases.amd.com/whl/gfx1151/"
-        ROCM_VLLM_INDEX="https://wheels.vllm.ai/rocm/0.19.0/rocm721"
+        AMD_GFX1151="https://repo.amd.com/rocm/whl/gfx1151/"
+        ROCM_VLLM_INDEX="https://wheels.vllm.ai/rocm/0.16.0/rocm712"
         # Step 1: AMD gfx1151-native torch
         uv pip install --python "${EDIR}/venv/bin/python" \
             --index-url "${AMD_GFX1151}" \
             --extra-index-url https://pypi.org/simple/ \
-            "torch==2.10.0+rocm7.12.0rc1" \
-            "torchaudio==2.10.0+rocm7.12.0rc1"
+            --index-strategy unsafe-best-match \
+            "torch==2.9.1" \
+            "torchaudio==2.9.1"
         # Step 2: non-torch/vllm deps from PyPI
         uv pip install --python "${EDIR}/venv/bin/python" \
             grpcio==1.80.0 protobuf certifi setuptools \
@@ -79,12 +78,15 @@ elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
         # Step 3: vllm ROCm wheel WITHOUT deps (preserves AMD torch, not the vllm-bundled torch)
         uv pip install --python "${EDIR}/venv/bin/python" \
             --index-url "${ROCM_VLLM_INDEX}" \
+            --extra-index-url https://pypi.org/simple/ \
+            --index-strategy unsafe-best-match \
             --no-deps \
             vllm
         # Step 4: vllm's non-torch deps (flash-attn, triton, etc.) from the ROCm index
         uv pip install --python "${EDIR}/venv/bin/python" \
             --index-url "${ROCM_VLLM_INDEX}" \
             --extra-index-url https://pypi.org/simple/ \
+            --index-strategy unsafe-best-match \
             --no-binary vllm \
             amd-aiter flash-attn triton 2>/dev/null || \
         echo "Optional ROCm deps (flash-attn/triton) not available, skipping"
