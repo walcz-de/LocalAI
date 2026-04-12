@@ -55,29 +55,32 @@ elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
         # The PyPI vllm wheel is CUDA-only (_C.abi3.so links against libcudart.so.12
         # which does NOT exist on ROCm systems) — never use PyPI for vllm on ROCm!
         #
-        # Install order:
-        # 1. AMD gfx1151-native torch (repo.amd.com) — must come first
-        # 2. AMD ROCm vllm (rocm.frameworks.amd.com) — includes ROCm _C.abi3.so
-        #    Use unsafe-first-match so AMD's index is preferred over PyPI
-        # 3. Set PYTHONPATH for amdsmi (needed for vllm ROCm platform detection)
+        # CRITICAL: AMD vllm requires torch==2.10.0. AMD's GFX1151 index has
+        # torch-2.10.0+rocm7.12.0 (ROCm). PyPI also has torch==2.10.0+cu128 (CUDA).
+        # Install order matters: install vllm first (gets CUDA torch from PyPI),
+        # then REINSTALL torch from AMD's GFX1151 index to force the ROCm variant.
+        # Without --reinstall the ROCm torch would be skipped (already "satisfied").
         ensureVenv
         runProtogen
         AMD_GFX1151="https://repo.amd.com/rocm/whl/gfx1151/"
         AMD_FRAMEWORKS="https://rocm.frameworks.amd.com/whl/gfx1151/"
-        # Step 1: AMD gfx1151-native torch
-        uv pip install --python "${EDIR}/venv/bin/python" \
-            --index-url "${AMD_GFX1151}" \
-            --extra-index-url https://pypi.org/simple/ \
-            --index-strategy unsafe-best-match \
-            "torch==2.9.1" \
-            "torchaudio==2.9.1"
-        # Step 2: AMD ROCm vllm wheel (includes ROCm-compiled _C.abi3.so — NOT PyPI CUDA wheel)
-        # unsafe-first-match: take from AMD index first, fall back to PyPI for non-vllm deps
+        # Step 1: AMD ROCm vllm wheel + all deps (torch==2.10.0 gets CUDA here — fixed in Step 2)
+        # unsafe-first-match: AMD index first, fall back to PyPI for non-vllm deps
         uv pip install --python "${EDIR}/venv/bin/python" \
             --index-url "${AMD_FRAMEWORKS}" \
+            --extra-index-url "${AMD_GFX1151}" \
             --extra-index-url https://pypi.org/simple/ \
             --index-strategy unsafe-first-match \
             vllm
+        # Step 2: Force-reinstall torch from AMD's ROCm GFX1151 index (replaces CUDA torch)
+        # AMD has torch-2.10.0+rocm7.12.0 at repo.amd.com/rocm/whl/gfx1151/
+        # --reinstall is required because torch==2.10.0 is already "satisfied" by +cu128
+        uv pip install --python "${EDIR}/venv/bin/python" \
+            --index-url "${AMD_GFX1151}" \
+            --index-strategy first-match \
+            --reinstall \
+            "torch==2.10.0" \
+            "torchaudio==2.10.0"
         # Step 3: grpcio + protogen re-run (vllm may have updated grpcio version)
         uv pip install --python "${EDIR}/venv/bin/python" \
             "grpcio>=1.60.0" protobuf 2>/dev/null || true
