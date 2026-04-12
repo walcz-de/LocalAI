@@ -510,6 +510,18 @@ RUN go install github.com/mikefarah/yq/v4@latest
 ###################################
 ###################################
 
+# Import vllm + transformers backends from pre-built registry images — baked into the main image
+# so no gallery download is needed at runtime.
+# ARGs control the source tags; override at build time if newer versions are available.
+ARG VLLM_BACKEND_IMAGE=pointblank.ddns.net:5556/localai-backends:v4.1.3-gfx1151-rocm7.12-018cb25a-vllm
+FROM ${VLLM_BACKEND_IMAGE} AS vllm-backend
+
+ARG TRANSFORMERS_BACKEND_IMAGE=pointblank.ddns.net:5556/localai-backends:v4.1.3-gfx1151-rocm7.12-018cb25a-transformers
+FROM ${TRANSFORMERS_BACKEND_IMAGE} AS transformers-backend
+
+###################################
+###################################
+
 # This is the final target. The result of this target will be the image uploaded to the registry.
 # If you cannot find a more suitable place for an addition, this layer is a suitable place for it.
 FROM requirements-drivers
@@ -578,6 +590,21 @@ RUN --mount=from=llama-cpp-hipblas-builder,src=/build/backend/cpp/llama-cpp/pack
         printf '{"alias":"llama-cpp","name":"rocm-gfx1151-llama-cpp"}' > /var/lib/local-ai/backends/rocm-gfx1151-llama-cpp/metadata.json && \
         echo "llama-cpp backend baked in at /var/lib/local-ai/backends/rocm-gfx1151-llama-cpp/" ; \
     fi
+
+# Bake in vllm backend from pre-built registry image into BackendsSystemPath.
+# Baked into /var/lib/local-ai/backends (not /backends VOLUME) so it is always present.
+RUN --mount=from=vllm-backend,src=/,dst=/mnt/vllm \
+    mkdir -p /var/lib/local-ai/backends/rocm7-vllm && \
+    cp -a /mnt/vllm/. /var/lib/local-ai/backends/rocm7-vllm/ && \
+    printf '{"alias":"vllm","name":"rocm7-vllm"}' > /var/lib/local-ai/backends/rocm7-vllm/metadata.json && \
+    echo "vllm backend baked in at /var/lib/local-ai/backends/rocm7-vllm/"
+
+# Bake in transformers backend from pre-built registry image into BackendsSystemPath.
+RUN --mount=from=transformers-backend,src=/,dst=/mnt/transformers \
+    mkdir -p /var/lib/local-ai/backends/rocm7-transformers && \
+    cp -a /mnt/transformers/. /var/lib/local-ai/backends/rocm7-transformers/ && \
+    printf '{"alias":"transformers","name":"rocm7-transformers"}' > /var/lib/local-ai/backends/rocm7-transformers/metadata.json && \
+    echo "transformers backend baked in at /var/lib/local-ai/backends/rocm7-transformers/"
 
 # Define the health check command
 HEALTHCHECK --interval=1m --timeout=10m --retries=10 \
