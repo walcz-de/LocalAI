@@ -28,11 +28,12 @@ installRequirements
 
 # Install vllm based on build type
 if [ "x${BUILD_TYPE}" == "xhipblas" ]; then
-    # ROCm
+    # ROCm: use pre-built ROCm vllm wheel (cp312) from the official vllm ROCm wheel server.
+    ROCM_WHEEL_BASE="https://wheels.vllm.ai/rocm/0.19.0/rocm721"
     if [ "x${USE_PIP}" == "xtrue" ]; then
-        pip install vllm==0.14.0 --extra-index-url https://wheels.vllm.ai/rocm/0.14.0/rocm700
+        pip install vllm --index-url "${ROCM_WHEEL_BASE}" --extra-index-url https://pypi.org/simple/
     else
-        uv pip install vllm==0.14.0 --extra-index-url https://wheels.vllm.ai/rocm/0.14.0/rocm700
+        uv pip install vllm --index-url "${ROCM_WHEEL_BASE}" --extra-index-url https://pypi.org/simple/
     fi
 elif [ "x${BUILD_TYPE}" == "xcublas" ] || [ "x${BUILD_TYPE}" == "x" ]; then
     # CUDA (default) or CPU

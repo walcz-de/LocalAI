@@ -221,9 +221,10 @@ COPY scripts/build/package-gpu-libs.sh /package-gpu-libs.sh
 RUN cd /${BACKEND} && PORTABLE_PYTHON=true make
 
 # For gfx1151: attempt to upgrade torch to AMD prerelease wheels (gfx1151-native).
-# torchvision is excluded: AMD prerelease index only has cp311+ wheels, but the
-# portable Python used here is 3.10. If this fails, the rocm6.4 torch from
-# requirements-hipblas.txt is used instead (works with HSA_OVERRIDE_GFX_VERSION=11.5.1).
+# AMD prerelease index has cp311+ wheels only.
+# - vllm/vllm-omni use Python 3.12 → upgrade succeeds, torch becomes rocm7.12.0rc+ (gfx1151-native)
+# - Other backends use Python 3.10 → upgrade fails silently, keeping their rocm6.4 torch
+# torchvision is excluded from the upgrade (AMD prerelease torchvision lacks cp310 wheels).
 RUN <<EOT bash
     if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${ROCM_ARCH}" = "gfx1151" ]; then
         if [ -f "/${BACKEND}/venv/bin/python" ]; then

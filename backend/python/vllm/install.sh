@@ -10,6 +10,14 @@ EXTRA_PIP_INSTALL_FLAGS="--no-build-isolation"
 export NVCC_THREADS=2
 export MAX_JOBS=1
 
+# For ROCm: vllm's official ROCm wheels are built for Python 3.12 only.
+# Switch the portable Python to 3.12 so we can use the pre-built ROCm wheel.
+if [ "x${BUILD_TYPE}" == "xhipblas" ]; then
+    PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
+    PYTHON_PATCH="${PYTHON_PATCH:-13}"
+    PY_STANDALONE_TAG="${PY_STANDALONE_TAG:-20250818}"
+fi
+
 backend_dir=$(dirname $0)
 
 if [ -d $backend_dir/common ]; then
@@ -40,6 +48,25 @@ if [ "x${BUILD_TYPE}" == "x" ] && [ "x${FROM_SOURCE:-}" == "xtrue" ]; then
             VLLM_TARGET_DEVICE=cpu python setup.py install
         popd
         rm -rf vllm
+elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
+        # ROCm / HIP build: use pre-built ROCm vllm wheel from the official vllm ROCm wheel server.
+        # The PyPI vllm wheel is CUDA-only. wheels.vllm.ai/rocm provides ROCm-compiled wheels for cp312.
+        # Index: https://wheels.vllm.ai/rocm/0.19.0/rocm721/
+        # This index provides: vllm (ROCm), torch (ROCm), torchaudio, torchvision, flash-attn, amdsmi, triton.
+        # We skip installRequirements to avoid downloading the CUDA vllm from PyPI first.
+        # We only install requirements.txt items OTHER than vllm (grpcio, protobuf, etc.) manually.
+        ensureVenv
+        runProtogen
+        ROCM_WHEEL_BASE="https://wheels.vllm.ai/rocm/0.19.0/rocm721"
+        # Install non-vllm requirements (grpcio, protobuf, certifi, setuptools, accelerate, transformers, bitsandbytes)
+        uv pip install --python "${EDIR}/venv/bin/python" \
+            grpcio==1.80.0 protobuf certifi setuptools \
+            accelerate transformers bitsandbytes
+        # Install vllm + its ROCm-compiled dependencies from the official ROCm wheel server
+        uv pip install --python "${EDIR}/venv/bin/python" \
+            --index-url "${ROCM_WHEEL_BASE}" \
+            --extra-index-url https://pypi.org/simple/ \
+            vllm
     else
         installRequirements
 fi
