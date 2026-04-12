@@ -132,13 +132,24 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
             return backend_pb2.Result(success=False, message=f"Unexpected {err=}, {type(err)=}")
 
         try:
-           engine_model_config = await self.llm.get_model_config()
-           self.tokenizer = get_tokenizer(
-               engine_model_config.tokenizer,
-               tokenizer_mode=engine_model_config.tokenizer_mode,
-               trust_remote_code=engine_model_config.trust_remote_code,
-               truncation_side="left",
-           )
+            # vllm >= 0.16 removed get_model_config(); fall back to engine_args directly.
+            try:
+                engine_model_config = await self.llm.get_model_config()
+                self.tokenizer = get_tokenizer(
+                    engine_model_config.tokenizer,
+                    tokenizer_mode=engine_model_config.tokenizer_mode,
+                    trust_remote_code=engine_model_config.trust_remote_code,
+                    truncation_side="left",
+                )
+            except (AttributeError, TypeError):
+                # AMD vllm 0.16.1.dev / new EngineClient: tokenizer_mode param also dropped
+                _tok_name = getattr(engine_args, 'tokenizer', None) or engine_args.model
+                _trust = getattr(engine_args, 'trust_remote_code', False)
+                self.tokenizer = get_tokenizer(
+                    _tok_name,
+                    trust_remote_code=_trust,
+                    truncation_side="left",
+                )
         except Exception as err:
             return backend_pb2.Result(success=False, message=f"Unexpected {err=}, {type(err)=}")
         print("Model loaded successfully", file=sys.stderr)
