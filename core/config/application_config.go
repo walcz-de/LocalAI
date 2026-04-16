@@ -57,6 +57,8 @@ type ApplicationConfig struct {
 	ExternalGRPCBackends map[string]string
 
 	AutoloadGalleries, AutoloadBackendGalleries bool
+	AutoUpgradeBackends                         bool
+	PreferDevelopmentBackends                   bool
 
 	SingleBackend           bool // Deprecated: use MaxActiveBackends = 1 instead
 	MaxActiveBackends       int  // Maximum number of active backends (0 = unlimited, 1 = single backend mode)
@@ -388,6 +390,14 @@ var EnableGalleriesAutoload = func(o *ApplicationConfig) {
 
 var EnableBackendGalleriesAutoload = func(o *ApplicationConfig) {
 	o.AutoloadBackendGalleries = true
+}
+
+func WithAutoUpgradeBackends(v bool) AppOption {
+	return func(o *ApplicationConfig) { o.AutoUpgradeBackends = v }
+}
+
+func WithPreferDevelopmentBackends(v bool) AppOption {
+	return func(o *ApplicationConfig) { o.PreferDevelopmentBackends = v }
 }
 
 var EnableFederated = func(o *ApplicationConfig) {
@@ -862,6 +872,8 @@ func (o *ApplicationConfig) ToRuntimeSettings() RuntimeSettings {
 	backendGalleries := o.BackendGalleries
 	autoloadGalleries := o.AutoloadGalleries
 	autoloadBackendGalleries := o.AutoloadBackendGalleries
+	autoUpgradeBackends := o.AutoUpgradeBackends
+	preferDevelopmentBackends := o.PreferDevelopmentBackends
 	apiKeys := o.ApiKeys
 	agentJobRetentionDays := o.AgentJobRetentionDays
 
@@ -935,6 +947,8 @@ func (o *ApplicationConfig) ToRuntimeSettings() RuntimeSettings {
 		BackendGalleries:          &backendGalleries,
 		AutoloadGalleries:         &autoloadGalleries,
 		AutoloadBackendGalleries:  &autoloadBackendGalleries,
+		AutoUpgradeBackends:       &autoUpgradeBackends,
+		PreferDevelopmentBackends: &preferDevelopmentBackends,
 		ApiKeys:                   &apiKeys,
 		AgentJobRetentionDays:     &agentJobRetentionDays,
 		OpenResponsesStoreTTL:     &openResponsesStoreTTL,
@@ -1082,6 +1096,12 @@ func (o *ApplicationConfig) ApplyRuntimeSettings(settings *RuntimeSettings) (req
 	}
 	if settings.AutoloadBackendGalleries != nil {
 		o.AutoloadBackendGalleries = *settings.AutoloadBackendGalleries
+	}
+	if settings.AutoUpgradeBackends != nil {
+		o.AutoUpgradeBackends = *settings.AutoUpgradeBackends
+	}
+	if settings.PreferDevelopmentBackends != nil {
+		o.PreferDevelopmentBackends = *settings.PreferDevelopmentBackends
 	}
 	if settings.AgentJobRetentionDays != nil {
 		o.AgentJobRetentionDays = *settings.AgentJobRetentionDays

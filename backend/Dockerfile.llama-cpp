@@ -221,7 +221,11 @@ RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then 
         ln -sf /opt/rocm/core-7/lib /opt/rocm/lib && \
         ln -sf /opt/rocm/core-7/include /opt/rocm/include && \
         # ROCm lib packages don't trigger ldconfig - run it manually
-        ldconfig \
+        ldconfig && \
+        # Log which GPU architectures have rocBLAS kernel support
+        echo "rocBLAS library data architectures:" && \
+        (ls /opt/rocm*/lib/rocblas/library/Kernels* 2>/dev/null || ls /opt/rocm*/lib64/rocblas/library/Kernels* 2>/dev/null) | grep -oP 'gfx[0-9a-z+-]+' | sort -u || \
+        echo "WARNING: No rocBLAS kernel data found" \
     ; fi
 
 RUN echo "TARGETARCH: $TARGETARCH"

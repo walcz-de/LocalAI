@@ -58,6 +58,19 @@ jobs:
             cuda-minor-version: ""
             platforms: 'linux/amd64'
             tag-latest: 'auto'
+            tag-suffix: '-cpu-vllm'
+            runs-on: 'ubuntu-latest'
+            base-image: "ubuntu:24.04"
+            skip-drivers: 'true'
+            backend: "vllm"
+            dockerfile: "./backend/Dockerfile.python"
+            context: "./"
+            ubuntu-version: '2404'
+          - build-type: ''
+            cuda-major-version: ""
+            cuda-minor-version: ""
+            platforms: 'linux/amd64'
+            tag-latest: 'auto'
             tag-suffix: '-cpu-diffusers'
             runs-on: 'ubuntu-latest'
             base-image: "ubuntu:24.04"
@@ -89,6 +102,25 @@ jobs:
             base-image: "ubuntu:24.04"
             skip-drivers: 'true'
             backend: "moonshine"
+            dockerfile: "./backend/Dockerfile.python"
+            context: "./"
+            ubuntu-version: '2404'
+          # tinygrad ships a single image — its CPU device uses bundled
+          # libLLVM, and its CUDA / HIP / Metal devices dlopen the host
+          # driver libraries at runtime via tinygrad's ctypes autogen
+          # wrappers. There is no toolkit-version split because tinygrad
+          # generates kernels itself (PTX renderer for CUDA) and never
+          # links against cuDNN/cuBLAS/torch.
+          - build-type: ''
+            cuda-major-version: ""
+            cuda-minor-version: ""
+            platforms: 'linux/amd64'
+            tag-latest: 'auto'
+            tag-suffix: '-tinygrad'
+            runs-on: 'ubuntu-latest'
+            base-image: "ubuntu:24.04"
+            skip-drivers: 'true'
+            backend: "tinygrad"
             dockerfile: "./backend/Dockerfile.python"
             context: "./"
             ubuntu-version: '2404'
@@ -338,6 +370,19 @@ jobs:
             skip-drivers: 'false'
             backend: "llama-cpp"
             dockerfile: "./backend/Dockerfile.llama-cpp"
+            context: "./"
+            ubuntu-version: '2404'
+          - build-type: 'cublas'
+            cuda-major-version: "12"
+            cuda-minor-version: "8"
+            platforms: 'linux/amd64'
+            tag-latest: 'auto'
+            tag-suffix: '-gpu-nvidia-cuda-12-turboquant'
+            runs-on: 'bigger-runner'
+            base-image: "ubuntu:24.04"
+            skip-drivers: 'false'
+            backend: "turboquant"
+            dockerfile: "./backend/Dockerfile.turboquant"
             context: "./"
             ubuntu-version: '2404'
           - build-type: 'cublas'
@@ -618,6 +663,19 @@ jobs:
             cuda-minor-version: "8"
             platforms: 'linux/amd64'
             tag-latest: 'auto'
+            tag-suffix: '-gpu-nvidia-cuda-12-qwen3-tts-cpp'
+            runs-on: 'ubuntu-latest'
+            base-image: "ubuntu:24.04"
+            skip-drivers: 'false'
+            backend: "qwen3-tts-cpp"
+            dockerfile: "./backend/Dockerfile.golang"
+            context: "./"
+            ubuntu-version: '2404'
+          - build-type: 'cublas'
+            cuda-major-version: "12"
+            cuda-minor-version: "8"
+            platforms: 'linux/amd64'
+            tag-latest: 'auto'
             tag-suffix: '-gpu-nvidia-cuda-12-rfdetr'
             runs-on: 'ubuntu-latest'
             base-image: "ubuntu:24.04"
@@ -773,6 +831,19 @@ jobs:
           - build-type: 'cublas'
             cuda-major-version: "13"
             cuda-minor-version: "0"
+            platforms: 'linux/amd64'
+            tag-latest: 'auto'
+            tag-suffix: '-gpu-nvidia-cuda-13-turboquant'
+            runs-on: 'ubuntu-latest'
+            base-image: "ubuntu:24.04"
+            skip-drivers: 'false'
+            backend: "turboquant"
+            dockerfile: "./backend/Dockerfile.turboquant"
+            context: "./"
+            ubuntu-version: '2404'
+          - build-type: 'cublas'
+            cuda-major-version: "13"
+            cuda-minor-version: "0"
             platforms: 'linux/arm64'
             skip-drivers: 'false'
             tag-latest: 'auto'
@@ -782,6 +853,19 @@ jobs:
             ubuntu-version: '2404'
             backend: "llama-cpp"
             dockerfile: "./backend/Dockerfile.llama-cpp"
+            context: "./"
+          - build-type: 'cublas'
+            cuda-major-version: "13"
+            cuda-minor-version: "0"
+            platforms: 'linux/arm64'
+            skip-drivers: 'false'
+            tag-latest: 'auto'
+            tag-suffix: '-nvidia-l4t-cuda-13-arm64-turboquant'
+            base-image: "ubuntu:24.04"
+            runs-on: 'ubuntu-24.04-arm'
+            ubuntu-version: '2404'
+            backend: "turboquant"
+            dockerfile: "./backend/Dockerfile.turboquant"
             context: "./"
           - build-type: 'cublas'
             cuda-major-version: "13"
@@ -1228,6 +1312,19 @@ jobs:
           - build-type: 'cublas'
             cuda-major-version: "13"
             cuda-minor-version: "0"
+            platforms: 'linux/amd64'
+            tag-latest: 'auto'
+            tag-suffix: '-gpu-nvidia-cuda-13-qwen3-tts-cpp'
+            runs-on: 'ubuntu-latest'
+            base-image: "ubuntu:24.04"
+            skip-drivers: 'false'
+            backend: "qwen3-tts-cpp"
+            dockerfile: "./backend/Dockerfile.golang"
+            context: "./"
+            ubuntu-version: '2404'
+          - build-type: 'cublas'
+            cuda-major-version: "13"
+            cuda-minor-version: "0"
             platforms: 'linux/arm64'
             skip-drivers: 'false'
             tag-latest: 'auto'
@@ -1236,6 +1333,19 @@ jobs:
             ubuntu-version: '2404'
             runs-on: 'ubuntu-24.04-arm'
             backend: "acestep-cpp"
+            dockerfile: "./backend/Dockerfile.golang"
+            context: "./"
+          - build-type: 'cublas'
+            cuda-major-version: "13"
+            cuda-minor-version: "0"
+            platforms: 'linux/arm64'
+            skip-drivers: 'false'
+            tag-latest: 'auto'
+            tag-suffix: '-nvidia-l4t-cuda-13-arm64-qwen3-tts-cpp'
+            base-image: "ubuntu:24.04"
+            ubuntu-version: '2404'
+            runs-on: 'ubuntu-24.04-arm'
+            backend: "qwen3-tts-cpp"
             dockerfile: "./backend/Dockerfile.golang"
             context: "./"
           - build-type: 'cublas'
@@ -1259,7 +1369,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-rerankers'
             runs-on: 'ubuntu-latest'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "rerankers"
             dockerfile: "./backend/Dockerfile.python"
@@ -1272,7 +1382,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-llama-cpp'
             runs-on: 'ubuntu-latest'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "llama-cpp"
             dockerfile: "./backend/Dockerfile.llama-cpp"
@@ -1283,9 +1393,22 @@ jobs:
             cuda-minor-version: ""
             platforms: 'linux/amd64'
             tag-latest: 'auto'
+            tag-suffix: '-gpu-rocm-hipblas-turboquant'
+            runs-on: 'ubuntu-latest'
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
+            skip-drivers: 'false'
+            backend: "turboquant"
+            dockerfile: "./backend/Dockerfile.turboquant"
+            context: "./"
+            ubuntu-version: '2404'
+          - build-type: 'hipblas'
+            cuda-major-version: ""
+            cuda-minor-version: ""
+            platforms: 'linux/amd64'
+            tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-vllm'
             runs-on: 'arc-runner-set'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "vllm"
             dockerfile: "./backend/Dockerfile.python"
@@ -1298,7 +1421,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-vllm-omni'
             runs-on: 'arc-runner-set'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "vllm-omni"
             dockerfile: "./backend/Dockerfile.python"
@@ -1311,7 +1434,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-transformers'
             runs-on: 'arc-runner-set'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "transformers"
             dockerfile: "./backend/Dockerfile.python"
@@ -1324,7 +1447,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-diffusers'
             runs-on: 'arc-runner-set'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "diffusers"
             dockerfile: "./backend/Dockerfile.python"
@@ -1337,7 +1460,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-ace-step'
             runs-on: 'arc-runner-set'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "ace-step"
             dockerfile: "./backend/Dockerfile.python"
@@ -1351,7 +1474,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-kokoro'
             runs-on: 'arc-runner-set'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "kokoro"
             dockerfile: "./backend/Dockerfile.python"
@@ -1364,7 +1487,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-vibevoice'
             runs-on: 'arc-runner-set'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "vibevoice"
             dockerfile: "./backend/Dockerfile.python"
@@ -1377,7 +1500,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-qwen-asr'
             runs-on: 'arc-runner-set'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "qwen-asr"
             dockerfile: "./backend/Dockerfile.python"
@@ -1390,7 +1513,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-nemo'
             runs-on: 'arc-runner-set'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "nemo"
             dockerfile: "./backend/Dockerfile.python"
@@ -1403,7 +1526,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-qwen-tts'
             runs-on: 'arc-runner-set'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "qwen-tts"
             dockerfile: "./backend/Dockerfile.python"
@@ -1416,7 +1539,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-fish-speech'
             runs-on: 'arc-runner-set'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "fish-speech"
             dockerfile: "./backend/Dockerfile.python"
@@ -1429,7 +1552,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-voxcpm'
             runs-on: 'arc-runner-set'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "voxcpm"
             dockerfile: "./backend/Dockerfile.python"
@@ -1442,7 +1565,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-pocket-tts'
             runs-on: 'arc-runner-set'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "pocket-tts"
             dockerfile: "./backend/Dockerfile.python"
@@ -1455,7 +1578,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-faster-whisper'
             runs-on: 'bigger-runner'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "faster-whisper"
             dockerfile: "./backend/Dockerfile.python"
@@ -1468,7 +1591,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-whisperx'
             runs-on: 'bigger-runner'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "whisperx"
             dockerfile: "./backend/Dockerfile.python"
@@ -1481,7 +1604,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-coqui'
             runs-on: 'bigger-runner'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "coqui"
             dockerfile: "./backend/Dockerfile.python"
@@ -1514,6 +1637,19 @@ jobs:
             dockerfile: "./backend/Dockerfile.llama-cpp"
             context: "./"
             ubuntu-version: '2404'
+          - build-type: 'sycl_f32'
+            cuda-major-version: ""
+            cuda-minor-version: ""
+            platforms: 'linux/amd64'
+            tag-latest: 'auto'
+            tag-suffix: '-gpu-intel-sycl-f32-turboquant'
+            runs-on: 'ubuntu-latest'
+            base-image: "intel/oneapi-basekit:2025.3.0-0-devel-ubuntu24.04"
+            skip-drivers: 'false'
+            backend: "turboquant"
+            dockerfile: "./backend/Dockerfile.turboquant"
+            context: "./"
+            ubuntu-version: '2404'
           - build-type: 'sycl_f16'
             cuda-major-version: ""
             cuda-minor-version: ""
@@ -1525,6 +1661,19 @@ jobs:
             skip-drivers: 'false'
             backend: "llama-cpp"
             dockerfile: "./backend/Dockerfile.llama-cpp"
+            context: "./"
+            ubuntu-version: '2404'
+          - build-type: 'sycl_f16'
+            cuda-major-version: ""
+            cuda-minor-version: ""
+            platforms: 'linux/amd64'
+            tag-latest: 'auto'
+            tag-suffix: '-gpu-intel-sycl-f16-turboquant'
+            runs-on: 'ubuntu-latest'
+            base-image: "intel/oneapi-basekit:2025.3.0-0-devel-ubuntu24.04"
+            skip-drivers: 'false'
+            backend: "turboquant"
+            dockerfile: "./backend/Dockerfile.turboquant"
             context: "./"
             ubuntu-version: '2404'
           - build-type: 'intel'
@@ -1906,6 +2055,32 @@ jobs:
             dockerfile: "./backend/Dockerfile.llama-cpp"
             context: "./"
             ubuntu-version: '2404'
+          - build-type: ''
+            cuda-major-version: ""
+            cuda-minor-version: ""
+            platforms: 'linux/amd64,linux/arm64'
+            tag-latest: 'auto'
+            tag-suffix: '-cpu-turboquant'
+            runs-on: 'bigger-runner'
+            base-image: "ubuntu:24.04"
+            skip-drivers: 'false'
+            backend: "turboquant"
+            dockerfile: "./backend/Dockerfile.turboquant"
+            context: "./"
+            ubuntu-version: '2404'
+          - build-type: ''
+            cuda-major-version: ""
+            cuda-minor-version: ""
+            platforms: 'linux/amd64'
+            tag-latest: 'auto'
+            tag-suffix: '-cpu-ik-llama-cpp'
+            runs-on: 'bigger-runner'
+            base-image: "ubuntu:24.04"
+            skip-drivers: 'false'
+            backend: "ik-llama-cpp"
+            dockerfile: "./backend/Dockerfile.ik-llama-cpp"
+            context: "./"
+            ubuntu-version: '2404'
           - build-type: 'cublas'
             cuda-major-version: "12"
             cuda-minor-version: "0"
@@ -1919,6 +2094,19 @@ jobs:
             dockerfile: "./backend/Dockerfile.llama-cpp"
             context: "./"
             ubuntu-version: '2204'
+          - build-type: 'cublas'
+            cuda-major-version: "12"
+            cuda-minor-version: "0"
+            platforms: 'linux/arm64'
+            skip-drivers: 'false'
+            tag-latest: 'auto'
+            tag-suffix: '-nvidia-l4t-arm64-turboquant'
+            base-image: "nvcr.io/nvidia/l4t-jetpack:r36.4.0"
+            runs-on: 'ubuntu-24.04-arm'
+            backend: "turboquant"
+            dockerfile: "./backend/Dockerfile.turboquant"
+            context: "./"
+            ubuntu-version: '2204'
           - build-type: 'vulkan'
             cuda-major-version: ""
             cuda-minor-version: ""
@@ -1930,6 +2118,19 @@ jobs:
             skip-drivers: 'false'
             backend: "llama-cpp"
             dockerfile: "./backend/Dockerfile.llama-cpp"
+            context: "./"
+            ubuntu-version: '2404'
+          - build-type: 'vulkan'
+            cuda-major-version: ""
+            cuda-minor-version: ""
+            platforms: 'linux/amd64,linux/arm64'
+            tag-latest: 'auto'
+            tag-suffix: '-gpu-vulkan-turboquant'
+            runs-on: 'bigger-runner'
+            base-image: "ubuntu:24.04"
+            skip-drivers: 'false'
+            backend: "turboquant"
+            dockerfile: "./backend/Dockerfile.turboquant"
             context: "./"
             ubuntu-version: '2404'
           # Stablediffusion-ggml
@@ -2136,7 +2337,7 @@ jobs:
             platforms: 'linux/amd64'
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-whisper'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             runs-on: 'ubuntu-latest'
             skip-drivers: 'false'
             backend: "whisper"
@@ -2215,10 +2416,89 @@ jobs:
             platforms: 'linux/amd64'
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-acestep-cpp'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             runs-on: 'ubuntu-latest'
             skip-drivers: 'false'
             backend: "acestep-cpp"
+            dockerfile: "./backend/Dockerfile.golang"
+            context: "./"
+            ubuntu-version: '2404'
+          # qwen3-tts-cpp
+          - build-type: ''
+            cuda-major-version: ""
+            cuda-minor-version: ""
+            platforms: 'linux/amd64,linux/arm64'
+            tag-latest: 'auto'
+            tag-suffix: '-cpu-qwen3-tts-cpp'
+            runs-on: 'ubuntu-latest'
+            base-image: "ubuntu:24.04"
+            skip-drivers: 'false'
+            backend: "qwen3-tts-cpp"
+            dockerfile: "./backend/Dockerfile.golang"
+            context: "./"
+            ubuntu-version: '2404'
+          - build-type: 'sycl_f32'
+            cuda-major-version: ""
+            cuda-minor-version: ""
+            platforms: 'linux/amd64'
+            tag-latest: 'auto'
+            tag-suffix: '-gpu-intel-sycl-f32-qwen3-tts-cpp'
+            runs-on: 'ubuntu-latest'
+            base-image: "intel/oneapi-basekit:2025.3.0-0-devel-ubuntu24.04"
+            skip-drivers: 'false'
+            backend: "qwen3-tts-cpp"
+            dockerfile: "./backend/Dockerfile.golang"
+            context: "./"
+            ubuntu-version: '2404'
+          - build-type: 'sycl_f16'
+            cuda-major-version: ""
+            cuda-minor-version: ""
+            platforms: 'linux/amd64'
+            tag-latest: 'auto'
+            tag-suffix: '-gpu-intel-sycl-f16-qwen3-tts-cpp'
+            runs-on: 'ubuntu-latest'
+            base-image: "intel/oneapi-basekit:2025.3.0-0-devel-ubuntu24.04"
+            skip-drivers: 'false'
+            backend: "qwen3-tts-cpp"
+            dockerfile: "./backend/Dockerfile.golang"
+            context: "./"
+            ubuntu-version: '2404'
+          - build-type: 'vulkan'
+            cuda-major-version: ""
+            cuda-minor-version: ""
+            platforms: 'linux/amd64,linux/arm64'
+            tag-latest: 'auto'
+            tag-suffix: '-gpu-vulkan-qwen3-tts-cpp'
+            runs-on: 'ubuntu-latest'
+            base-image: "ubuntu:24.04"
+            skip-drivers: 'false'
+            backend: "qwen3-tts-cpp"
+            dockerfile: "./backend/Dockerfile.golang"
+            context: "./"
+            ubuntu-version: '2404'
+          - build-type: 'cublas'
+            cuda-major-version: "12"
+            cuda-minor-version: "0"
+            platforms: 'linux/arm64'
+            skip-drivers: 'false'
+            tag-latest: 'auto'
+            tag-suffix: '-nvidia-l4t-arm64-qwen3-tts-cpp'
+            base-image: "nvcr.io/nvidia/l4t-jetpack:r36.4.0"
+            runs-on: 'ubuntu-24.04-arm'
+            backend: "qwen3-tts-cpp"
+            dockerfile: "./backend/Dockerfile.golang"
+            context: "./"
+            ubuntu-version: '2204'
+          - build-type: 'hipblas'
+            cuda-major-version: ""
+            cuda-minor-version: ""
+            platforms: 'linux/amd64'
+            tag-latest: 'auto'
+            tag-suffix: '-gpu-rocm-hipblas-qwen3-tts-cpp'
+            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            runs-on: 'ubuntu-latest'
+            skip-drivers: 'false'
+            backend: "qwen3-tts-cpp"
             dockerfile: "./backend/Dockerfile.golang"
             context: "./"
             ubuntu-version: '2404'
@@ -2338,7 +2618,7 @@ jobs:
           #   platforms: 'linux/amd64'
           #   tag-latest: 'auto'
           #   tag-suffix: '-gpu-hipblas-rfdetr'
-          #   base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+          #   base-image: "rocm/dev-ubuntu-24.04:7.2.1"
           #   runs-on: 'ubuntu-latest'
           #   skip-drivers: 'false'
           #   backend: "rfdetr"
@@ -2379,7 +2659,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-neutts'
             runs-on: 'arc-runner-set'
-            base-image: "rocm/dev-ubuntu-24.04:6.4.4"
+            base-image: "rocm/dev-ubuntu-24.04:7.2.1"
             skip-drivers: 'false'
             backend: "neutts"
             dockerfile: "./backend/Dockerfile.python"
@@ -2525,6 +2805,10 @@ jobs:
             lang: "go"
           - backend: "acestep-cpp"
             tag-suffix: "-metal-darwin-arm64-acestep-cpp"
+            build-type: "metal"
+            lang: "go"
+          - backend: "qwen3-tts-cpp"
+            tag-suffix: "-metal-darwin-arm64-qwen3-tts-cpp"
             build-type: "metal"
             lang: "go"
           - backend: "voxtral"
