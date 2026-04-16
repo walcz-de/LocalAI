@@ -2,6 +2,9 @@ ARG BASE_IMAGE=ubuntu:24.04
 ARG GRPC_BASE_IMAGE=${BASE_IMAGE}
 ARG INTEL_BASE_IMAGE=${BASE_IMAGE}
 ARG UBUNTU_CODENAME=noble
+# Global ARGs for pre-built backend images baked in at build time (must be global for FROM usage)
+ARG VLLM_BACKEND_IMAGE=
+ARG TRANSFORMERS_BACKEND_IMAGE=
 
 ###################################
 # gRPC stage — builds gRPC C++ library for use by llama-cpp backend builder
@@ -512,11 +515,10 @@ RUN go install github.com/mikefarah/yq/v4@latest
 
 # Import vllm + transformers backends from pre-built registry images — baked into the main image
 # so no gallery download is needed at runtime.
-# ARGs control the source tags; override at build time if newer versions are available.
-ARG VLLM_BACKEND_IMAGE=pointblank.ddns.net:5556/localai-backends:v4.1.3-gfx1151-rocm7.12-018cb25a-vllm
+# VLLM_BACKEND_IMAGE and TRANSFORMERS_BACKEND_IMAGE are declared globally at the top of this file.
+# Override with: docker build --build-arg VLLM_BACKEND_IMAGE=<tag> ...
 FROM ${VLLM_BACKEND_IMAGE} AS vllm-backend
 
-ARG TRANSFORMERS_BACKEND_IMAGE=pointblank.ddns.net:5556/localai-backends:v4.1.3-gfx1151-rocm7.12-018cb25a-transformers
 FROM ${TRANSFORMERS_BACKEND_IMAGE} AS transformers-backend
 
 ###################################
