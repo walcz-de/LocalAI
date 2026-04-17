@@ -83,3 +83,6 @@ local-backends/
 tests/e2e-ui/ui-test-server
 core/http/react-ui/playwright-report/
 core/http/react-ui/test-results/
+
+# Benchmark temperature traces (produced by temp-watcher.sh)
+temps_*.csv
