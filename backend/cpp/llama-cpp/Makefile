@@ -1,5 +1,5 @@
 
-LLAMA_VERSION?=b3d758750a268bf93f084ccfa3060fb9a203192a
+LLAMA_VERSION?=45cac7ca703fb9085eae62b9121fca01d20177f6
 LLAMA_REPO?=https://github.com/ggerganov/llama.cpp
 
 CMAKE_ARGS?=
@@ -133,7 +133,7 @@ llama.cpp:
 	cd llama.cpp && \
 	git init && \
 	git remote add origin $(LLAMA_REPO)  && \
-	git fetch origin && \
+	git fetch --all --tags && \
 	git checkout -b build $(LLAMA_VERSION) && \
 	git submodule update --init --recursive --depth 1 --single-branch
 

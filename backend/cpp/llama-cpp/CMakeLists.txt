@@ -67,7 +67,7 @@ get_filename_component(LLAMA_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../commo
 include_directories("${LLAMA_COMMON_DIR}")
 target_include_directories(${TARGET} PRIVATE "${LLAMA_COMMON_DIR}")
 
-target_link_libraries(${TARGET} PRIVATE common llama mtmd ${CMAKE_THREAD_LIBS_INIT} absl::flags hw_grpc_proto
+target_link_libraries(${TARGET} PRIVATE llama-common llama mtmd ${CMAKE_THREAD_LIBS_INIT} absl::flags hw_grpc_proto
   absl::flags_parse
   gRPC::${_REFLECTION}
   gRPC::${_GRPC_GRPCPP}
