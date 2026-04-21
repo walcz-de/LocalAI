@@ -108,18 +108,6 @@ elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
             --index-strategy unsafe-first-match \
             --pre \
             vllm
-        # Step 2a: Force-reinstall AMD ROCm torch. Step 2's vllm pulls
-        # torch 2.10.0+cu128 (NVIDIA) from PyPI as a transitive dependency,
-        # overwriting Step 1's 2.9.1+rocm7.12.0. Without this step the image
-        # ships pure CUDA torch → libtorch_hip.so missing, torch.version.hip
-        # becomes None, ROCm runtime is dead on extract. --force-reinstall
-        # --no-deps restores the HIP variant without re-pulling the vllm stack.
-        pip3 install \
-            --target="${EDIR}/venv/lib/python3.12/site-packages/" \
-            --upgrade --force-reinstall --no-deps \
-            --index-url "${AMD_GFX1151}" \
-            --extra-index-url "https://pypi.org/simple/" \
-            "torch==2.9.1+rocm7.12.0"
         # Step 3: AMD flash-attn (pure-py wheel at AMD frameworks index)
         # Note: use uv with --no-build-isolation since flash-attn tries to build
         # from source when resolved via PyPI; the AMD index has a pre-built pure-py wheel
@@ -214,6 +202,20 @@ else:
         # Create libtorch_cuda.so / libc10_cuda.so symlinks pointing to HIP equivalents.
         # Some code paths (e.g. subprocess LD_LIBRARY_PATH resolution in EngineCore_DP0)
         # look for CUDA-named libs; AMD torch only ships libtorch_hip.so / libc10_hip.so.
+        # Step 6: Force-reinstall AMD ROCm torch as the LAST install step.
+        # Earlier Step 2 (vllm) pulls torch 2.10.0+cu128 from PyPI as a
+        # transitive dependency, overwriting Step 1's 2.9.1+rocm7.12.0. We
+        # wait until after flash-attn (Step 3) and all patches (Steps 4-5) are
+        # done so those steps resolve against the already-present CUDA torch
+        # metadata. Only now do we swap in the HIP variant with --force-reinstall
+        # --no-deps. Without this swap the image ships pure NVIDIA CUDA torch
+        # and ROCm runtime is dead.
+        pip3 install \
+            --target="${EDIR}/venv/lib/python3.12/site-packages/" \
+            --upgrade --force-reinstall --no-deps \
+            --index-url "${AMD_GFX1151}" \
+            --extra-index-url "https://pypi.org/simple/" \
+            "torch==2.9.1+rocm7.12.0"
         # Relative symlinks, NOT absolute: at build time EDIR=/vllm, so absolute
         # symlinks become /vllm/venv/.../libtorch_hip.so and are dangling once
         # the backend is extracted to /backends/rocm7-vllm/. Relative links stay
