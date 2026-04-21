@@ -131,8 +131,8 @@ elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
 import os
 path = os.environ['FLASH_INTERFACE']
 src = open(path).read()
-old = 'import flash_attn_2_cuda as flash_attn_gpu'
-new = 'try:\n    import flash_attn_2_cuda as flash_attn_gpu\nexcept ImportError:\n    flash_attn_gpu = None  # AMD ROCm pure-py wheel ships no C-extension; Triton paths still work'
+old = '    import flash_attn_2_cuda as flash_attn_gpu'
+new = '    try:\n        import flash_attn_2_cuda as flash_attn_gpu\n    except ImportError:\n        flash_attn_gpu = None  # AMD ROCm pure-py wheel ships no C-extension; Triton paths still work'
 if old in src and new not in src:
     open(path, 'w').write(src.replace(old, new, 1))
     print('Patched flash_attn_interface.py: optional flash_attn_2_cuda import')
