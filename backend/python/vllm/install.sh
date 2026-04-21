@@ -108,6 +108,18 @@ elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
             --index-strategy unsafe-first-match \
             --pre \
             vllm
+        # Step 2a: Force-reinstall AMD ROCm torch. Step 2's vllm pulls
+        # torch 2.10.0+cu128 (NVIDIA) from PyPI as a transitive dependency,
+        # overwriting Step 1's 2.9.1+rocm7.12.0. Without this step the image
+        # ships pure CUDA torch → libtorch_hip.so missing, torch.version.hip
+        # becomes None, ROCm runtime is dead on extract. --force-reinstall
+        # --no-deps restores the HIP variant without re-pulling the vllm stack.
+        pip3 install \
+            --target="${EDIR}/venv/lib/python3.12/site-packages/" \
+            --upgrade --force-reinstall --no-deps \
+            --index-url "${AMD_GFX1151}" \
+            --extra-index-url "https://pypi.org/simple/" \
+            "torch==2.9.1+rocm7.12.0"
         # Step 3: AMD flash-attn (pure-py wheel at AMD frameworks index)
         # Note: use uv with --no-build-isolation since flash-attn tries to build
         # from source when resolved via PyPI; the AMD index has a pre-built pure-py wheel
@@ -202,9 +214,14 @@ else:
         # Create libtorch_cuda.so / libc10_cuda.so symlinks pointing to HIP equivalents.
         # Some code paths (e.g. subprocess LD_LIBRARY_PATH resolution in EngineCore_DP0)
         # look for CUDA-named libs; AMD torch only ships libtorch_hip.so / libc10_hip.so.
+        # Relative symlinks, NOT absolute: at build time EDIR=/vllm, so absolute
+        # symlinks become /vllm/venv/.../libtorch_hip.so and are dangling once
+        # the backend is extracted to /backends/rocm7-vllm/. Relative links stay
+        # valid because the target sits in the same directory.
         TORCH_LIB="${EDIR}/venv/lib/python3.12/site-packages/torch/lib"
-        ln -sf "${TORCH_LIB}/libtorch_hip.so" "${TORCH_LIB}/libtorch_cuda.so" 2>/dev/null || true
-        ln -sf "${TORCH_LIB}/libc10_hip.so"   "${TORCH_LIB}/libc10_cuda.so"   2>/dev/null || true
+        ( cd "${TORCH_LIB}" \
+          && ln -sf libtorch_hip.so libtorch_cuda.so \
+          && ln -sf libc10_hip.so   libc10_cuda.so ) 2>/dev/null || true
 else
     installRequirements
 fi
