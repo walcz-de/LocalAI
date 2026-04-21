@@ -116,6 +116,30 @@ elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
             --index-strategy first-match \
             --no-build-isolation \
             "flash-attn==2.8.3"
+        # Step 3b: Patch flash_attn_interface.py to survive missing C-extension.
+        # AMD's pre-built flash-attn wheel at rocm.frameworks.amd.com is pure-py
+        # (no flash_attn_2_cuda .so bundled), but upstream's interface module
+        # imports it unconditionally → ModuleNotFoundError breaks every vllm
+        # engine init that imports any flash_attn submodule (observed with
+        # Qwen3MoE rotary_embedding which pulls in the Triton-only ops path).
+        # The Triton paths don't need the C-extension; the import just has
+        # to not explode.
+        FLASH_INTERFACE="${EDIR}/venv/lib/python3.12/site-packages/flash_attn/flash_attn_interface.py"
+        export FLASH_INTERFACE
+        if [ -f "${FLASH_INTERFACE}" ]; then
+            "${EDIR}/venv/bin/python" -c "
+import os
+path = os.environ['FLASH_INTERFACE']
+src = open(path).read()
+old = 'import flash_attn_2_cuda as flash_attn_gpu'
+new = 'try:\n    import flash_attn_2_cuda as flash_attn_gpu\nexcept ImportError:\n    flash_attn_gpu = None  # AMD ROCm pure-py wheel ships no C-extension; Triton paths still work'
+if old in src and new not in src:
+    open(path, 'w').write(src.replace(old, new, 1))
+    print('Patched flash_attn_interface.py: optional flash_attn_2_cuda import')
+else:
+    print('flash_attn_interface.py: already patched or pattern not found, skipping')
+" 2>&1 || true
+        fi
         # Step 4: grpcio + protobuf for LocalAI gRPC backend protocol
         uv pip install --python "${EDIR}/venv/bin/python" \
             "grpcio>=1.60.0" protobuf 2>/dev/null || true
