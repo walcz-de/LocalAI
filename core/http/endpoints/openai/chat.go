@@ -789,9 +789,18 @@ func ChatEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, evaluator
 					}
 				}
 
-				// Automatic tool parsing fallback for streaming: when no tools were
-				// requested but the model emitted tool call markup, parse and emit them.
-				if !shouldUseFn && config.FunctionsConfig.AutomaticToolParsingFallback && collectedContent != "" && !toolsCalled {
+				// Tool parsing for streaming. Two cases:
+				//   (a) shouldUseFn=true: the model was asked to call a tool (possibly
+				//       forced via tool_choice), the grammar constrained it to emit
+				//       the tool JSON, but the streaming loop accumulated it as
+				//       content. Non-streaming runs ParseFunctionCall at L365; we
+				//       need the same conversion here, otherwise clients see a
+				//       JSON-looking delta.content and finish_reason="stop" instead
+				//       of delta.tool_calls + finish_reason="tool_calls".
+				//   (b) shouldUseFn=false + AutomaticToolParsingFallback: the model
+				//       emitted tool-call markup unprompted — parse opportunistically.
+				if collectedContent != "" && !toolsCalled &&
+					(shouldUseFn || config.FunctionsConfig.AutomaticToolParsingFallback) {
 					parsed := functions.ParseFunctionCall(collectedContent, config.FunctionsConfig)
 					for i, fc := range parsed {
 						toolCallID := fc.ID
