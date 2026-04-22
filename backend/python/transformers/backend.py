@@ -5,9 +5,12 @@ Extra gRPC server for HuggingFace AutoModel models.
 from concurrent import futures
 
 import argparse
+import json
+import re
 import signal
 import sys
 import os
+import uuid
 from threading import Thread
 import asyncio
 
@@ -298,7 +301,23 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
 
         prompt = request.Prompt
         if not request.Prompt and request.UseTokenizerTemplate and request.Messages:
-            prompt = self.tokenizer.apply_chat_template(request.Messages, tokenize=False, add_generation_prompt=True)
+            # Forward OpenAI-style tools to the chat template so models with
+            # native tool-call tokens (Qwen3, Mistral, Hermes, …) emit their
+            # structured tool syntax. Without this, apply_chat_template has
+            # no tools param and the model either hallucinates or falls back
+            # to System-Prompt emulation — the source of most tool-call bugs.
+            tools = None
+            if request.Tools:
+                try:
+                    tools = json.loads(request.Tools)
+                except (json.JSONDecodeError, ValueError):
+                    tools = None
+            prompt = self.tokenizer.apply_chat_template(
+                request.Messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                tools=tools,
+            )
 
         inputs = self.tokenizer(prompt, return_tensors="pt")
 
@@ -373,7 +392,51 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
         if streaming:
             return
 
-        yield backend_pb2.Reply(message=bytes(generated_text, encoding='utf-8'))
+        # Detect native tool-call XML emitted by Qwen3 / Hermes-2 / similar.
+        # Format: <tool_call>{"name": "...", "arguments": {...}}</tool_call>
+        # For each match we emit a ToolCallDelta inside chat_deltas so
+        # LocalAI-core can map them to OpenAI tool_calls. We also strip the
+        # XML from the user-visible content to avoid duplication.
+        # NOTE: non-streaming path only for now — streaming tool-call parsing
+        # would need incremental XML detection in TextIteratorStreamer.
+        tool_calls = []
+        for i, m in enumerate(re.finditer(
+            r'<tool_call>\s*(\{.*?\})\s*</tool_call>',
+            generated_text,
+            re.DOTALL,
+        )):
+            try:
+                call = json.loads(m.group(1))
+            except (json.JSONDecodeError, ValueError):
+                continue
+            args_raw = call.get("arguments", {})
+            if isinstance(args_raw, str):
+                arguments = args_raw
+            else:
+                arguments = json.dumps(args_raw, ensure_ascii=False)
+            tool_calls.append(backend_pb2.ToolCallDelta(
+                index=i,
+                id=f"call_{uuid.uuid4().hex[:8]}",
+                name=call.get("name", ""),
+                arguments=arguments,
+            ))
+
+        if tool_calls:
+            content_stripped = re.sub(
+                r'<tool_call>.*?</tool_call>',
+                '',
+                generated_text,
+                flags=re.DOTALL,
+            ).strip()
+            yield backend_pb2.Reply(
+                message=bytes(content_stripped, encoding='utf-8'),
+                chat_deltas=[backend_pb2.ChatDelta(
+                    content=content_stripped,
+                    tool_calls=tool_calls,
+                )],
+            )
+        else:
+            yield backend_pb2.Reply(message=bytes(generated_text, encoding='utf-8'))
 
     async def Predict(self, request, context):
         gen = self._predict(request, context, streaming=False)
