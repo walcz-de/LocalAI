@@ -237,9 +237,18 @@ RUN cd /${BACKEND} && PORTABLE_PYTHON=true make
 RUN <<EOT bash
     if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${ROCM_ARCH}" = "gfx1151" ]; then
         if [ -f "/${BACKEND}/venv/bin/python" ]; then
-            uv pip install --python "/${BACKEND}/venv/bin/python" --pre torch \
-                --index-url https://rocm.prereleases.amd.com/whl/gfx1151/ || \
-            echo "gfx1151 prerelease torch not available for this Python version, keeping existing torch"
+            # vllm backend explicitly pins torch 2.9.1 in its install.sh for ABI
+            # compatibility with AMD vllm 0.16.1 (see install.sh Step 6 + comment
+            # about c10_hip_check_implementation signature). Skip the prerelease
+            # auto-upgrade for vllm to preserve the pin + the CUDA-named symlinks
+            # that install.sh creates post-pin.
+            if [ "${BACKEND}" = "vllm" ]; then
+                echo "Skipping prerelease torch upgrade for vllm — install.sh pins torch 2.9.1 with symlinks"
+            else
+                uv pip install --python "/${BACKEND}/venv/bin/python" --pre torch \
+                    --index-url https://rocm.prereleases.amd.com/whl/gfx1151/ || \
+                echo "gfx1151 prerelease torch not available for this Python version, keeping existing torch"
+            fi
         fi
     fi
 EOT
