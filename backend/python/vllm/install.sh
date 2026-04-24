@@ -100,14 +100,48 @@ elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
             --extra-index-url "https://pypi.org/simple/" \
             "torch==2.9.1+rocm7.12.0" \
             "torchvision==0.24.0+rocm7.12.0"
-        # Step 2: AMD ROCm vllm (pre-release — requires --pre; deps from PyPI fallback)
-        # unsafe-first-match: AMD frameworks index first, PyPI fallback for other packages
-        uv pip install --python "${EDIR}/venv/bin/python" \
-            --index-url "${AMD_FRAMEWORKS}" \
-            --extra-index-url https://pypi.org/simple/ \
-            --index-strategy unsafe-first-match \
-            --pre \
-            vllm
+        # Step 2: vllm — either AMD pre-release wheel OR source build.
+        # The AMD pre-release wheel (0.16.1.devXX+rocm712) at AMD_FRAMEWORKS
+        # ships neither vllm._C (CUDA) nor vllm._rocm_C (ROCm) native kernels.
+        # Engine init crashes at silu_and_mul lookup on any text model load.
+        # Source-build gate: VLLM_FROM_SOURCE=true compiles vllm against the
+        # already-pinned torch 2.9.1+rocm7.12.0 and produces _rocm_C locally.
+        if [ "${VLLM_FROM_SOURCE:-}" = "true" ]; then
+            echo "=== vllm from source for gfx1151 ==="
+            # Build-only deps (must be present in builder image)
+            uv pip install --python "${EDIR}/venv/bin/python" \
+                ninja cmake packaging setuptools wheel build
+            # Clone target version — pin explicit so the build is reproducible
+            VLLM_SRC_DIR="${EDIR}/vllm-src"
+            VLLM_VERSION="${VLLM_VERSION:-v0.12.0}"
+            rm -rf "${VLLM_SRC_DIR}"
+            git clone --depth 1 --branch "${VLLM_VERSION}" \
+                https://github.com/vllm-project/vllm "${VLLM_SRC_DIR}"
+            pushd "${VLLM_SRC_DIR}"
+                # Source-build needs: hipcc (present in rocm base), cmake, ninja,
+                # gcc (installed in Dockerfile.python for BACKEND=vllm).
+                # Use use_existing_torch.py to strip vllm's torch pin from
+                # requirements so our 2.9.1+rocm7.12.0 isn't downgraded.
+                "${EDIR}/venv/bin/python" use_existing_torch.py
+                export VLLM_TARGET_DEVICE=rocm
+                export PYTORCH_ROCM_ARCH=gfx1151
+                export MAX_JOBS="${MAX_JOBS:-4}"
+                export NVCC_THREADS="${NVCC_THREADS:-2}"
+                # Install without build-isolation so the build sees our torch
+                "${EDIR}/venv/bin/pip" install --no-build-isolation --no-deps -r requirements/rocm.txt
+                "${EDIR}/venv/bin/pip" install --no-build-isolation -v .
+            popd
+            rm -rf "${VLLM_SRC_DIR}"
+        else
+            # Default: AMD pre-release wheel (broken on text models due to missing _rocm_C).
+            # unsafe-first-match: AMD frameworks index first, PyPI fallback for other packages
+            uv pip install --python "${EDIR}/venv/bin/python" \
+                --index-url "${AMD_FRAMEWORKS}" \
+                --extra-index-url https://pypi.org/simple/ \
+                --index-strategy unsafe-first-match \
+                --pre \
+                vllm
+        fi
         # Step 3: AMD flash-attn (pure-py wheel at AMD frameworks index)
         # Note: use uv with --no-build-isolation since flash-attn tries to build
         # from source when resolved via PyPI; the AMD index has a pre-built pure-py wheel
