@@ -127,9 +127,12 @@ elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
                 export PYTORCH_ROCM_ARCH=gfx1151
                 export MAX_JOBS="${MAX_JOBS:-4}"
                 export NVCC_THREADS="${NVCC_THREADS:-2}"
-                # Install without build-isolation so the build sees our torch
-                "${EDIR}/venv/bin/pip" install --no-build-isolation --no-deps -r requirements/rocm.txt
-                "${EDIR}/venv/bin/pip" install --no-build-isolation -v .
+                # Install without build-isolation so the build sees our torch.
+                # Use uv pip (portable Python backend has no pip in venv/bin).
+                uv pip install --python "${EDIR}/venv/bin/python" \
+                    --no-build-isolation --no-deps -r requirements/rocm.txt
+                uv pip install --python "${EDIR}/venv/bin/python" \
+                    --no-build-isolation -v .
             popd
             rm -rf "${VLLM_SRC_DIR}"
         else
