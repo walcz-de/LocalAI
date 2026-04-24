@@ -168,6 +168,21 @@ func (c *fakeBackendClient) SoundGeneration(_ context.Context, _ *pb.SoundGenera
 func (c *fakeBackendClient) Detect(_ context.Context, _ *pb.DetectOptions, _ ...ggrpc.CallOption) (*pb.DetectResponse, error) {
 	return nil, nil
 }
+func (c *fakeBackendClient) FaceVerify(_ context.Context, _ *pb.FaceVerifyRequest, _ ...ggrpc.CallOption) (*pb.FaceVerifyResponse, error) {
+	return nil, nil
+}
+func (c *fakeBackendClient) FaceAnalyze(_ context.Context, _ *pb.FaceAnalyzeRequest, _ ...ggrpc.CallOption) (*pb.FaceAnalyzeResponse, error) {
+	return nil, nil
+}
+func (c *fakeBackendClient) VoiceVerify(_ context.Context, _ *pb.VoiceVerifyRequest, _ ...ggrpc.CallOption) (*pb.VoiceVerifyResponse, error) {
+	return nil, nil
+}
+func (c *fakeBackendClient) VoiceAnalyze(_ context.Context, _ *pb.VoiceAnalyzeRequest, _ ...ggrpc.CallOption) (*pb.VoiceAnalyzeResponse, error) {
+	return nil, nil
+}
+func (c *fakeBackendClient) VoiceEmbed(_ context.Context, _ *pb.VoiceEmbedRequest, _ ...ggrpc.CallOption) (*pb.VoiceEmbedResponse, error) {
+	return nil, nil
+}
 func (c *fakeBackendClient) AudioTranscription(_ context.Context, _ *pb.TranscriptRequest, _ ...ggrpc.CallOption) (*pb.TranscriptResult, error) {
 	return nil, nil
 }

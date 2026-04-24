@@ -7,14 +7,21 @@ const userQ = (userId) => userId ? `?user_id=${enc(userId)}` : ''
 async function handleResponse(response) {
   if (!response.ok) {
     let errorMessage = `HTTP ${response.status}`
+    let errorBody = null
     try {
       const data = await response.json()
+      errorBody = data
       if (data?.error?.message) errorMessage = data.error.message
       else if (data?.error) errorMessage = data.error
     } catch (_e) {
       // response wasn't JSON
     }
-    throw new Error(errorMessage)
+    const err = new Error(errorMessage)
+    // Preserve the parsed body + status so handlers can pattern-match on
+    // structured responses (e.g. the import form's ambiguity picker).
+    err.status = response.status
+    err.body = errorBody
+    throw err
   }
   const contentType = response.headers.get('content-type')
   if (contentType && contentType.includes('application/json')) {
@@ -115,6 +122,7 @@ export const modelsApi = {
 export const backendsApi = {
   list: (params) => fetchJSON(buildUrl(API_CONFIG.endpoints.backends, params)),
   listInstalled: () => fetchJSON(API_CONFIG.endpoints.backendsInstalled),
+  listKnown: () => fetchJSON(API_CONFIG.endpoints.backendsKnown),
   install: (id) => postJSON(API_CONFIG.endpoints.installBackend(id), {}),
   delete: (id) => postJSON(API_CONFIG.endpoints.deleteBackend(id), {}),
   installExternal: (body) => postJSON(API_CONFIG.endpoints.installExternalBackend, body),
@@ -249,6 +257,26 @@ export const audioApi = {
     })
     return handleResponse(response)
   },
+}
+
+// Face biometrics — backend spec: core/http/endpoints/localai/face_*.go
+export const faceApi = {
+  verify: (body) => postJSON(API_CONFIG.endpoints.faceVerify, body),
+  analyze: (body) => postJSON(API_CONFIG.endpoints.faceAnalyze, body),
+  embed: (body) => postJSON(API_CONFIG.endpoints.faceEmbed, body),
+  register: (body) => postJSON(API_CONFIG.endpoints.faceRegister, body),
+  identify: (body) => postJSON(API_CONFIG.endpoints.faceIdentify, body),
+  forget: (body) => postJSON(API_CONFIG.endpoints.faceForget, body),
+}
+
+// Voice biometrics — backend spec: core/http/endpoints/localai/voice_*.go
+export const voiceApi = {
+  verify: (body) => postJSON(API_CONFIG.endpoints.voiceVerify, body),
+  analyze: (body) => postJSON(API_CONFIG.endpoints.voiceAnalyze, body),
+  embed: (body) => postJSON(API_CONFIG.endpoints.voiceEmbed, body),
+  register: (body) => postJSON(API_CONFIG.endpoints.voiceRegister, body),
+  identify: (body) => postJSON(API_CONFIG.endpoints.voiceIdentify, body),
+  forget: (body) => postJSON(API_CONFIG.endpoints.voiceForget, body),
 }
 
 // Realtime / WebRTC

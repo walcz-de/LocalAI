@@ -72,7 +72,9 @@ func (s *SystemState) Capability(capMap map[string]string) string {
 		return reportedCapability
 	}
 
-	// Try parent capabilities by stripping trailing components (e.g. "amd-gfx1151" → "amd")
+	// 1) Try parent capabilities by stripping trailing components
+	//    (e.g. "amd-gfx1151" → "amd"). walcz-de fork addition: lets
+	//    gfx-specific meta-entries fall back to the generic "amd" bucket.
 	parts := strings.Split(reportedCapability, "-")
 	for i := len(parts) - 1; i > 0; i-- {
 		parent := strings.Join(parts[:i], "-")
@@ -82,8 +84,22 @@ func (s *SystemState) Capability(capMap map[string]string) string {
 		}
 	}
 
+	// 2) Fall back to the explicit "default" catch-all, then to "cpu".
+	//    The cpu fallback matters for meta backends that only enumerate
+	//    GPU variants + cpu (e.g. vllm maps nvidia/amd/intel/cpu but not
+	//    default): on a no-GPU host the reported capability is "default",
+	//    so without this we'd filter the meta out and break auto-install
+	//    by name. (upstream addition)
+	if _, exists := capMap[defaultCapability]; exists {
+		xlog.Debug("Capability not in map, falling back to default", "reportedCapability", reportedCapability, "capMap", capMap)
+		return defaultCapability
+	}
+	if _, exists := capMap["cpu"]; exists {
+		xlog.Debug("Capability not in map, falling back to cpu", "reportedCapability", reportedCapability, "capMap", capMap)
+		return "cpu"
+	}
+
 	xlog.Debug("The requested capability was not found, using default capability", "reportedCapability", reportedCapability, "capMap", capMap)
-	// Otherwise, return the default capability (catch-all)
 	return defaultCapability
 }
 

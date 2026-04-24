@@ -91,6 +91,26 @@ func (f *fakeGRPCBackend) Detect(_ context.Context, _ *pb.DetectOptions, _ ...gg
 	return &pb.DetectResponse{}, nil
 }
 
+func (f *fakeGRPCBackend) FaceVerify(_ context.Context, _ *pb.FaceVerifyRequest, _ ...ggrpc.CallOption) (*pb.FaceVerifyResponse, error) {
+	return &pb.FaceVerifyResponse{}, nil
+}
+
+func (f *fakeGRPCBackend) FaceAnalyze(_ context.Context, _ *pb.FaceAnalyzeRequest, _ ...ggrpc.CallOption) (*pb.FaceAnalyzeResponse, error) {
+	return &pb.FaceAnalyzeResponse{}, nil
+}
+
+func (f *fakeGRPCBackend) VoiceVerify(_ context.Context, _ *pb.VoiceVerifyRequest, _ ...ggrpc.CallOption) (*pb.VoiceVerifyResponse, error) {
+	return &pb.VoiceVerifyResponse{}, nil
+}
+
+func (f *fakeGRPCBackend) VoiceAnalyze(_ context.Context, _ *pb.VoiceAnalyzeRequest, _ ...ggrpc.CallOption) (*pb.VoiceAnalyzeResponse, error) {
+	return &pb.VoiceAnalyzeResponse{}, nil
+}
+
+func (f *fakeGRPCBackend) VoiceEmbed(_ context.Context, _ *pb.VoiceEmbedRequest, _ ...ggrpc.CallOption) (*pb.VoiceEmbedResponse, error) {
+	return &pb.VoiceEmbedResponse{}, nil
+}
+
 func (f *fakeGRPCBackend) AudioTranscription(_ context.Context, _ *pb.TranscriptRequest, _ ...ggrpc.CallOption) (*pb.TranscriptResult, error) {
 	return &pb.TranscriptResult{}, nil
 }

@@ -151,6 +151,66 @@ func (s *server) Detect(ctx context.Context, in *pb.DetectOptions) (*pb.DetectRe
 	return &res, nil
 }
 
+func (s *server) FaceVerify(ctx context.Context, in *pb.FaceVerifyRequest) (*pb.FaceVerifyResponse, error) {
+	if s.llm.Locking() {
+		s.llm.Lock()
+		defer s.llm.Unlock()
+	}
+	res, err := s.llm.FaceVerify(in)
+	if err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (s *server) FaceAnalyze(ctx context.Context, in *pb.FaceAnalyzeRequest) (*pb.FaceAnalyzeResponse, error) {
+	if s.llm.Locking() {
+		s.llm.Lock()
+		defer s.llm.Unlock()
+	}
+	res, err := s.llm.FaceAnalyze(in)
+	if err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (s *server) VoiceVerify(ctx context.Context, in *pb.VoiceVerifyRequest) (*pb.VoiceVerifyResponse, error) {
+	if s.llm.Locking() {
+		s.llm.Lock()
+		defer s.llm.Unlock()
+	}
+	res, err := s.llm.VoiceVerify(in)
+	if err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (s *server) VoiceAnalyze(ctx context.Context, in *pb.VoiceAnalyzeRequest) (*pb.VoiceAnalyzeResponse, error) {
+	if s.llm.Locking() {
+		s.llm.Lock()
+		defer s.llm.Unlock()
+	}
+	res, err := s.llm.VoiceAnalyze(in)
+	if err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (s *server) VoiceEmbed(ctx context.Context, in *pb.VoiceEmbedRequest) (*pb.VoiceEmbedResponse, error) {
+	if s.llm.Locking() {
+		s.llm.Lock()
+		defer s.llm.Unlock()
+	}
+	res, err := s.llm.VoiceEmbed(in)
+	if err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
 func (s *server) AudioTranscription(ctx context.Context, in *pb.TranscriptRequest) (*pb.TranscriptResult, error) {
 	if s.llm.Locking() {
 		s.llm.Lock()
