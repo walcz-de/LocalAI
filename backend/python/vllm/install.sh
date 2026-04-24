@@ -108,9 +108,12 @@ elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
         # already-pinned torch 2.9.1+rocm7.12.0 and produces _rocm_C locally.
         if [ "${VLLM_FROM_SOURCE:-}" = "true" ]; then
             echo "=== vllm from source for gfx1151 ==="
-            # Build-only deps (must be present in builder image)
+            # Build-only deps. --no-build-isolation below means uv can't resolve
+            # build-deps in an isolated env, so pre-install everything the
+            # vllm + fastsafetensors + xformers source trees need at build time.
             uv pip install --python "${EDIR}/venv/bin/python" \
-                ninja cmake packaging setuptools wheel build
+                ninja cmake packaging setuptools wheel build \
+                pybind11 numpy
             # Clone target version — pin explicit so the build is reproducible
             VLLM_SRC_DIR="${EDIR}/vllm-src"
             VLLM_VERSION="${VLLM_VERSION:-v0.12.0}"
