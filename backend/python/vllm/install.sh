@@ -220,10 +220,36 @@ else:
         # symlinks become /vllm/venv/.../libtorch_hip.so and are dangling once
         # the backend is extracted to /backends/rocm7-vllm/. Relative links stay
         # valid because the target sits in the same directory.
+        #
+        # NO `|| true` here: if we can't create the CUDA-named symlinks the
+        # backend is broken (vllm subprocesses dlopen libtorch_cuda.so at engine
+        # init — observed in EngineCore_DP0 spawn). Fail loud at build time
+        # instead of shipping a dead image.
         TORCH_LIB="${EDIR}/venv/lib/python3.12/site-packages/torch/lib"
+        if [ ! -f "${TORCH_LIB}/libtorch_hip.so" ] || [ ! -f "${TORCH_LIB}/libc10_hip.so" ]; then
+            echo "FATAL: Step 6 force-reinstall didn't produce HIP torch libs at ${TORCH_LIB}" >&2
+            ls -la "${TORCH_LIB}" >&2
+            exit 1
+        fi
         ( cd "${TORCH_LIB}" \
           && ln -sf libtorch_hip.so libtorch_cuda.so \
-          && ln -sf libc10_hip.so   libc10_cuda.so ) 2>/dev/null || true
+          && ln -sf libc10_hip.so   libc10_cuda.so )
+        echo "Created CUDA-named symlinks: libtorch_cuda.so, libc10_cuda.so -> libtorch_hip.so, libc10_hip.so"
+
+        # torchvision ABI-Mismatch: AMD's repo ships torchvision==0.24.0+rocm7.12.0
+        # compiled against torch 2.10.0, but we force-installed torch 2.9.1 above.
+        # torchvision._meta_registrations.py crashes at import with
+        # "RuntimeError: operator torchvision::nms does not exist" because the
+        # registered dispatcher kernels don't match torch 2.9.1's ABI. vllm-text
+        # models don't need torchvision at all — transformers imports it
+        # unconditionally via image_processing_auto, so simply removing it
+        # avoids the crash while letting text inference work. Remove the package
+        # metadata AND the shipped .libs so there's no trace left.
+        PKGS="${EDIR}/venv/lib/python3.12/site-packages"
+        if [ -d "${PKGS}/torchvision" ]; then
+            rm -rf "${PKGS}/torchvision" "${PKGS}/torchvision-"*".dist-info" "${PKGS}/torchvision.libs"
+            echo "Removed torchvision (ABI-mismatch with force-installed torch 2.9.1)"
+        fi
 else
     installRequirements
 fi
