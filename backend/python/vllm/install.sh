@@ -113,7 +113,10 @@ elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
             # vllm + fastsafetensors + xformers source trees need at build time.
             uv pip install --python "${EDIR}/venv/bin/python" \
                 ninja cmake packaging setuptools wheel build \
-                pybind11 numpy
+                pybind11 numpy \
+                "setuptools-scm>=8" vcs_versioning \
+                cython "typing_extensions>=4.8" \
+                "jinja2>=3.1.2" regex
             # Clone target version — pin explicit so the build is reproducible
             VLLM_SRC_DIR="${EDIR}/vllm-src"
             VLLM_VERSION="${VLLM_VERSION:-v0.12.0}"
