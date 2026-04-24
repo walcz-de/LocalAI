@@ -2593,4 +2593,32 @@ def hello():
 			Expect(result).To(Equal("Just a normal response with no tools"))
 		})
 	})
+
+	Context("when C++ autoparser delivers tool-call JSON as inline content", func() {
+		// Regression: some chat templates route the model's tool-call emission through
+		// Reply.chat_deltas as content (not tool_calls). If the Go-side handler treats
+		// that content as a natural-language answer, the raw {"function":...} JSON
+		// leaks into the assistant message and, on /v1/mcp/chat/completions, the
+		// server-side MCP loop never sees structured tool calls and either returns the
+		// leaked JSON verbatim or exhausts the iteration limit.
+		// See chat.go:977-1005 (deltaContent branch).
+		It("parses {\"function\":...,\"arguments\":{...}} shape out of inline content", func() {
+			input := `{"function":"tavily_search","arguments":{"query":"Eiffelturm Höhe"}}`
+			cfg := FunctionsConfig{FunctionNameKey: "function"}
+			results := ParseFunctionCall(input, cfg)
+			Expect(results).To(HaveLen(1))
+			Expect(results[0].Name).To(Equal("tavily_search"))
+			var args map[string]string
+			err := json.Unmarshal([]byte(results[0].Arguments), &args)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(args["query"]).To(Equal("Eiffelturm Höhe"))
+		})
+
+		It("parses classic {\"name\":...,\"arguments\":{...}} shape out of inline content", func() {
+			input := `{"name":"searxng_search","arguments":{"query":"Schlüsseldienst 99999"}}`
+			results := ParseFunctionCall(input, FunctionsConfig{})
+			Expect(results).To(HaveLen(1))
+			Expect(results[0].Name).To(Equal("searxng_search"))
+		})
+	})
 })

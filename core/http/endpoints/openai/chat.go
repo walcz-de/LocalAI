@@ -980,12 +980,22 @@ func ChatEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, evaluator
 						textContentToReturn = functions.ContentFromChatDeltas(chatDeltas)
 						cbReasoning = functions.ReasoningFromChatDeltas(chatDeltas)
 					} else if deltaContent := functions.ContentFromChatDeltas(chatDeltas); len(chatDeltas) > 0 && deltaContent != "" {
-						// ChatDeltas have content but no tool calls — model answered without using tools.
-						// This happens with thinking models (e.g. Gemma 4) where the Go-side reasoning
-						// extraction misclassifies clean content as reasoning, leaving cbRawResult empty.
-						xlog.Debug("[ChatDeltas] non-SSE: using C++ autoparser content (no tool calls)", "content_len", len(deltaContent))
-						textContentToReturn = deltaContent
+						// ChatDeltas have content but no structured tool_calls. Two sub-cases:
+						//   (a) Model answered in natural language (e.g. Gemma 4 reasoning-tagged output).
+						//   (b) Model emitted tool-call JSON inline as content because its template/grammar
+						//       doesn't match the C++ autoparser's expected shape (observed with
+						//       Mistral-Small-3.2, Qwen3-30B-A3B-Instruct-2507). Without the parse-attempt
+						//       below, deltaContent leaks raw {"function":...,"arguments":...} into the
+						//       assistant message and, in MCP loops, prevents tool execution entirely.
 						cbReasoning = functions.ReasoningFromChatDeltas(chatDeltas)
+						if parsed := functions.ParseFunctionCall(deltaContent, config.FunctionsConfig); len(parsed) > 0 {
+							xlog.Debug("[ChatDeltas] non-SSE: deltaContent contained tool-call markup, parsed", "count", len(parsed))
+							funcResults = parsed
+							textContentToReturn = functions.StripToolCallMarkup(deltaContent)
+						} else {
+							xlog.Debug("[ChatDeltas] non-SSE: using C++ autoparser content (no tool calls)", "content_len", len(deltaContent))
+							textContentToReturn = deltaContent
+						}
 					} else {
 						// Fallback: parse tool calls from raw text
 						xlog.Debug("[ChatDeltas] non-SSE: no chat deltas, falling back to Go-side text parsing")
