@@ -187,9 +187,11 @@ else:
     print('flash_attn_interface.py: already patched or pattern not found, skipping')
 " 2>&1 || true
         fi
-        # Step 4: grpcio + protobuf for LocalAI gRPC backend protocol
+        # Step 4: grpcio + protobuf for LocalAI gRPC backend protocol.
+        # Pin >=1.80.0 because LocalAI's generated backend_pb2_grpc.py asserts
+        # that floor at import time; older vllm pins (<=1.78.0) fail loud.
         uv pip install --python "${EDIR}/venv/bin/python" \
-            "grpcio>=1.60.0" protobuf 2>/dev/null || true
+            "grpcio>=1.80.0" protobuf 2>/dev/null || true
         # Step 5: Patch vllm platform detection for ROCm container environments
         # (a) __init__.py: fall back to torch.version.hip when amdsmi is unavailable
         #     (amdsmi is NOT installed in the LocalAI backend container)
@@ -282,20 +284,16 @@ else:
           && ln -sf libc10_hip.so   libc10_cuda.so )
         echo "Created CUDA-named symlinks: libtorch_cuda.so, libc10_cuda.so -> libtorch_hip.so, libc10_hip.so"
 
-        # torchvision ABI-Mismatch: AMD's repo ships torchvision==0.24.0+rocm7.12.0
-        # compiled against torch 2.10.0, but we force-installed torch 2.9.1 above.
-        # torchvision._meta_registrations.py crashes at import with
-        # "RuntimeError: operator torchvision::nms does not exist" because the
-        # registered dispatcher kernels don't match torch 2.9.1's ABI. vllm-text
-        # models don't need torchvision at all — transformers imports it
-        # unconditionally via image_processing_auto, so simply removing it
-        # avoids the crash while letting text inference work. Remove the package
-        # metadata AND the shipped .libs so there's no trace left.
-        PKGS="${EDIR}/venv/lib/python3.12/site-packages"
-        if [ -d "${PKGS}/torchvision" ]; then
-            rm -rf "${PKGS}/torchvision" "${PKGS}/torchvision-"*".dist-info" "${PKGS}/torchvision.libs"
-            echo "Removed torchvision (ABI-mismatch with force-installed torch 2.9.1)"
-        fi
+        # torchvision: required by transformers' qwen2_vl image_processor, which
+        # is imported transitively whenever we load the qwen3_vl / qwen3_5 model
+        # families (Qwen3.5/3.6 MoE). Install the ROCm 7.2 build that matches
+        # our torch 2.11.0+rocm7.2 ABI exactly.
+        pip3 install \
+            --target="${EDIR}/venv/lib/python3.12/site-packages/" \
+            --upgrade --force-reinstall --no-deps \
+            --index-url "${TORCH_ROCM72}" \
+            --extra-index-url "https://pypi.org/simple/" \
+            "torchvision==0.26.0+rocm7.2"
 else
     installRequirements
 fi
