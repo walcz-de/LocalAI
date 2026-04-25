@@ -2,8 +2,9 @@ ARG BASE_IMAGE=ubuntu:24.04
 ARG GRPC_BASE_IMAGE=${BASE_IMAGE}
 ARG INTEL_BASE_IMAGE=${BASE_IMAGE}
 ARG UBUNTU_CODENAME=noble
-# Global ARGs for pre-built backend images baked in at build time (must be global for FROM usage)
-ARG TRANSFORMERS_BACKEND_IMAGE=
+# Backend bake-in 2026-04-25: nur llama-cpp wird ins Hauptimage gebakt
+# (über Dockerfile.llama-cpp Builder-Stage). transformers/vllm/etc. kommen
+# bei Bedarf via OCI Gallery — kein Bake-in mehr.
 
 ###################################
 # gRPC stage — builds gRPC C++ library for use by llama-cpp backend builder
@@ -512,12 +513,9 @@ RUN go install github.com/mikefarah/yq/v4@latest
 ###################################
 ###################################
 
-# Import transformers backend from pre-built registry image — baked into the main image
-# so no gallery download is needed at runtime.
-# TRANSFORMERS_BACKEND_IMAGE is declared globally at the top of this file.
-# Override with: docker build --build-arg TRANSFORMERS_BACKEND_IMAGE=<tag> ...
-# (vllm dropped 2026-04-25 — gfx1151 has no FP8 MoE backend in vllm; we standardise on llama.cpp.)
-FROM ${TRANSFORMERS_BACKEND_IMAGE} AS transformers-backend
+# transformers backend bake-in entfernt 2026-04-25 — kein Modell nutzt es,
+# alle Embeddings/Reranker laufen über llama.cpp + GGUF. Bei Bedarf bleibt
+# das Backend über die OCI Gallery installierbar.
 
 ###################################
 ###################################
@@ -590,13 +588,6 @@ RUN --mount=from=llama-cpp-hipblas-builder,src=/build/backend/cpp/llama-cpp/pack
         printf '{"alias":"llama-cpp","name":"rocm-gfx1151-llama-cpp"}' > /var/lib/local-ai/backends/rocm-gfx1151-llama-cpp/metadata.json && \
         echo "llama-cpp backend baked in at /var/lib/local-ai/backends/rocm-gfx1151-llama-cpp/" ; \
     fi
-
-# Bake in transformers backend from pre-built registry image into BackendsSystemPath.
-RUN --mount=from=transformers-backend,src=/,dst=/mnt/transformers \
-    mkdir -p /var/lib/local-ai/backends/rocm7-transformers && \
-    cp -a /mnt/transformers/. /var/lib/local-ai/backends/rocm7-transformers/ && \
-    printf '{"alias":"transformers","name":"rocm7-transformers"}' > /var/lib/local-ai/backends/rocm7-transformers/metadata.json && \
-    echo "transformers backend baked in at /var/lib/local-ai/backends/rocm7-transformers/"
 
 # Define the health check command
 HEALTHCHECK --interval=1m --timeout=10m --retries=10 \
