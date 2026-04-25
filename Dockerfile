@@ -3,7 +3,6 @@ ARG GRPC_BASE_IMAGE=${BASE_IMAGE}
 ARG INTEL_BASE_IMAGE=${BASE_IMAGE}
 ARG UBUNTU_CODENAME=noble
 # Global ARGs for pre-built backend images baked in at build time (must be global for FROM usage)
-ARG VLLM_BACKEND_IMAGE=
 ARG TRANSFORMERS_BACKEND_IMAGE=
 
 ###################################
@@ -513,12 +512,11 @@ RUN go install github.com/mikefarah/yq/v4@latest
 ###################################
 ###################################
 
-# Import vllm + transformers backends from pre-built registry images — baked into the main image
+# Import transformers backend from pre-built registry image — baked into the main image
 # so no gallery download is needed at runtime.
-# VLLM_BACKEND_IMAGE and TRANSFORMERS_BACKEND_IMAGE are declared globally at the top of this file.
-# Override with: docker build --build-arg VLLM_BACKEND_IMAGE=<tag> ...
-FROM ${VLLM_BACKEND_IMAGE} AS vllm-backend
-
+# TRANSFORMERS_BACKEND_IMAGE is declared globally at the top of this file.
+# Override with: docker build --build-arg TRANSFORMERS_BACKEND_IMAGE=<tag> ...
+# (vllm dropped 2026-04-25 — gfx1151 has no FP8 MoE backend in vllm; we standardise on llama.cpp.)
 FROM ${TRANSFORMERS_BACKEND_IMAGE} AS transformers-backend
 
 ###################################
@@ -592,14 +590,6 @@ RUN --mount=from=llama-cpp-hipblas-builder,src=/build/backend/cpp/llama-cpp/pack
         printf '{"alias":"llama-cpp","name":"rocm-gfx1151-llama-cpp"}' > /var/lib/local-ai/backends/rocm-gfx1151-llama-cpp/metadata.json && \
         echo "llama-cpp backend baked in at /var/lib/local-ai/backends/rocm-gfx1151-llama-cpp/" ; \
     fi
-
-# Bake in vllm backend from pre-built registry image into BackendsSystemPath.
-# Baked into /var/lib/local-ai/backends (not /backends VOLUME) so it is always present.
-RUN --mount=from=vllm-backend,src=/,dst=/mnt/vllm \
-    mkdir -p /var/lib/local-ai/backends/rocm7-vllm && \
-    cp -a /mnt/vllm/. /var/lib/local-ai/backends/rocm7-vllm/ && \
-    printf '{"alias":"vllm","name":"rocm7-vllm"}' > /var/lib/local-ai/backends/rocm7-vllm/metadata.json && \
-    echo "vllm backend baked in at /var/lib/local-ai/backends/rocm7-vllm/"
 
 # Bake in transformers backend from pre-built registry image into BackendsSystemPath.
 RUN --mount=from=transformers-backend,src=/,dst=/mnt/transformers \
