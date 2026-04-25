@@ -72,34 +72,35 @@ if [ "x${BUILD_TYPE}" == "x" ] && [ "x${FROM_SOURCE:-}" == "xtrue" ]; then
         VLLM_TARGET_DEVICE=cpu uv pip install ${EXTRA_PIP_INSTALL_FLAGS:-} --no-deps .
     popd
 elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
-        # ROCm / HIP build for gfx1151 (Strix Halo):
+        # ROCm / HIP build for gfx1151 (Strix Halo) — 100% ROCm 7.2 stack.
         #
-        # AMD provides ROCm-native vllm wheels at rocm.frameworks.amd.com/whl/gfx1151/.
-        # The AMD vllm is a DEV/pre-release (0.16.1.dev10+rocm712) that links against
-        # libtorch_hip.so — NO libcudart.so.12 needed. Never use PyPI vllm on ROCm:
-        # the PyPI vllm wheel links against libcudart.so.12 (NVIDIA CUDA) which doesn't
-        # exist on AMD systems.
+        # As of 2026-04-25 we abandoned the AMD gfx1151 pre-release wheels
+        # (rocm7.11/7.12) because:
+        #  - AMD vllm wheel ships no _rocm_C native kernels → silu_and_mul missing
+        #  - rocm-sdk-libraries-gfx1151 only published for 7.10/7.11/7.12 preview
+        #  - 7.12-preview base lacks libhipsolver_fortran etc → vllm cmake fails
         #
-        # AMD vllm does NOT declare torch as a Requires-Dist, so we install torch
-        # explicitly from AMD's GFX1151 index (torch-2.10.0+rocm7.12.0).
-        # flash-attn==2.8.3 is required by AMD vllm and has an AMD-specific pure-py wheel.
+        # Switching to the official ROCm 7.2.2 stack:
+        #  - torch 2.11.0+rocm7.2 from pytorch.org (compiled for all GFX arches incl. gfx1151)
+        #  - vllm v0.20.0 from source (latest, knows qwen3_5_moe / Qwen3.6 architecture)
+        #  - flash-attn 2.8.3 from AMD frameworks gfx1151 index (pure-py, arch-agnostic)
+        #  - rocm/dev-ubuntu-24.04:7.2.2-complete base provides libs at /opt/rocm
+        #
+        # Build is gated on VLLM_FROM_SOURCE=true (default for gfx1151 in Dockerfile.python)
+        # since no official vllm wheel exists for ROCm 7.2 on PyPI.
         ensureVenv
         runProtogen
-        AMD_GFX1151="https://repo.amd.com/rocm/whl/gfx1151/"
+        TORCH_ROCM72="https://download.pytorch.org/whl/rocm7.2"
         AMD_FRAMEWORKS="https://rocm.frameworks.amd.com/whl/gfx1151/"
-        # Step 1: AMD ROCm torch (HIP variant, links libtorch_hip.so / libc10_hip.so)
-        # NOTE: AMD vllm 0.16.1 was built against torch 2.9.1, NOT 2.10.0.
-        # torch 2.10.0 changed c10_hip_check_implementation signature (int→unsigned int),
-        # causing ABI mismatch: vllm._C.abi3.so expects _ZN3c103hip28c10_hip_check_implementationEiPKcS2_ib
-        # but torch 2.10.0 exports _ZN3c103hip28c10_hip_check_implementationEiPKcS2_jb.
-        # Use torch 2.9.1+rocm7.12.0 + matching torchvision 0.24.0.
+        # Step 1: torch 2.11.0+rocm7.2 from pytorch.org official.
+        # This is the upstream PyTorch ROCm 7.2 build, compiled for all GFX arches
+        # (gfx906/908/90a/942/950/1030/1100/1101/1200/1201/1150/gfx1151).
         pip3 install \
             --target="${EDIR}/venv/lib/python3.12/site-packages/" \
             --upgrade \
-            --index-url "${AMD_GFX1151}" \
+            --index-url "${TORCH_ROCM72}" \
             --extra-index-url "https://pypi.org/simple/" \
-            "torch==2.9.1+rocm7.12.0" \
-            "torchvision==0.24.0+rocm7.12.0"
+            "torch==2.11.0+rocm7.2"
         # Step 2: vllm — either AMD pre-release wheel OR source build.
         # The AMD pre-release wheel (0.16.1.devXX+rocm712) at AMD_FRAMEWORKS
         # ships neither vllm._C (CUDA) nor vllm._rocm_C (ROCm) native kernels.
@@ -119,7 +120,7 @@ elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
                 "jinja2>=3.1.2" regex
             # Clone target version — pin explicit so the build is reproducible
             VLLM_SRC_DIR="${EDIR}/vllm-src"
-            VLLM_VERSION="${VLLM_VERSION:-v0.12.0}"
+            VLLM_VERSION="${VLLM_VERSION:-v0.20.0}"
             rm -rf "${VLLM_SRC_DIR}"
             git clone --depth 1 --branch "${VLLM_VERSION}" \
                 https://github.com/vllm-project/vllm "${VLLM_SRC_DIR}"
@@ -135,8 +136,11 @@ elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
                 export NVCC_THREADS="${NVCC_THREADS:-2}"
                 # Install without build-isolation so the build sees our torch.
                 # Use uv pip (portable Python backend has no pip in venv/bin).
+                # use_existing_torch.py strips torch pin from rocm.txt — but rocm.txt
+                # might still try to overwrite torch via transitive deps. Use --no-deps
+                # on both calls to keep our 2.11.0+rocm7.2 from pytorch.org untouched.
                 uv pip install --python "${EDIR}/venv/bin/python" \
-                    --no-build-isolation --no-deps -r requirements/rocm.txt
+                    --no-build-isolation --no-deps -r requirements/rocm.txt || true
                 uv pip install --python "${EDIR}/venv/bin/python" \
                     --no-build-isolation -v .
             popd
@@ -245,20 +249,19 @@ else:
         # Create libtorch_cuda.so / libc10_cuda.so symlinks pointing to HIP equivalents.
         # Some code paths (e.g. subprocess LD_LIBRARY_PATH resolution in EngineCore_DP0)
         # look for CUDA-named libs; AMD torch only ships libtorch_hip.so / libc10_hip.so.
-        # Step 6: Force-reinstall AMD ROCm torch as the LAST install step.
-        # Earlier Step 2 (vllm) pulls torch 2.10.0+cu128 from PyPI as a
-        # transitive dependency, overwriting Step 1's 2.9.1+rocm7.12.0. We
+        # Step 6: Force-reinstall ROCm 7.2 torch as the LAST install step.
+        # Earlier Step 2 (vllm source build dependencies) may pull torch from
+        # PyPI as a transitive dep, overwriting Step 1's 2.11.0+rocm7.2. We
         # wait until after flash-attn (Step 3) and all patches (Steps 4-5) are
-        # done so those steps resolve against the already-present CUDA torch
-        # metadata. Only now do we swap in the HIP variant with --force-reinstall
-        # --no-deps. Without this swap the image ships pure NVIDIA CUDA torch
-        # and ROCm runtime is dead.
+        # done so those steps resolve against the already-present torch
+        # metadata. Only now do we swap back to the ROCm 7.2 variant with
+        # --force-reinstall --no-deps.
         pip3 install \
             --target="${EDIR}/venv/lib/python3.12/site-packages/" \
             --upgrade --force-reinstall --no-deps \
-            --index-url "${AMD_GFX1151}" \
+            --index-url "${TORCH_ROCM72}" \
             --extra-index-url "https://pypi.org/simple/" \
-            "torch==2.9.1+rocm7.12.0"
+            "torch==2.11.0+rocm7.2"
         # Relative symlinks, NOT absolute: at build time EDIR=/vllm, so absolute
         # symlinks become /vllm/venv/.../libtorch_hip.so and are dangling once
         # the backend is extracted to /backends/rocm7-vllm/. Relative links stay
