@@ -411,7 +411,7 @@ require (
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pierrec/lz4/v4 v4.1.8 // indirect
 	github.com/pkg/errors v0.9.1
-	github.com/pkoukk/tiktoken-go v0.1.7 // indirect
+	github.com/pkoukk/tiktoken-go v0.1.7
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/polydawn/refmt v0.89.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
