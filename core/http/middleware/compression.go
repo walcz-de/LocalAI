@@ -49,8 +49,22 @@ const compressorPrompt = "Summarize the following conversation for an AI agent "
 // Production wiring uses a backend-backed Summarizer that invokes the
 // compressor model via core/backend. Tests use
 // CompressionMiddlewareWithSummarizer with a stub.
+//
+// Honours the global LOCALAI_DISABLE_COMPRESSION kill-switch: when the
+// ApplicationConfig has DisableCompression=true the middleware is a
+// no-op for all models, regardless of per-model enabled settings.
 func CompressionMiddleware(app *application.Application) echo.MiddlewareFunc {
+	if app.ApplicationConfig().DisableCompression {
+		return passthroughMiddleware
+	}
 	return CompressionMiddlewareWithSummarizer(newBackendSummarizer(app))
+}
+
+// passthroughMiddleware is the no-op handler returned when compression is
+// globally disabled. Cheaper than the regular middleware (no per-request
+// type assertions or config reads) so the kill-switch has zero overhead.
+var passthroughMiddleware echo.MiddlewareFunc = func(next echo.HandlerFunc) echo.HandlerFunc {
+	return next
 }
 
 // CompressionMiddlewareWithSummarizer is the testable factory: it wires

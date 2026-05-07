@@ -49,6 +49,7 @@ type ApplicationConfig struct {
 	HttpGetExemptedEndpoints           []*regexp.Regexp
 	DisableGalleryEndpoint             bool
 	DisableMCP                         bool
+	DisableCompression                 bool
 	LoadToMemory                       []string
 
 	Galleries        []Gallery
@@ -295,6 +296,15 @@ var DisableGalleryEndpoint = func(o *ApplicationConfig) {
 
 var DisableMCP = func(o *ApplicationConfig) {
 	o.DisableMCP = true
+}
+
+// DisableCompression is a global kill-switch for the context-compression
+// middleware. When set, the middleware is a no-op regardless of any
+// per-model `compression.enabled: true` setting. Wired from the
+// LOCALAI_DISABLE_COMPRESSION env var so operators can disable the
+// feature at the process level without editing every model YAML.
+var DisableCompression = func(o *ApplicationConfig) {
+	o.DisableCompression = true
 }
 
 var EnableWatchDogBusyCheck = func(o *ApplicationConfig) {
