@@ -95,8 +95,44 @@ type ModelConfig struct {
 	Options   []string `yaml:"options,omitempty" json:"options,omitempty"`
 	Overrides []string `yaml:"overrides,omitempty" json:"overrides,omitempty"`
 
-	MCP   MCPConfig   `yaml:"mcp,omitempty" json:"mcp,omitempty"`
-	Agent AgentConfig `yaml:"agent,omitempty" json:"agent,omitempty"`
+	MCP         MCPConfig         `yaml:"mcp,omitempty" json:"mcp,omitempty"`
+	Agent       AgentConfig       `yaml:"agent,omitempty" json:"agent,omitempty"`
+	Compression CompressionConfig `yaml:"compression,omitempty" json:"compression,omitempty"`
+}
+
+// @Description Compression configuration controls optional server-side
+// context-compression for chat completions. When enabled, requests that
+// approach the model's context size are partitioned into a "compress" head
+// and a "keep" tail; the head is summarised by a small compressor model and
+// replaced with a single system message before the request is forwarded.
+//
+// Defaults are off — absence of this block means no behavior change.
+type CompressionConfig struct {
+	// Enabled gates the entire feature. When false (default) the middleware
+	// is a passthrough and no compression is attempted.
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+
+	// TriggerAtRatio is the fraction of context_size at which compression
+	// fires (e.g. 0.75 = compress when request reaches 75% of context).
+	// Values outside (0, 1] disable the trigger. Default 0.75 when Enabled.
+	TriggerAtRatio float64 `yaml:"trigger_at_ratio,omitempty" json:"trigger_at_ratio,omitempty"`
+
+	// KeepTailTokens is the number of trailing tokens of the conversation
+	// that are never compressed. Token-based (not role-based) so tool-call
+	// chains with many short messages are handled correctly. Default 8000.
+	KeepTailTokens int `yaml:"keep_tail_tokens,omitempty" json:"keep_tail_tokens,omitempty"`
+
+	// MaxSummaryTokens caps the size of the generated summary. Default 2048.
+	MaxSummaryTokens int `yaml:"max_summary_tokens,omitempty" json:"max_summary_tokens,omitempty"`
+
+	// CompressorModel is the model used to produce the summary. When empty,
+	// the primary model compresses itself.
+	CompressorModel string `yaml:"compressor_model,omitempty" json:"compressor_model,omitempty"`
+
+	// OnPostCompressionOverflow controls behaviour when the compressed
+	// request still exceeds context_size. Allowed: "drop_oldest_summary"
+	// (default) or "error".
+	OnPostCompressionOverflow string `yaml:"on_post_compression_overflow,omitempty" json:"on_post_compression_overflow,omitempty"`
 }
 
 // @Description MCP configuration
