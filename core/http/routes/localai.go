@@ -383,6 +383,7 @@ func RegisterLocalAIRoutes(router *echo.Echo,
 					return next(c)
 				}
 			},
+			middleware.CompressionMiddleware(app),
 		}
 		router.POST("/v1/mcp/chat/completions", mcpStreamHandler, mcpStreamMiddleware...)
 		router.POST("/mcp/v1/chat/completions", mcpStreamHandler, mcpStreamMiddleware...)

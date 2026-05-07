@@ -46,6 +46,7 @@ func RegisterOpenAIRoutes(app *echo.Echo,
 				return next(c)
 			}
 		},
+		middleware.CompressionMiddleware(application),
 	}
 	app.POST("/v1/chat/completions", chatHandler, chatMiddleware...)
 	app.POST("/chat/completions", chatHandler, chatMiddleware...)
