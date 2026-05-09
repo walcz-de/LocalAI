@@ -407,7 +407,9 @@ func InstallBackendOnNodeEndpoint(unloader nodes.NodeCommandSender) echo.Handler
 		}
 		// Admin-driven backend install: not tied to a specific replica slot
 		// (no model is being loaded). Pass replica 0 to match the worker's
-		// admin process-key convention (`backend#0`).
+		// admin process-key convention (`backend#0`). The worker's fast path
+		// takes over if the backend is already running — upgrades go through
+		// the dedicated /api/backends/upgrade path on backend.upgrade.
 		reply, err := unloader.InstallBackend(nodeID, req.Backend, "", req.BackendGalleries, req.URI, req.Name, req.Alias, 0)
 		if err != nil {
 			xlog.Error("Failed to install backend on node", "node", nodeID, "backend", req.Backend, "uri", req.URI, "error", err)

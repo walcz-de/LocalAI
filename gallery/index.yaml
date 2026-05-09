@@ -1,4 +1,65 @@
 ---
+- name: "qwen3.6-40b-claude-4.6-opus-deckard-heretic-uncensored-thinking-neo-code-di-imatrix-max"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/DavidAU/Qwen3.6-40B-Claude-4.6-Opus-Deckard-Heretic-Uncensored-Thinking-NEO-CODE-Di-IMatrix-MAX-GGUF
+  description: |
+    The Qwen 3.5 version (also 40B) got 181 likes+ This version uses the new Qwen 3.6 27B arch (which exceeds even Qwen's own 398B model).
+
+    WARNING: This model has character and intelligence. It will take no prisoners. It will give no quarter. Uncensored,
+    Unfiltered and boldly confident. Not even remotely "SFW", if you ask it for NSFW content. And it is wickedly smart too - exceeding the base model in 6 out of 7 benchmarks.
+
+    Qwen3.6-40B-Claude-4.6-Opus-Deckard-Heretic-Uncensored-Thinking
+
+    40 billion parameters (dense, not moe) expanded from 27B Qwen 3.6, then trained on Claude 4.6 Opus High Reasoning dataset via Unsloth on local hardware... but there
+    is much more to the story - in comes DECKARD.
+
+    96 layers, 1275 Tensors. (50% more than base model of 27B)
+
+    Features variable length reasoning ; less complex = shorter, longer for more complex.
+
+    Model performance has increased dramatically. And it has character too.
+
+    A lot of character.
+
+    No censorship, no nanny. (via Heretic)
+
+    And it is very, very smart.
+
+    ...
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+  icon: https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3.6/Figures/qwen3.6_27b_score.png
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    mmproj: llama-cpp/mmproj/Qwen3.6-40B-Claude-4.6-Opus-Deckard-Heretic-Uncensored-Thinking-NEO-CODE-Di-IMatrix-MAX-GGUF/mmproj-F32.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      min_p: 0
+      model: llama-cpp/models/Qwen3.6-40B-Claude-4.6-Opus-Deckard-Heretic-Uncensored-Thinking-NEO-CODE-Di-IMatrix-MAX-GGUF/Qwen3.6-40B-Deck-Opus-NEO-CODE-HERE-2T-OT-Q4_K_M.gguf
+      presence_penalty: 1.5
+      repeat_penalty: 1
+      temperature: 0.7
+      top_k: 20
+      top_p: 0.8
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Qwen3.6-40B-Claude-4.6-Opus-Deckard-Heretic-Uncensored-Thinking-NEO-CODE-Di-IMatrix-MAX-GGUF/Qwen3.6-40B-Deck-Opus-NEO-CODE-HERE-2T-OT-Q4_K_M.gguf
+      sha256: 6533e19802f02af3524ae499a5f10b07667913c8ffa6bf4f055e83ea525a9fba
+      uri: https://huggingface.co/DavidAU/Qwen3.6-40B-Claude-4.6-Opus-Deckard-Heretic-Uncensored-Thinking-NEO-CODE-Di-IMatrix-MAX-GGUF/resolve/main/Qwen3.6-40B-Deck-Opus-NEO-CODE-HERE-2T-OT-Q4_K_M.gguf
+    - filename: llama-cpp/mmproj/Qwen3.6-40B-Claude-4.6-Opus-Deckard-Heretic-Uncensored-Thinking-NEO-CODE-Di-IMatrix-MAX-GGUF/mmproj-F32.gguf
+      sha256: fdc443e974cad1f61c45af1cfd5580855855ddce0d6c14cc500a5714c486ac1d
+      uri: https://huggingface.co/DavidAU/Qwen3.6-40B-Claude-4.6-Opus-Deckard-Heretic-Uncensored-Thinking-NEO-CODE-Di-IMatrix-MAX-GGUF/resolve/main/mmproj-F32.gguf
 - name: "qwopus3.6-35b-a3b-v1"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -24108,6 +24169,73 @@
   overrides:
     parameters:
       model: NousResearch/Hermes-3-Llama-3.1-405B
+- &gemma4-sglang-mtp
+  name: "gemma-4-e2b-it:sglang-mtp"
+  url: "github:mudler/LocalAI/gallery/sglang-gemma-4-e2b-mtp.yaml@master"
+  icon: https://ai.google.dev/static/gemma/images/gemma3.png
+  license: gemma
+  urls:
+    - https://huggingface.co/google/gemma-4-E2B-it
+    - https://huggingface.co/google/gemma-4-E2B-it-assistant
+    - https://docs.sglang.io/cookbook/autoregressive/Google/Gemma4
+  description: |
+    Google Gemma 4 E2B-IT served by SGLang with Multi-Token Prediction
+    (MTP) speculative decoding. The companion drafter
+    google/gemma-4-E2B-it-assistant lets the target accept several
+    tokens per step. Flags are a 1:1 transcription of the SGLang
+    cookbook's MTP command (NEXTN algorithm, num_steps=5,
+    num_draft_tokens=6, eagle_topk=1, mem_fraction_static=0.85). The
+    E2B variant has 5B total / 2B effective parameters and targets the
+    smaller end of consumer GPUs.
+  tags:
+    - llm
+    - sglang
+    - gpu
+    - speculative-decoding
+    - mtp
+    - gemma
+    - gemma4
+    - gemma-4
+- !!merge <<: *gemma4-sglang-mtp
+  name: "gemma-4-e4b-it:sglang-mtp"
+  url: "github:mudler/LocalAI/gallery/sglang-gemma-4-e4b-mtp.yaml@master"
+  urls:
+    - https://huggingface.co/google/gemma-4-E4B-it
+    - https://huggingface.co/google/gemma-4-E4B-it-assistant
+    - https://docs.sglang.io/cookbook/autoregressive/Google/Gemma4
+  description: |
+    Google Gemma 4 E4B-IT served by SGLang with Multi-Token Prediction
+    (MTP) speculative decoding. The companion drafter
+    google/gemma-4-E4B-it-assistant lets the target accept several
+    tokens per step. Flags are a 1:1 transcription of the SGLang
+    cookbook's MTP command (NEXTN algorithm, num_steps=5,
+    num_draft_tokens=6, eagle_topk=1, mem_fraction_static=0.85). The
+    E4B variant has 8B total / 4B effective parameters — the natural
+    pick for consumer GPUs in the 16–24 GB range.
+- name: "mimo-7b-mtp:sglang"
+  url: "github:mudler/LocalAI/gallery/sglang-mimo-7b-mtp.yaml@master"
+  icon: https://github.com/XiaomiMiMo/MiMo/raw/main/figures/Xiaomi_MiMo.png
+  license: mit
+  urls:
+    - https://huggingface.co/XiaomiMiMo/MiMo-7B-RL
+    - https://github.com/XiaomiMiMo/MiMo
+  description: |
+    Xiaomi MiMo-7B-RL served by SGLang with built-in Multi-Token
+    Prediction (MTP) heads (no separate drafter needed) plus online fp8
+    weight quantization to fit on a 16 GB consumer GPU. ~90% acceptance
+    per the model card. Verified end-to-end at ~88 tok/s on an RTX 5070
+    Ti (16 GB). Note: mem_fraction_static is dropped to 0.7 (vs sglang's
+    0.85 default) because the MTP draft worker's vocab embedding is
+    loaded unquantised (~1.2 GiB) and OOMs the static reservation
+    otherwise.
+  tags:
+    - llm
+    - sglang
+    - gpu
+    - speculative-decoding
+    - mtp
+    - reasoning
+    - fp8
 - name: codellama-7b
   url: github:mudler/LocalAI/gallery/codellama.yaml@master
   urls:
@@ -25213,6 +25341,7 @@
       - sampler:euler
       - llm_path:stablediffusion-cpp/models/Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf
       - offload_params_to_cpu:true
+      - vae_decode_only:false
     parameters:
       model: stablediffusion-cpp/models/flux2-dev-Q4_K_M.gguf
     step: 50
@@ -25256,6 +25385,7 @@
       - sampler:euler
       - llm_path:stablediffusion-cpp/models/Qwen3-4B-Q4_K_M.gguf
       - offload_params_to_cpu:true
+      - vae_decode_only:false
     parameters:
       model: stablediffusion-cpp/models/flux-2-klein-4b-Q4_0.gguf
     step: 4
@@ -25299,6 +25429,7 @@
       - sampler:euler
       - llm_path:stablediffusion-cpp/models/Qwen3-8B-Q4_K_M.gguf
       - offload_params_to_cpu:true
+      - vae_decode_only:false
     parameters:
       model: stablediffusion-cpp/models/flux-2-klein-9b-Q4_0.gguf
     step: 4
