@@ -1,4 +1,71 @@
 ---
+- name: "qwopus3.5-9b-coder-mtp"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/Jackrong/Qwopus3.5-9B-Coder-MTP-GGUF
+  description: "# \U0001F31F Qwopus3.5-9B-v3.5\n\n## \U0001F4A1 Model Overview & v3.5 Design\n\nQwopus3.5-9B-v3.5 is a **data-scaled continuation** of the Qwopus3.5-9B-v3 model.\n\nThe training data in v3.5 is expanded to cover a broader range of domains, including mathematics, programming, puzzle-solving, multilingual dialogue, instruction-following, multi-turn interactions, and STEM-related tasks.\n\nQwopus3.5-9B-v3.5 is a reasoning-enhanced model based on **Qwen3.5-9B**, designed for:\n\n  - \U0001F9E9 Structured reasoning\n  - \U0001F527 Tool-augmented workflows\n  - \U0001F501 Multi-step agentic tasks\n  - ⚡ Token-efficient inference\n\nCompared with Qwopus3.5-9B-v3, **3.5 version does not introduce a new architecture, RL stage, or template redesign**.\n\nThis version is trained with approximately **2× more SFT data**.\n\n## \U0001F3AF Motivation & Generalization Insight\n\nThe motivation behind v3.5 comes from a simple observation:\n\n> This work is motivated by the hypothesis that scaling high-quality SFT data may further enhance the generalization ability of large language models.\n\nIn earlier Qwopus3.5 experiments, structured reasoning was observed to improve both **accuracy and efficiency**:\n\n...\n"
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+    - reasoning
+  icon: https://cdn-uploads.huggingface.co/production/uploads/66309bd090589b7c65950665/9EnS13MSxNU3snpAgEiLq.jpeg
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    mmproj: llama-cpp/mmproj/Qwopus3.5-9B-Coder-MTP-GGUF/Qwopus3.5-9B-Coder-MTP-mmproj.gguf
+    options:
+      - use_jinja:true
+      - spec_type:draft-mtp
+      - spec_n_max:6
+      - spec_p_min:0.75
+    parameters:
+      model: llama-cpp/models/Qwopus3.5-9B-Coder-MTP-GGUF/Qwopus3.5-9B-Coder-MTP-Q4_K_M.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Qwopus3.5-9B-Coder-MTP-GGUF/Qwopus3.5-9B-Coder-MTP-Q4_K_M.gguf
+      sha256: f6fc5d193045796d9e1870cbc40f827fe55f53f70593c3f5c1968b82b9331991
+      uri: https://huggingface.co/Jackrong/Qwopus3.5-9B-Coder-MTP-GGUF/resolve/main/Qwopus3.5-9B-Coder-MTP-Q4_K_M.gguf
+    - filename: llama-cpp/mmproj/Qwopus3.5-9B-Coder-MTP-GGUF/Qwopus3.5-9B-Coder-MTP-mmproj.gguf
+      sha256: f48daca405a1c768a9514e392c3955dcc4a9d66a5cf64cf45e064092b5f20ee4
+      uri: https://huggingface.co/Jackrong/Qwopus3.5-9B-Coder-MTP-GGUF/resolve/main/Qwopus3.5-9B-Coder-MTP-mmproj.gguf
+- name: "qwopus3.6-27b-v2-mtp"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/Jackrong/Qwopus3.6-27B-v2-MTP-GGUF
+  description: "\U0001FA90 Qwopus3.6-27B-v2-MTP\nMTP Release\n\nMulti-Token Prediction reasoning model fine-tuned from Qwen3.6-27B\n\n\U0001F9EC Trace Inversion & Negentropy\n\U0001F9E0 27B Parameters\n⚡ Speculative Decoding\n\U0001F6E0️ Coding / DevOps / Math\n\n\U0001F4A1 What is Qwopus3.6-27B-v2-MTP?\n\U0001FA90 Qwopus3.6-27B-v2-MTP is a speed-oriented reasoning release built on top of Qwen3.6-27B. It keeps the Qwopus line's focus on reconstructed reasoning traces, coding discipline, DevOps procedures, and mathematical derivations, while adding Multi-Token Prediction for faster generation. The goal is simple: preserve the depth and structure of a 27B reasoning model while making real interactive use noticeably faster.\n\n⚡ MTP DecodingAuxiliary future-token prediction improves throughput on long reasoning, code, math, and strict-format prompts.\n\U0001F9E9 Structured ReasoningInherits the Qwopus training recipe built around reconstructed step-by-step reasoning trajectories.\n\U0001F9EA GB10 TestedValidated on a 30-question local benchmark across Logic, Coding, DevOps, Math, and Edge tasks.\n\U0001F680 Practical SpeedDesigned for workflows where strong answers matter, but waiting several extra minutes per task does not.\n\n...\n"
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+    - reasoning
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+      - spec_type:draft-mtp
+      - spec_n_max:6
+      - spec_p_min:0.75
+    parameters:
+      model: llama-cpp/models/Qwopus3.6-27B-v2-MTP-GGUF/Qwopus3.6-27B-v2-MTP-Q4_K_M.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Qwopus3.6-27B-v2-MTP-GGUF/Qwopus3.6-27B-v2-MTP-Q4_K_M.gguf
+      sha256: 818d68223be4d8518dac0b3b5604dde633cbbcbae1f491d842a3e26711c6606d
+      uri: https://huggingface.co/Jackrong/Qwopus3.6-27B-v2-MTP-GGUF/resolve/main/Qwopus3.6-27B-v2-MTP-Q4_K_M.gguf
 - name: "qwen3.6-40b-claude-4.6-opus-deckard-heretic-uncensored-thinking-neo-code-di-imatrix-max"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -6068,6 +6135,319 @@
       - detection
     parameters:
       model: rfdetr-base
+- name: rfdetr-cpp-nano
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://github.com/mudler/rf-detr.cpp
+    - https://huggingface.co/mudler/rfdetr-cpp-nano
+  description: |
+    RF-DETR Nano object detection model, served via the native rfdetr.cpp backend (ggml + purego, no Python).
+    Q8_0 quantization is the recommended default for CPU: same accuracy as F16/F32, ~20MB on disk, fastest CPU latency.
+    Pure C++/ggml runtime; no Python dependencies. Drop-in for the /v1/detection endpoint.
+  license: apache-2.0
+  icon: https://avatars.githubusercontent.com/u/53104118?s=200&v=4
+  tags:
+    - object-detection
+    - rfdetr
+    - native
+    - cpp
+    - cpu
+  overrides:
+    backend: rfdetr-cpp
+    known_usecases:
+      - detection
+    parameters:
+      model: rfdetr-nano-q8_0.gguf
+  files:
+    - filename: rfdetr-nano-q8_0.gguf
+      uri: huggingface://mudler/rfdetr-cpp-nano/rfdetr-nano-q8_0.gguf
+      sha256: 940084c60a780f1a19a51458ae3a601454b3b843675fa0713ff43ae5bccc0d9b
+- name: rfdetr-cpp-base
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://github.com/mudler/rf-detr.cpp
+    - https://huggingface.co/mudler/rfdetr-cpp-base
+  description: |
+    RF-DETR Base object detection model, served via the native rfdetr.cpp backend.
+    F16 quantization is recommended on CPU: identical accuracy to F32, half the size, fastest.
+  license: apache-2.0
+  icon: https://avatars.githubusercontent.com/u/53104118?s=200&v=4
+  tags:
+    - object-detection
+    - rfdetr
+    - native
+    - cpp
+    - cpu
+  overrides:
+    backend: rfdetr-cpp
+    known_usecases:
+      - detection
+    parameters:
+      model: rfdetr-base-f16.gguf
+  files:
+    - filename: rfdetr-base-f16.gguf
+      uri: huggingface://mudler/rfdetr-cpp-base/rfdetr-base-f16.gguf
+      sha256: 8a68b21a90478564bcbb758557069a618d96e25e7c358207fd85ba45b90faf52
+- name: rfdetr-cpp-small
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://github.com/mudler/rf-detr.cpp
+    - https://huggingface.co/mudler/rfdetr-cpp-small
+  description: |
+    RF-DETR Small object detection model (DINOv2-small backbone, 512px input, 3 decoder layers), served
+    via the native rfdetr.cpp backend (ggml + purego, no Python). A step up from Nano in accuracy while
+    staying lightweight on CPU. F16 quantization is the recommended default: identical accuracy to F32
+    at roughly half the size. Drop-in for the /v1/detection endpoint.
+  license: apache-2.0
+  icon: https://avatars.githubusercontent.com/u/53104118?s=200&v=4
+  tags:
+    - object-detection
+    - rfdetr
+    - native
+    - cpp
+    - cpu
+  overrides:
+    backend: rfdetr-cpp
+    known_usecases:
+      - detection
+    parameters:
+      model: rfdetr-small-f16.gguf
+  files:
+    - filename: rfdetr-small-f16.gguf
+      sha256: 5365264a976bb99ab31f735f43326e50b0804a60cd1709abe8c1c95114c4d79d
+      uri: huggingface://mudler/rfdetr-cpp-small/rfdetr-small-f16.gguf
+- name: rfdetr-cpp-medium
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://github.com/mudler/rf-detr.cpp
+    - https://huggingface.co/mudler/rfdetr-cpp-medium
+  description: |
+    RF-DETR Medium object detection model (DINOv2-small backbone, 576px input, 4 decoder layers), served
+    via the native rfdetr.cpp backend. Balanced detection quality vs. CPU latency — recommended when
+    Base is not accurate enough but Large is too slow. F16 quantization is the recommended default:
+    identical accuracy to F32, half the size. Drop-in for the /v1/detection endpoint.
+  license: apache-2.0
+  icon: https://avatars.githubusercontent.com/u/53104118?s=200&v=4
+  tags:
+    - object-detection
+    - rfdetr
+    - native
+    - cpp
+    - cpu
+  overrides:
+    backend: rfdetr-cpp
+    known_usecases:
+      - detection
+    parameters:
+      model: rfdetr-medium-f16.gguf
+  files:
+    - filename: rfdetr-medium-f16.gguf
+      sha256: 685b8f50890f099bbc603454309b2d5f1d471541420b95c20c6ed296aec1e7ae
+      uri: huggingface://mudler/rfdetr-cpp-medium/rfdetr-medium-f16.gguf
+- name: rfdetr-cpp-large
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://github.com/mudler/rf-detr.cpp
+    - https://huggingface.co/mudler/rfdetr-cpp-large
+  description: |
+    RF-DETR Large object detection model (DINOv2-small backbone, 704px input, 4 decoder layers), served
+    via the native rfdetr.cpp backend. Highest-accuracy detection variant — best for offline workflows
+    and high-resolution inputs where CPU latency is secondary to recall. F16 quantization is the
+    recommended default: identical accuracy to F32, half the size. Drop-in for the /v1/detection endpoint.
+  license: apache-2.0
+  icon: https://avatars.githubusercontent.com/u/53104118?s=200&v=4
+  tags:
+    - object-detection
+    - rfdetr
+    - native
+    - cpp
+    - cpu
+  overrides:
+    backend: rfdetr-cpp
+    known_usecases:
+      - detection
+    parameters:
+      model: rfdetr-large-f16.gguf
+  files:
+    - filename: rfdetr-large-f16.gguf
+      sha256: 819f1abc72f746a686722eacc9c4db992b7ca853b26e390ab0a66ca6ea70060a
+      uri: huggingface://mudler/rfdetr-cpp-large/rfdetr-large-f16.gguf
+- name: rfdetr-cpp-seg-nano
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://github.com/mudler/rf-detr.cpp
+    - https://huggingface.co/mudler/rfdetr-cpp-seg-nano
+  description: |
+    RF-DETR Seg-Nano instance segmentation model (DINOv2-small backbone, 312px input, 4 decoder layers,
+    100 queries), served via the native rfdetr.cpp backend. Smallest segmentation variant — fastest CPU
+    latency, ideal for edge deployment. Returns both bounding boxes and per-instance masks via the
+    /v1/detection endpoint. F16 quantization is the recommended default: identical accuracy to F32,
+    half the size.
+  license: apache-2.0
+  icon: https://avatars.githubusercontent.com/u/53104118?s=200&v=4
+  tags:
+    - object-detection
+    - image-segmentation
+    - rfdetr
+    - native
+    - cpp
+    - cpu
+  overrides:
+    backend: rfdetr-cpp
+    known_usecases:
+      - detection
+    parameters:
+      model: rfdetr-seg-nano-f16.gguf
+  files:
+    - filename: rfdetr-seg-nano-f16.gguf
+      sha256: 9f9a0ab547743992b6c664d41ee1a6afcd66b21b04609a68f76c0eec88648c2b
+      uri: huggingface://mudler/rfdetr-cpp-seg-nano/rfdetr-seg-nano-f16.gguf
+- name: rfdetr-cpp-seg-small
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://github.com/mudler/rf-detr.cpp
+    - https://huggingface.co/mudler/rfdetr-cpp-seg-small
+  description: |
+    RF-DETR Seg-Small instance segmentation model (DINOv2-small backbone, 384px input, 4 decoder layers,
+    100 queries), served via the native rfdetr.cpp backend. Step up from Seg-Nano in mask quality while
+    staying CPU-friendly. Returns both bounding boxes and per-instance masks via the /v1/detection
+    endpoint. F16 quantization is the recommended default: identical accuracy to F32, half the size.
+  license: apache-2.0
+  icon: https://avatars.githubusercontent.com/u/53104118?s=200&v=4
+  tags:
+    - object-detection
+    - image-segmentation
+    - rfdetr
+    - native
+    - cpp
+    - cpu
+  overrides:
+    backend: rfdetr-cpp
+    known_usecases:
+      - detection
+    parameters:
+      model: rfdetr-seg-small-f16.gguf
+  files:
+    - filename: rfdetr-seg-small-f16.gguf
+      sha256: 1b569a182aea941ec645a1923c1e8ad9db05e006db36136da9f148d1ec066670
+      uri: huggingface://mudler/rfdetr-cpp-seg-small/rfdetr-seg-small-f16.gguf
+- name: rfdetr-cpp-seg-medium
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://github.com/mudler/rf-detr.cpp
+    - https://huggingface.co/mudler/rfdetr-cpp-seg-medium
+  description: |
+    RF-DETR Seg-Medium instance segmentation model (DINOv2-small backbone, 432px input, 5 decoder layers,
+    200 queries), served via the native rfdetr.cpp backend. Balanced segmentation quality vs. CPU latency
+    — recommended for everyday segmentation workloads. Returns both bounding boxes and per-instance masks
+    via the /v1/detection endpoint. F16 quantization is the recommended default.
+  license: apache-2.0
+  icon: https://avatars.githubusercontent.com/u/53104118?s=200&v=4
+  tags:
+    - object-detection
+    - image-segmentation
+    - rfdetr
+    - native
+    - cpp
+    - cpu
+  overrides:
+    backend: rfdetr-cpp
+    known_usecases:
+      - detection
+    parameters:
+      model: rfdetr-seg-medium-f16.gguf
+  files:
+    - filename: rfdetr-seg-medium-f16.gguf
+      sha256: 885d85ed6935495fc50ff464e06b6ea3bd8e8386865852d68a8be0f649d65afe
+      uri: huggingface://mudler/rfdetr-cpp-seg-medium/rfdetr-seg-medium-f16.gguf
+- name: rfdetr-cpp-seg-large
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://github.com/mudler/rf-detr.cpp
+    - https://huggingface.co/mudler/rfdetr-cpp-seg-large
+  description: |
+    RF-DETR Seg-Large instance segmentation model (DINOv2-small backbone, 504px input, 5 decoder layers,
+    200 queries), served via the native rfdetr.cpp backend. Higher-resolution input than Seg-Medium for
+    sharper mask boundaries. Returns both bounding boxes and per-instance masks via the /v1/detection
+    endpoint. F16 quantization is the recommended default: identical accuracy to F32, half the size.
+  license: apache-2.0
+  icon: https://avatars.githubusercontent.com/u/53104118?s=200&v=4
+  tags:
+    - object-detection
+    - image-segmentation
+    - rfdetr
+    - native
+    - cpp
+    - cpu
+  overrides:
+    backend: rfdetr-cpp
+    known_usecases:
+      - detection
+    parameters:
+      model: rfdetr-seg-large-f16.gguf
+  files:
+    - filename: rfdetr-seg-large-f16.gguf
+      sha256: 90423066d0791b4ae249f3986cce1f095a1e4090bf46800bf7f9e371ea80d559
+      uri: huggingface://mudler/rfdetr-cpp-seg-large/rfdetr-seg-large-f16.gguf
+- name: rfdetr-cpp-seg-xlarge
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://github.com/mudler/rf-detr.cpp
+    - https://huggingface.co/mudler/rfdetr-cpp-seg-xlarge
+  description: |
+    RF-DETR Seg-XLarge instance segmentation model (DINOv2-small backbone, 624px input, 6 decoder layers,
+    300 queries), served via the native rfdetr.cpp backend. High-capacity segmentation variant with more
+    queries and deeper decoder — best for dense scenes with many instances. Returns both bounding boxes
+    and per-instance masks via the /v1/detection endpoint. F16 quantization is the recommended default.
+  license: apache-2.0
+  icon: https://avatars.githubusercontent.com/u/53104118?s=200&v=4
+  tags:
+    - object-detection
+    - image-segmentation
+    - rfdetr
+    - native
+    - cpp
+    - cpu
+  overrides:
+    backend: rfdetr-cpp
+    known_usecases:
+      - detection
+    parameters:
+      model: rfdetr-seg-xlarge-f16.gguf
+  files:
+    - filename: rfdetr-seg-xlarge-f16.gguf
+      sha256: 0b82de4a6e65a40bc930979a1a4281cb24de35203d30eeefd797c858101a7bec
+      uri: huggingface://mudler/rfdetr-cpp-seg-xlarge/rfdetr-seg-xlarge-f16.gguf
+- name: rfdetr-cpp-seg-2xlarge
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://github.com/mudler/rf-detr.cpp
+    - https://huggingface.co/mudler/rfdetr-cpp-seg-2xlarge
+  description: |
+    RF-DETR Seg-2XLarge instance segmentation model (DINOv2-small backbone, 768px input, 6 decoder layers,
+    300 queries), served via the native rfdetr.cpp backend. Highest-accuracy segmentation variant — best
+    for offline workflows and high-resolution inputs where CPU latency is secondary to mask quality.
+    Returns both bounding boxes and per-instance masks via the /v1/detection endpoint. F16 quantization
+    is the recommended default: identical accuracy to F32, half the size.
+  license: apache-2.0
+  icon: https://avatars.githubusercontent.com/u/53104118?s=200&v=4
+  tags:
+    - object-detection
+    - image-segmentation
+    - rfdetr
+    - native
+    - cpp
+    - cpu
+  overrides:
+    backend: rfdetr-cpp
+    known_usecases:
+      - detection
+    parameters:
+      model: rfdetr-seg-2xlarge-f16.gguf
+  files:
+    - filename: rfdetr-seg-2xlarge-f16.gguf
+      sha256: 7f957997db23e844194ea8266a95b4adc3deb6d0b71c0924922b20fbdeafa299
+      uri: huggingface://mudler/rfdetr-cpp-seg-2xlarge/rfdetr-seg-2xlarge-f16.gguf
 - name: edgetam
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
@@ -23520,6 +23900,75 @@
     - python
   parameters:
     model: cross-encoder
+- name: bge-m3-colbert
+  url: github:mudler/LocalAI/gallery/bge-m3-colbert.yaml@master
+  icon: https://cdn-avatars.huggingface.co/v1/production/uploads/1664511063789-632c234f42c386ebd2710434.png
+  urls:
+    - https://huggingface.co/BAAI/bge-m3
+  description: |
+    BAAI/bge-m3 loaded by the rerankers backend in ColBERT
+    (late-interaction MaxSim) mode. Pairs with the `colbert` router
+    classifier to score policy descriptions against the prompt
+    without an LLM round-trip — robust on abstract or short labels
+    where next-token scoring with Arch-Router-style models is noisy.
+  license: mit
+  tags:
+    - reranker
+    - colbert
+    - router
+    - gpu
+    - python
+  parameters:
+    model: bge-m3-colbert
+- &arch-router-1_5b
+  url: github:mudler/LocalAI/gallery/chatml.yaml@master
+  name: arch-router-1.5b-q4
+  icon: https://cdn-avatars.huggingface.co/v1/production/uploads/66b681906c8d3b36786b764c/uyP7mxDVv0HbV9Hv_KfHk.jpeg
+  license: other
+  urls:
+    - https://huggingface.co/katanemo/Arch-Router-1.5B
+    - https://huggingface.co/mradermacher/Arch-Router-1.5B-GGUF
+  description: |
+    Arch-Router-1.5B is a compact router LLM from Katanemo, fine-tuned from
+    Qwen2.5-1.5B-Instruct. Given a prompt and a set of user-defined route
+    policies (domain + action), it picks the best-matching policy name so
+    requests can be dispatched to the appropriate downstream model. Designed
+    for low-latency, high-throughput use inside the Arch proxy, it pairs
+    with LocalAI's router classifier as a preference-aligned alternative to
+    embedding/ColBERT-based routing on concrete, well-described policies.
+  tags:
+    - llm
+    - gguf
+    - qwen
+    - qwen2.5
+    - 1.5b
+    - router
+    - cpu
+    - gpu
+  overrides:
+    # Replace the inherited [chat] usecase from chatml.yaml — Arch-Router
+    # is exclusively a router-classifier model, and chat+score conflict
+    # on llama-cpp (the score path races the llama_context against
+    # concurrent generation traffic; see model_config.go validation).
+    known_usecases:
+      - score
+    parameters:
+      model: Arch-Router-1.5B.Q4_K_M.gguf
+  files:
+    - filename: Arch-Router-1.5B.Q4_K_M.gguf
+      sha256: 9abe34414ebfe3921a1d157ed3ce8718e21e59a1f80693a33969a82ea40df636
+      uri: huggingface://mradermacher/Arch-Router-1.5B-GGUF/Arch-Router-1.5B.Q4_K_M.gguf
+- !!merge <<: *arch-router-1_5b
+  name: arch-router-1.5b-q8
+  overrides:
+    known_usecases:
+      - score
+    parameters:
+      model: Arch-Router-1.5B.Q8_0.gguf
+  files:
+    - filename: Arch-Router-1.5B.Q8_0.gguf
+      sha256: 236fcf372bb25f314dafa1605d84566db60ddad98b889aaa072a3108ec48ef22
+      uri: huggingface://mradermacher/Arch-Router-1.5B-GGUF/Arch-Router-1.5B.Q8_0.gguf
 - name: dolphin-2.9-llama3-8b
   url: github:mudler/LocalAI/gallery/hermes-2-pro-mistral.yaml@master
   urls:
@@ -30736,6 +31185,258 @@
       - torch_dtype:bf16
     parameters:
       model: Lightricks/LTX-2.3
+- &ltx-2-3-dev-ggml
+  name: ltx-2.3-22b-dev-ggml
+  url: github:mudler/LocalAI/gallery/ltx-ggml.yaml@master
+  urls:
+    - https://huggingface.co/Lightricks/LTX-2.3
+    - https://huggingface.co/unsloth/LTX-2.3-GGUF
+    - https://huggingface.co/unsloth/gemma-3-12b-it-qat-GGUF
+  description: |
+    LTX-2.3 22B dev - DiT-based audio-video foundation model from Lightricks,
+    GGUF-quantized for the stable-diffusion.cpp backend. Generates synchronized
+    video and audio from a text prompt (T2V), a reference image (I2V), or
+    first/last frame pairs (FLF2V). Uses gemma-3-12b-it as the text encoder
+    and ships dedicated video and audio VAEs plus an embeddings_connectors
+    safetensors that bridges the LLM hidden states to the diffusion model.
+
+    This entry uses the dynamic (UD) Q4_K_M quantization of the 22B model
+    (~16 GB) paired with the UD-Q4_K_XL QAT Gemma encoder (~7.4 GB).
+    Recommended generation: width=1280, height=720, video_frames=33,
+    fps=24, sampler=euler, cfg_scale=6.0.
+  license: ltx-2-community-license-agreement
+  icon: https://cdn-avatars.huggingface.co/v1/production/uploads/1652783139615-628375426db5127097cf5442.png
+  tags:
+    - ltx
+    - ltx-2
+    - text-to-video
+    - image-to-video
+    - first-last-frame-to-video
+    - audio-video
+    - video-generation
+    - diffusion
+    - gguf
+    - quantized
+    - 22b
+    - cpu
+    - gpu
+  overrides:
+    parameters:
+      model: ltx-2.3-22b-dev-UD-Q4_K_M.gguf
+    options:
+      - diffusion_model
+      - "vae_decode_only:false"
+      - llm_path:gemma-3-12b-it-qat-UD-Q4_K_XL.gguf
+      - vae_path:ltx-2.3-22b-dev_video_vae.safetensors
+      - audio_vae_path:ltx-2.3-22b-dev_audio_vae.safetensors
+      - embeddings_connectors_path:ltx-2.3-22b-dev_embeddings_connectors.safetensors
+  files:
+    - filename: ltx-2.3-22b-dev-UD-Q4_K_M.gguf
+      sha256: a6983fcf16cda13ec6dc22711dae47fa7cf160204d5a3b42b0c09d1f13fc853b
+      uri: huggingface://unsloth/LTX-2.3-GGUF/ltx-2.3-22b-dev-UD-Q4_K_M.gguf
+    - filename: gemma-3-12b-it-qat-UD-Q4_K_XL.gguf
+      sha256: da98f81c86916ed1c76b3eeda56b25cb7b8352b01093e2edb8028110fe2cb53b
+      uri: huggingface://unsloth/gemma-3-12b-it-qat-GGUF/gemma-3-12b-it-qat-UD-Q4_K_XL.gguf
+    - filename: ltx-2.3-22b-dev_video_vae.safetensors
+      sha256: 8732bb70cf4343541815f45c9f90f5ff0519d679bd63483afc27bf79a08d3f4e
+      uri: huggingface://unsloth/LTX-2.3-GGUF/vae/ltx-2.3-22b-dev_video_vae.safetensors
+    - filename: ltx-2.3-22b-dev_audio_vae.safetensors
+      sha256: d7711812d9387ce940c2cd5d65a4f5a1e57bf6087cf618d89b56dd3c722c4dea
+      uri: huggingface://unsloth/LTX-2.3-GGUF/vae/ltx-2.3-22b-dev_audio_vae.safetensors
+    - filename: ltx-2.3-22b-dev_embeddings_connectors.safetensors
+      sha256: a5c5148788d8d9d5d1e650e4cbf3502a46a2f7f975ce70c59082732c8905a8ae
+      uri: huggingface://unsloth/LTX-2.3-GGUF/text_encoders/ltx-2.3-22b-dev_embeddings_connectors.safetensors
+- !!merge <<: *ltx-2-3-dev-ggml
+  name: ltx-2.3-22b-dev-ggml-q4_k_m
+  description: |
+    LTX-2.3 22B dev - non-dynamic Q4_K_M quantization (~14.3 GB). Same
+    pipeline as ltx-2.3-22b-dev-ggml but with the plain Q4_K_M weights
+    instead of the dynamic UD-Q4_K_M variant. Slightly smaller and slightly
+    lower quality.
+  overrides:
+    parameters:
+      model: ltx-2.3-22b-dev-Q4_K_M.gguf
+    options:
+      - diffusion_model
+      - "vae_decode_only:false"
+      - llm_path:gemma-3-12b-it-qat-UD-Q4_K_XL.gguf
+      - vae_path:ltx-2.3-22b-dev_video_vae.safetensors
+      - audio_vae_path:ltx-2.3-22b-dev_audio_vae.safetensors
+      - embeddings_connectors_path:ltx-2.3-22b-dev_embeddings_connectors.safetensors
+  files:
+    - filename: ltx-2.3-22b-dev-Q4_K_M.gguf
+      sha256: e053e3d7827f3a69ecd00e55395d3a8f8616ab10d3a394e8d2b65ae204d490e0
+      uri: huggingface://unsloth/LTX-2.3-GGUF/ltx-2.3-22b-dev-Q4_K_M.gguf
+    - filename: gemma-3-12b-it-qat-UD-Q4_K_XL.gguf
+      sha256: da98f81c86916ed1c76b3eeda56b25cb7b8352b01093e2edb8028110fe2cb53b
+      uri: huggingface://unsloth/gemma-3-12b-it-qat-GGUF/gemma-3-12b-it-qat-UD-Q4_K_XL.gguf
+    - filename: ltx-2.3-22b-dev_video_vae.safetensors
+      sha256: 8732bb70cf4343541815f45c9f90f5ff0519d679bd63483afc27bf79a08d3f4e
+      uri: huggingface://unsloth/LTX-2.3-GGUF/vae/ltx-2.3-22b-dev_video_vae.safetensors
+    - filename: ltx-2.3-22b-dev_audio_vae.safetensors
+      sha256: d7711812d9387ce940c2cd5d65a4f5a1e57bf6087cf618d89b56dd3c722c4dea
+      uri: huggingface://unsloth/LTX-2.3-GGUF/vae/ltx-2.3-22b-dev_audio_vae.safetensors
+    - filename: ltx-2.3-22b-dev_embeddings_connectors.safetensors
+      sha256: a5c5148788d8d9d5d1e650e4cbf3502a46a2f7f975ce70c59082732c8905a8ae
+      uri: huggingface://unsloth/LTX-2.3-GGUF/text_encoders/ltx-2.3-22b-dev_embeddings_connectors.safetensors
+- !!merge <<: *ltx-2-3-dev-ggml
+  name: ltx-2.3-22b-dev-ggml-q8_0
+  description: |
+    LTX-2.3 22B dev - Q8_0 quantization (~22.8 GB). Highest-quality
+    quantized dev variant on the cpp backend; needs roughly twice the
+    VRAM/RAM of the Q4 entries but produces noticeably cleaner audio
+    and motion. Paired with the QAT Gemma-3 12B encoder.
+  overrides:
+    parameters:
+      model: ltx-2.3-22b-dev-Q8_0.gguf
+    options:
+      - diffusion_model
+      - "vae_decode_only:false"
+      - llm_path:gemma-3-12b-it-qat-UD-Q4_K_XL.gguf
+      - vae_path:ltx-2.3-22b-dev_video_vae.safetensors
+      - audio_vae_path:ltx-2.3-22b-dev_audio_vae.safetensors
+      - embeddings_connectors_path:ltx-2.3-22b-dev_embeddings_connectors.safetensors
+  files:
+    - filename: ltx-2.3-22b-dev-Q8_0.gguf
+      sha256: c4e78967e6c6824864e81e8a9ac182dcd5d06cccfea937347484f4258ab6145c
+      uri: huggingface://unsloth/LTX-2.3-GGUF/ltx-2.3-22b-dev-Q8_0.gguf
+    - filename: gemma-3-12b-it-qat-UD-Q4_K_XL.gguf
+      sha256: da98f81c86916ed1c76b3eeda56b25cb7b8352b01093e2edb8028110fe2cb53b
+      uri: huggingface://unsloth/gemma-3-12b-it-qat-GGUF/gemma-3-12b-it-qat-UD-Q4_K_XL.gguf
+    - filename: ltx-2.3-22b-dev_video_vae.safetensors
+      sha256: 8732bb70cf4343541815f45c9f90f5ff0519d679bd63483afc27bf79a08d3f4e
+      uri: huggingface://unsloth/LTX-2.3-GGUF/vae/ltx-2.3-22b-dev_video_vae.safetensors
+    - filename: ltx-2.3-22b-dev_audio_vae.safetensors
+      sha256: d7711812d9387ce940c2cd5d65a4f5a1e57bf6087cf618d89b56dd3c722c4dea
+      uri: huggingface://unsloth/LTX-2.3-GGUF/vae/ltx-2.3-22b-dev_audio_vae.safetensors
+    - filename: ltx-2.3-22b-dev_embeddings_connectors.safetensors
+      sha256: a5c5148788d8d9d5d1e650e4cbf3502a46a2f7f975ce70c59082732c8905a8ae
+      uri: huggingface://unsloth/LTX-2.3-GGUF/text_encoders/ltx-2.3-22b-dev_embeddings_connectors.safetensors
+- &ltx-2-3-distilled-ggml
+  name: ltx-2.3-22b-distilled-ggml
+  url: github:mudler/LocalAI/gallery/ltx-ggml.yaml@master
+  urls:
+    - https://huggingface.co/Lightricks/LTX-2.3
+    - https://huggingface.co/unsloth/LTX-2.3-GGUF
+    - https://huggingface.co/unsloth/gemma-3-12b-it-qat-GGUF
+  description: |
+    LTX-2.3 22B distilled - faster student of the dev model, GGUF-quantized
+    for the stable-diffusion.cpp backend. Trades a small amount of quality
+    for substantially fewer sampling steps, making it the right pick for
+    iterative previews and CPU-offloaded inference. Same input modalities
+    as the dev entry (T2V / I2V / FLF2V) and the same gemma-3-12b-it text
+    encoder.
+
+    This entry uses the dynamic (UD) Q4_K_M quantization of the 22B
+    distilled model (~16.3 GB). Recommended generation: width=1280,
+    height=720, video_frames=33, fps=24, sampler=euler, cfg_scale=6.0.
+  license: ltx-2-community-license-agreement
+  icon: https://cdn-avatars.huggingface.co/v1/production/uploads/1652783139615-628375426db5127097cf5442.png
+  tags:
+    - ltx
+    - ltx-2
+    - distilled
+    - text-to-video
+    - image-to-video
+    - first-last-frame-to-video
+    - audio-video
+    - video-generation
+    - diffusion
+    - gguf
+    - quantized
+    - 22b
+    - cpu
+    - gpu
+  overrides:
+    parameters:
+      model: ltx-2.3-22b-distilled-UD-Q4_K_M.gguf
+    options:
+      - diffusion_model
+      - "vae_decode_only:false"
+      - llm_path:gemma-3-12b-it-qat-UD-Q4_K_XL.gguf
+      - vae_path:ltx-2.3-22b-distilled_video_vae.safetensors
+      - audio_vae_path:ltx-2.3-22b-distilled_audio_vae.safetensors
+      - embeddings_connectors_path:ltx-2.3-22b-distilled_embeddings_connectors.safetensors
+  files:
+    - filename: ltx-2.3-22b-distilled-UD-Q4_K_M.gguf
+      sha256: 451ef931569f084c69743d1917096b149eb489517ec0e1de76eaadeb4dbbc9bf
+      uri: huggingface://unsloth/LTX-2.3-GGUF/distilled/ltx-2.3-22b-distilled-UD-Q4_K_M.gguf
+    - filename: gemma-3-12b-it-qat-UD-Q4_K_XL.gguf
+      sha256: da98f81c86916ed1c76b3eeda56b25cb7b8352b01093e2edb8028110fe2cb53b
+      uri: huggingface://unsloth/gemma-3-12b-it-qat-GGUF/gemma-3-12b-it-qat-UD-Q4_K_XL.gguf
+    - filename: ltx-2.3-22b-distilled_video_vae.safetensors
+      sha256: e68d6d8f8a42942ac9b862cc315beb3bc30805a8876c7ad63ba5bf7a2b8e168a
+      uri: huggingface://unsloth/LTX-2.3-GGUF/vae/ltx-2.3-22b-distilled_video_vae.safetensors
+    - filename: ltx-2.3-22b-distilled_audio_vae.safetensors
+      sha256: 3cd6a6eb8cb28f5ecc12f1f3126952b2a3d2b0b42ad3270e63cefafafe0d9b57
+      uri: huggingface://unsloth/LTX-2.3-GGUF/vae/ltx-2.3-22b-distilled_audio_vae.safetensors
+    - filename: ltx-2.3-22b-distilled_embeddings_connectors.safetensors
+      sha256: c61cbb396e2a8175d8b2da51f0fdac885a4ccd22c9f64dafa5aa2c455dc8a507
+      uri: huggingface://unsloth/LTX-2.3-GGUF/text_encoders/ltx-2.3-22b-distilled_embeddings_connectors.safetensors
+- !!merge <<: *ltx-2-3-distilled-ggml
+  name: ltx-2.3-22b-distilled-ggml-q4_k_m
+  description: |
+    LTX-2.3 22B distilled - non-dynamic Q4_K_M quantization (~14.3 GB).
+    Same pipeline as ltx-2.3-22b-distilled-ggml but with the plain Q4_K_M
+    weights instead of the dynamic UD-Q4_K_M variant.
+  overrides:
+    parameters:
+      model: ltx-2.3-22b-distilled-Q4_K_M.gguf
+    options:
+      - diffusion_model
+      - "vae_decode_only:false"
+      - llm_path:gemma-3-12b-it-qat-UD-Q4_K_XL.gguf
+      - vae_path:ltx-2.3-22b-distilled_video_vae.safetensors
+      - audio_vae_path:ltx-2.3-22b-distilled_audio_vae.safetensors
+      - embeddings_connectors_path:ltx-2.3-22b-distilled_embeddings_connectors.safetensors
+  files:
+    - filename: ltx-2.3-22b-distilled-Q4_K_M.gguf
+      sha256: 4e4459bee04199bf93187ba385729f6b7d8e874d754b72d26e751fe2066f4358
+      uri: huggingface://unsloth/LTX-2.3-GGUF/distilled/ltx-2.3-22b-distilled-Q4_K_M.gguf
+    - filename: gemma-3-12b-it-qat-UD-Q4_K_XL.gguf
+      sha256: da98f81c86916ed1c76b3eeda56b25cb7b8352b01093e2edb8028110fe2cb53b
+      uri: huggingface://unsloth/gemma-3-12b-it-qat-GGUF/gemma-3-12b-it-qat-UD-Q4_K_XL.gguf
+    - filename: ltx-2.3-22b-distilled_video_vae.safetensors
+      sha256: e68d6d8f8a42942ac9b862cc315beb3bc30805a8876c7ad63ba5bf7a2b8e168a
+      uri: huggingface://unsloth/LTX-2.3-GGUF/vae/ltx-2.3-22b-distilled_video_vae.safetensors
+    - filename: ltx-2.3-22b-distilled_audio_vae.safetensors
+      sha256: 3cd6a6eb8cb28f5ecc12f1f3126952b2a3d2b0b42ad3270e63cefafafe0d9b57
+      uri: huggingface://unsloth/LTX-2.3-GGUF/vae/ltx-2.3-22b-distilled_audio_vae.safetensors
+    - filename: ltx-2.3-22b-distilled_embeddings_connectors.safetensors
+      sha256: c61cbb396e2a8175d8b2da51f0fdac885a4ccd22c9f64dafa5aa2c455dc8a507
+      uri: huggingface://unsloth/LTX-2.3-GGUF/text_encoders/ltx-2.3-22b-distilled_embeddings_connectors.safetensors
+- !!merge <<: *ltx-2-3-distilled-ggml
+  name: ltx-2.3-22b-distilled-ggml-q8_0
+  description: |
+    LTX-2.3 22B distilled - Q8_0 quantization (~22.8 GB). Highest-quality
+    distilled variant on the cpp backend; useful when you want the
+    distilled sampling cost but the cleanest possible output.
+  overrides:
+    parameters:
+      model: ltx-2.3-22b-distilled-Q8_0.gguf
+    options:
+      - diffusion_model
+      - "vae_decode_only:false"
+      - llm_path:gemma-3-12b-it-qat-UD-Q4_K_XL.gguf
+      - vae_path:ltx-2.3-22b-distilled_video_vae.safetensors
+      - audio_vae_path:ltx-2.3-22b-distilled_audio_vae.safetensors
+      - embeddings_connectors_path:ltx-2.3-22b-distilled_embeddings_connectors.safetensors
+  files:
+    - filename: ltx-2.3-22b-distilled-Q8_0.gguf
+      sha256: ed3be27373771404ed59239e8c2686fb6f8d3cd6a1db7f257d811c8d1a381ef8
+      uri: huggingface://unsloth/LTX-2.3-GGUF/distilled/ltx-2.3-22b-distilled-Q8_0.gguf
+    - filename: gemma-3-12b-it-qat-UD-Q4_K_XL.gguf
+      sha256: da98f81c86916ed1c76b3eeda56b25cb7b8352b01093e2edb8028110fe2cb53b
+      uri: huggingface://unsloth/gemma-3-12b-it-qat-GGUF/gemma-3-12b-it-qat-UD-Q4_K_XL.gguf
+    - filename: ltx-2.3-22b-distilled_video_vae.safetensors
+      sha256: e68d6d8f8a42942ac9b862cc315beb3bc30805a8876c7ad63ba5bf7a2b8e168a
+      uri: huggingface://unsloth/LTX-2.3-GGUF/vae/ltx-2.3-22b-distilled_video_vae.safetensors
+    - filename: ltx-2.3-22b-distilled_audio_vae.safetensors
+      sha256: 3cd6a6eb8cb28f5ecc12f1f3126952b2a3d2b0b42ad3270e63cefafafe0d9b57
+      uri: huggingface://unsloth/LTX-2.3-GGUF/vae/ltx-2.3-22b-distilled_audio_vae.safetensors
+    - filename: ltx-2.3-22b-distilled_embeddings_connectors.safetensors
+      sha256: c61cbb396e2a8175d8b2da51f0fdac885a4ccd22c9f64dafa5aa2c455dc8a507
+      uri: huggingface://unsloth/LTX-2.3-GGUF/text_encoders/ltx-2.3-22b-distilled_embeddings_connectors.safetensors
 - name: deepseek-v4-flash-q2
   description: |
     DeepSeek V4 Flash (IQ2XXS GGUF, ~81 GB) - only loadable via the ds4 backend.

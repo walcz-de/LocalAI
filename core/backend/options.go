@@ -21,7 +21,7 @@ func recordModelLoadFailure(appConfig *config.ApplicationConfig, modelName, back
 	if !appConfig.EnableTracing {
 		return
 	}
-	trace.InitBackendTracingIfEnabled(appConfig.TracingMaxItems)
+	trace.InitBackendTracingIfEnabled(appConfig.TracingMaxItems, appConfig.TracingMaxBodyBytes)
 	trace.RecordBackendTrace(trace.BackendTrace{
 		Timestamp: time.Now(),
 		Type:      trace.BackendTraceModelLoad,
@@ -242,6 +242,18 @@ func grpcModelOpts(c config.ModelConfig, modelPath string) *pb.ModelOptions {
 		Tokenizer: c.Tokenizer,
 	}
 
+	if c.Backend == "cloud-proxy" {
+		opts.Proxy = &pb.ProxyOptions{
+			UpstreamUrl:            c.Proxy.UpstreamURL,
+			Mode:                   c.Proxy.Mode,
+			Provider:               c.Proxy.Provider,
+			ApiKeyEnv:              c.Proxy.APIKeyEnv,
+			ApiKeyFile:             c.Proxy.APIKeyFile,
+			UpstreamModel:          c.Proxy.UpstreamModel,
+			RequestTimeoutSeconds:  int32(c.Proxy.RequestTimeoutSeconds),
+		}
+	}
+
 	if c.MMProj != "" {
 		opts.MMProj = filepath.Join(modelPath, c.MMProj)
 	}
@@ -277,7 +289,7 @@ func gRPCPredictOpts(c config.ModelConfig, modelPath string) *pb.PredictOptions 
 		MinP:                float32(*c.MinP),
 		Tokens:              int32(*c.Maxtokens),
 		Threads:             int32(*c.Threads),
-		PromptCacheAll:      c.PromptCacheAll,
+		PromptCacheAll:      *c.PromptCacheAll,
 		PromptCacheRO:       c.PromptCacheRO,
 		PromptCachePath:     promptCachePath,
 		F16KV:               *c.F16,
