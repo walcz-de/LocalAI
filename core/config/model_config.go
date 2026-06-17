@@ -70,6 +70,19 @@ type ModelConfig struct {
 	// (Harmony) or LFM2.5 — honor it; "none" also toggles enable_thinking off.
 	ReasoningEffort string `yaml:"reasoning_effort,omitempty" json:"reasoning_effort,omitempty"`
 
+	// ChatTemplateKwargs are arbitrary key/values forwarded to the backend's jinja
+	// chat template via chat_template_kwargs (e.g. preserve_thinking: true). The
+	// server-derived reasoning levers (enable_thinking / reasoning_effort) and any
+	// per-request metadata overrides layer on top. See gRPCPredictOpts.
+	ChatTemplateKwargs map[string]any `yaml:"chat_template_kwargs,omitempty" json:"chat_template_kwargs,omitempty"`
+
+	// RequestMetadata holds the raw client request `metadata` map for the current
+	// request. The request middleware stamps it; gRPCPredictOpts merges it into the
+	// backend gRPC metadata (overriding the server-derived enable_thinking /
+	// reasoning_effort) and folds it, coerced, into the chat_template_kwargs blob.
+	// Never persisted to YAML.
+	RequestMetadata map[string]string `yaml:"-" json:"-"`
+
 	FeatureFlag FeatureFlag `yaml:"feature_flags,omitempty" json:"feature_flags,omitempty"` // Feature Flag registry. We move fast, and features may break on a per model/backend basis. Registry for (usually temporary) flags that indicate aborting something early.
 	// LLM configs (GPT4ALL, Llama.cpp, ...)
 	LLMConfig `yaml:",inline" json:",inline"`
@@ -585,6 +598,44 @@ func (c *ModelConfig) ApplyReasoningEffort(requestEffort string) {
 			c.ReasoningConfig.DisableReasoning = &enable
 		}
 	}
+}
+
+// coerceChatTemplateKwarg coerces a request-metadata string value for use as a
+// jinja chat_template_kwarg. "true"/"false" become real booleans (so a jinja
+// `{% if preserve_thinking %}` reads false correctly, since any non-empty string
+// is truthy); everything else stays a string. Numeric/typed per-request values are
+// out of scope - set those in the model YAML chat_template_kwargs (YAML keeps the type).
+func coerceChatTemplateKwarg(v string) any {
+	switch v {
+	case "true":
+		return true
+	case "false":
+		return false
+	default:
+		return v
+	}
+}
+
+// ResolveChatTemplateKwargs builds the final chat_template_kwargs map forwarded to
+// the backend, layered: the model config map (base) < the coerced backend metadata
+// (server reasoning levers + client request overrides). `meta` is the already-merged
+// backend metadata string map. The reserved "chat_template_kwargs" key is skipped so
+// a client cannot smuggle a nested blob. Returns nil when there is nothing to forward.
+func (c *ModelConfig) ResolveChatTemplateKwargs(meta map[string]string) map[string]any {
+	out := map[string]any{}
+	for k, v := range c.ChatTemplateKwargs {
+		out[k] = v
+	}
+	for k, v := range meta {
+		if k == "chat_template_kwargs" {
+			continue
+		}
+		out[k] = coerceChatTemplateKwarg(v)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // @Description PipelineStreaming toggles incremental delivery per realtime stage.
@@ -1327,6 +1378,10 @@ const (
 	// chat/completion/embeddings.
 	FLAG_SCORE ModelConfigUsecase = 0b10000000000000000000
 
+	// Marks a model as wired for the Depth gRPC primitive (per-pixel
+	// metric depth + camera pose + 3D point cloud via Depth Anything 3).
+	FLAG_DEPTH ModelConfigUsecase = 0b100000000000000000000
+
 	// Common Subsets
 	FLAG_LLM ModelConfigUsecase = FLAG_CHAT | FLAG_COMPLETION | FLAG_EDIT
 )
@@ -1384,6 +1439,7 @@ func GetAllModelConfigUsecases() map[string]ModelConfigUsecase {
 		"FLAG_DIARIZATION":         FLAG_DIARIZATION,
 		"FLAG_REALTIME_AUDIO":      FLAG_REALTIME_AUDIO,
 		"FLAG_SCORE":               FLAG_SCORE,
+		"FLAG_DEPTH":               FLAG_DEPTH,
 	}
 }
 
@@ -1523,6 +1579,13 @@ func (c *ModelConfig) GuessUsecases(u ModelConfigUsecase) bool {
 	if (u & FLAG_DETECTION) == FLAG_DETECTION {
 		detectionBackends := []string{"rfdetr", "sam3-cpp", "insightface"}
 		if !slices.Contains(detectionBackends, c.Backend) {
+			return false
+		}
+	}
+
+	if (u & FLAG_DEPTH) == FLAG_DEPTH {
+		depthBackends := []string{"depth-anything"}
+		if !slices.Contains(depthBackends, c.Backend) {
 			return false
 		}
 	}
