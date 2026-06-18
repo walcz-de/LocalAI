@@ -46,8 +46,8 @@
       use_tokenizer_template: true
   files:
     - filename: llama-cpp/models/gemma-4-12B-coder-fable5-composer2.5-v1-GGUF/gemma4-coding-Q4_K_M.gguf
-      sha256: 4011bb86572a587783a553b54927314a2ed8395befa59db202ee775d183cd751
       uri: https://huggingface.co/yuxinlu1/gemma-4-12B-coder-fable5-composer2.5-v1-GGUF/resolve/main/gemma4-coding-Q4_K_M.gguf
+      sha256: 1fe90b72e105d7bc71650aa59883edece3e84751af489075217a7ae717b1fe8d
 - name: "serenity-26b-a4b"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -203,35 +203,7 @@
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
     - https://huggingface.co/Jackrong/Qwopus3.6-27B-Coder-MTP-GGUF
-  description: |
-    🪐 Qwopus3.6-27B-v2
-    SFT Release
-
-    Reasoning-Enhanced Dense Language Model Fine-Tuned on Qwen3.6-27B
-
-    🧬 Trace Inversion & Negentropy
-    🧠 27B Parameters
-    🔥 3-Stage Curriculum SFT
-    🛠️ Vision & Tool-use Support
-
-    💡 What is Qwopus3.6-27B-v2?
-    🪐 Qwopus3.6-27B-v2 is a reasoning-enhanced dense language model built on top of Qwen3.6-27B. By leveraging a multi-stage curriculum learning pipeline and augmented with Trace Inversion datasets (claude-opus-4.6/4.7-traceInversion), it reverse-engineers the compressed "Reasoning Bubbles" of commercial LLMs into structured, step-by-step synthetic reasoning traces, successfully eliminating logical shortcuts and knowledge fractures.
-
-    🧩 Structured Reasoning
-    Injects reconstructed deep CoT chains to eliminate logical shortcuts via Trace Inversion.
-
-    🪶 Style Consistency
-    Enforces strict constraints on the format and convergence of &lt;think&gt; tags.
-
-    🔁 Distillation Alignment
-    Ensures high-quality cross-source SFT data alignment to narrow the capacity gap.
-
-    ⚡ RL Scalability
-    Sets up a stable formatting pipeline optimized for downstream Reinforcement Learning (RL).
-
-    ## 💡 1. Base Model, Training Library & Cooperation
-
-    ...
+  description: "\U0001FA90 Qwopus3.6-27B-v2\nSFT Release\n\nReasoning-Enhanced Dense Language Model Fine-Tuned on Qwen3.6-27B\n\n\U0001F9EC Trace Inversion & Negentropy\n\U0001F9E0 27B Parameters\n\U0001F525 3-Stage Curriculum SFT\n\U0001F6E0️ Vision & Tool-use Support\n\n\U0001F4A1 What is Qwopus3.6-27B-v2?\n\U0001FA90 Qwopus3.6-27B-v2 is a reasoning-enhanced dense language model built on top of Qwen3.6-27B. By leveraging a multi-stage curriculum learning pipeline and augmented with Trace Inversion datasets (claude-opus-4.6/4.7-traceInversion), it reverse-engineers the compressed \"Reasoning Bubbles\" of commercial LLMs into structured, step-by-step synthetic reasoning traces, successfully eliminating logical shortcuts and knowledge fractures.\n\n\U0001F9E9 Structured Reasoning\nInjects reconstructed deep CoT chains to eliminate logical shortcuts via Trace Inversion.\n\n\U0001FAB6 Style Consistency\nEnforces strict constraints on the format and convergence of &lt;think&gt; tags.\n\n\U0001F501 Distillation Alignment\nEnsures high-quality cross-source SFT data alignment to narrow the capacity gap.\n\n⚡ RL Scalability\nSets up a stable formatting pipeline optimized for downstream Reinforcement Learning (RL).\n\n## \U0001F4A1 1. Base Model, Training Library & Cooperation\n\n...\n"
   license: "apache-2.0"
   tags:
     - llm
@@ -8049,7 +8021,6 @@
     - filename: depth-anything-base-q4_k.gguf
       uri: huggingface://mudler/depth-anything.cpp-gguf/depth-anything-base-q4_k.gguf
       sha256: "43cd45d00f9024f4319f4beabd73155db5132e4b575bc52eff4131262c9d78f1"
-
 - !!merge <<: *depth-anything-3-base
   name: depth-anything-3-base-q8_0
   description: |
@@ -8063,7 +8034,6 @@
     - filename: depth-anything-base-q8_0.gguf
       uri: huggingface://mudler/depth-anything.cpp-gguf/depth-anything-base-q8_0.gguf
       sha256: "71b1c953113657f9a4fbef43ab6a16fe7a6f87b36da113a184f13c4a564968a0"
-
 - !!merge <<: *depth-anything-3-base
   name: depth-anything-3-base-f16
   description: |
@@ -8077,7 +8047,6 @@
     - filename: depth-anything-base-f16.gguf
       uri: huggingface://mudler/depth-anything.cpp-gguf/depth-anything-base-f16.gguf
       sha256: "2975419c99702ca646d5b7120c53e35c9fee158f0a803577241d16957f75624b"
-
 - !!merge <<: *depth-anything-3-base
   name: depth-anything-3-base-f32
   description: |
@@ -8091,7 +8060,6 @@
     - filename: depth-anything-base-f32.gguf
       uri: huggingface://mudler/depth-anything.cpp-gguf/depth-anything-base-f32.gguf
       sha256: "1b13b166e8a8b4f2c862f42d36edb2f9aab995a18cc527a52b9f160b99c6b8da"
-
 - !!merge <<: *depth-anything-3-base
   name: depth-anything-3-giant
   description: |
@@ -8112,7 +8080,6 @@
     - filename: depth-anything-giant-f32.gguf
       uri: huggingface://mudler/depth-anything.cpp-gguf/depth-anything-giant-f32.gguf
       sha256: "392edf64626be6a985487beb39c8d54cdc14f7feb2b53323742c96b71e7e7181"
-
 - !!merge <<: *depth-anything-3-base
   name: depth-anything-3-small
   description: |
@@ -8126,7 +8093,6 @@
     - filename: depth-anything-small-f32.gguf
       uri: huggingface://mudler/depth-anything.cpp-gguf/depth-anything-small-f32.gguf
       sha256: "eab5597e01dedde1a20c038590ae8c887b85ec35b882581138c08308e92c41e5"
-
 - !!merge <<: *depth-anything-3-base
   name: depth-anything-3-large
   description: |
@@ -8147,7 +8113,6 @@
     - filename: depth-anything-large-f32.gguf
       uri: huggingface://mudler/depth-anything.cpp-gguf/depth-anything-large-f32.gguf
       sha256: "a79eb3e19e8ec49f4daac484fb5fb67e15baac61518d229cf819e40c87080906"
-
 - !!merge <<: *depth-anything-3-base
   name: depth-anything-3-mono-large
   description: |
@@ -8162,7 +8127,6 @@
     - filename: depth-anything-mono-large-f32.gguf
       uri: huggingface://mudler/depth-anything.cpp-gguf/depth-anything-mono-large-f32.gguf
       sha256: "291b1a554af907c3f79986ee225da8933be5f7a31d73c81d06784cda284535de"
-
 - !!merge <<: *depth-anything-3-base
   name: depth-anything-3-metric-large
   description: |
@@ -8178,7 +8142,6 @@
     - filename: depth-anything-metric-large-f32.gguf
       uri: huggingface://mudler/depth-anything.cpp-gguf/depth-anything-metric-large-f32.gguf
       sha256: "d10b7450c2238244b2d72e2749537a1876255180149cd630a18bc1619c9286be"
-
 - !!merge <<: *depth-anything-3-base
   name: depth-anything-3-nested
   description: |
@@ -33679,6 +33642,112 @@
     - filename: ds4flash.gguf
       sha256: 31598c67c8b8744d3bcebcd19aa62253c6dc43cef3b8adf9f593656c9e86fd8c
       uri: huggingface://antirez/deepseek-v4-gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf
+- name: deepseek-v4-flash-q2-q4
+  description: |
+    DeepSeek V4 Flash (mixed q2/q4 GGUF, ~91 GB) - only loadable via the ds4 backend.
+    The last 6 expert layers are kept at Q4_K (the rest IQ2XXS), trading a little
+    extra memory for higher quality than the pure-q2 build while still fitting in
+    RAM on a 128 GB machine. imatrix-tuned. Metal (Darwin) or CUDA (Linux).
+    See https://github.com/antirez/ds4 for details.
+  urls:
+    - https://huggingface.co/antirez/deepseek-v4-gguf
+  tags:
+    - deepseek
+    - ds4
+    - gguf
+    - llm
+    - chat
+  overrides:
+    backend: ds4
+    parameters:
+      model: ds4flash.gguf
+  files:
+    - filename: ds4flash.gguf
+      sha256: edabc92af63ad8b139f00087fbfc10a4072f37b7597f4fd9ad1dfa6f83002396
+      uri: huggingface://antirez/deepseek-v4-gguf/DeepSeek-V4-Flash-Layers37-42Q4KExperts-OtherExpertLayersIQ2XXSGateUp-Q2KDown-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-fixed.gguf
+- name: deepseek-v4-flash-q4-ssd
+  description: |
+    DeepSeek V4 Flash (full 4-bit experts GGUF, ~153 GB) - only loadable via the
+    ds4 backend, with SSD streaming enabled so it runs on a 128 GB machine even
+    though the weights do not fit in RAM: routed MoE experts stream from the GGUF
+    on SSD while the non-routed weights stay resident. SSD streaming is Metal
+    (Darwin) only; generation speed depends on SSD speed and the expert cache.
+    Tune the routed-expert cache with the 'ssd_streaming_cache_experts:NGB'
+    option (default: automatic budget). See https://github.com/antirez/ds4.
+  urls:
+    - https://huggingface.co/antirez/deepseek-v4-gguf
+  tags:
+    - deepseek
+    - ds4
+    - gguf
+    - llm
+    - chat
+  overrides:
+    backend: ds4
+    options:
+      - ssd_streaming
+    parameters:
+      model: ds4flash.gguf
+  files:
+    - filename: ds4flash.gguf
+      sha256: 39e5de72ac544fdd5ffaf83ec28e36aaf3341b145235488e67d59400bbb3af55
+      uri: huggingface://antirez/deepseek-v4-gguf/DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2.gguf
+- name: deepseek-v4-flash-q2-mtp
+  description: |
+    DeepSeek V4 Flash (IQ2XXS GGUF, ~81 GB) paired with the optional MTP
+    speculative-decoding weights (~3.5 GB) for a slight speedup. Only loadable
+    via the ds4 backend; requires >=128 GB RAM. MTP helps only with greedy
+    decoding (temperature 0), so the override pins temperature to 0. Metal
+    (Darwin) or CUDA (Linux). See https://github.com/antirez/ds4 for details.
+  urls:
+    - https://huggingface.co/antirez/deepseek-v4-gguf
+  tags:
+    - deepseek
+    - ds4
+    - gguf
+    - llm
+    - chat
+  overrides:
+    backend: ds4
+    options:
+      - mtp_path:ds4flash-mtp.gguf
+      - mtp_draft:2
+    parameters:
+      model: ds4flash.gguf
+      temperature: 0
+  files:
+    - filename: ds4flash.gguf
+      sha256: 31598c67c8b8744d3bcebcd19aa62253c6dc43cef3b8adf9f593656c9e86fd8c
+      uri: huggingface://antirez/deepseek-v4-gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf
+    - filename: ds4flash-mtp.gguf
+      sha256: afd481ee689dce9037f70f39085fcdae5a5b096d521cdad43b19fa52bf8f4083
+      uri: huggingface://antirez/deepseek-v4-gguf/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf
+- name: deepseek-v4-pro-q2-ssd
+  description: |
+    DeepSeek V4 Pro (IQ2XXS GGUF, ~433 GB, imatrix-tuned) - only loadable via the
+    ds4 backend, with SSD streaming so the Pro-class model can be run on a 128 GB
+    machine. This is experimental and slow: it needs ~433 GB of free SSD plus
+    enough RAM for the resident weights, KV cache, and routed-expert cache, and
+    is best used with thinking off for inspection or occasional work. SSD
+    streaming is Metal (Darwin) only. See https://github.com/antirez/ds4.
+  urls:
+    - https://huggingface.co/antirez/deepseek-v4-gguf
+  tags:
+    - deepseek
+    - ds4
+    - gguf
+    - llm
+    - chat
+  overrides:
+    backend: ds4
+    options:
+      - ssd_streaming
+    parameters:
+      model: ds4pro.gguf
+  files:
+    - filename: ds4pro.gguf
+      sha256: a0314d9c0e16122cd60071079124a2d17185d317c55a8f95ecb3ed3506278a96
+      uri: huggingface://antirez/deepseek-v4-gguf/DeepSeek-V4-Pro-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-Instruct-imatrix.gguf
 - name: parakeet-cpp-tdt_ctc-110m
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
