@@ -37,6 +37,12 @@ type ModelConfig struct {
 	schema.PredictionOptions `yaml:"parameters,omitempty" json:"parameters,omitempty"`
 	Name                     string `yaml:"name,omitempty" json:"name,omitempty"`
 
+	// Alias, when set, makes this config a pure redirect: every request for
+	// Name is served by the model named here. All other fields are ignored.
+	// The target must be an existing, non-alias model (enforced at load and
+	// at create/swap time). See docs/content for Model Aliases.
+	Alias string `yaml:"alias,omitempty" json:"alias,omitempty"`
+
 	F16                 *bool               `yaml:"f16,omitempty" json:"f16,omitempty"`
 	Threads             *int                `yaml:"threads,omitempty" json:"threads,omitempty"`
 	Debug               *bool               `yaml:"debug,omitempty" json:"debug,omitempty"`
@@ -426,6 +432,10 @@ type RouterCandidate struct {
 func (c *ModelConfig) HasRouter() bool {
 	return len(c.Router.Candidates) > 0
 }
+
+// IsAlias reports whether this config is a pure redirect to another model.
+// Value receiver so it is callable on non-addressable config values too.
+func (c ModelConfig) IsAlias() bool { return c.Alias != "" }
 
 // @Description PII filtering configuration. PII redaction is per-model so
 // that local models don't pay the latency or behaviour change of regex
@@ -1147,106 +1157,21 @@ func (cfg *ModelConfig) SetDefaults(opts ...ConfigLoaderOption) {
 	// This ensures gallery-installed and runtime-loaded models get optimal parameters.
 	ApplyInferenceDefaults(cfg, cfg.Name, cfg.Model)
 
-	// https://github.com/ggerganov/llama.cpp/blob/75cd4c77292034ecec587ecb401366f57338f7c0/common/sampling.h#L22
-	defaultTopP := 0.95
-	defaultTopK := 40
-	defaultMinP := 0.0
-	defaultTemp := 0.9
-	// https://github.com/mudler/LocalAI/issues/2780
-	defaultMirostat := 0
-	defaultMirostatTAU := 5.0
-	defaultMirostatETA := 0.1
-	defaultTypicalP := 1.0
-	defaultTFZ := 1.0
-	defaultZero := 0
+	// Apply hardware-driven defaults (e.g. a larger physical batch on Blackwell).
+	// Uses the local GPU here; in distributed mode the router re-applies the same
+	// heuristics for the selected node's GPU before loading. Explicit config wins.
+	ApplyHardwareDefaults(cfg, localGPU())
+
+	// Apply serving-policy defaults (device-independent): cross-request prefix
+	// caching. Propagates to distributed nodes via the model options.
+	ApplyServingDefaults(cfg)
+
+	// Generic fallback defaults (sampling params + runtime flags), applied after
+	// the model-family / hardware / serving tiers above. Only fills unset values.
+	ApplyGenericDefaults(cfg)
 
 	trueV := true
 	falseV := false
-
-	if cfg.Seed == nil {
-		//  random number generator seed
-		defaultSeed := RAND_SEED
-		cfg.Seed = &defaultSeed
-	}
-
-	// top_k=40 is llama.cpp's sampling default and is wrong for backends whose
-	// native default differs (issue #6632). Only inject it for the llama.cpp
-	// family and the empty/auto backend; leave TopK nil for known non-llama
-	// backends (e.g. mlx, whose intended default is top_k=0) so the wire value
-	// is 0 rather than a silently-changed 40.
-	if cfg.TopK == nil && UsesLlamaSamplerDefaults(cfg.Backend) {
-		cfg.TopK = &defaultTopK
-	}
-
-	if cfg.MinP == nil {
-		cfg.MinP = &defaultMinP
-	}
-
-	if cfg.TypicalP == nil {
-		cfg.TypicalP = &defaultTypicalP
-	}
-
-	if cfg.TFZ == nil {
-		cfg.TFZ = &defaultTFZ
-	}
-
-	if cfg.MMap == nil {
-		// MMap is enabled by default
-
-		// Only exception is for Intel GPUs
-		if os.Getenv("XPU") != "" {
-			cfg.MMap = &falseV
-		} else {
-			cfg.MMap = &trueV
-		}
-	}
-
-	if cfg.MMlock == nil {
-		// MMlock is disabled by default
-		cfg.MMlock = &falseV
-	}
-
-	if cfg.TopP == nil {
-		cfg.TopP = &defaultTopP
-	}
-	if cfg.Temperature == nil {
-		cfg.Temperature = &defaultTemp
-	}
-
-	if cfg.Maxtokens == nil {
-		cfg.Maxtokens = &defaultZero
-	}
-
-	if cfg.Mirostat == nil {
-		cfg.Mirostat = &defaultMirostat
-	}
-
-	if cfg.MirostatETA == nil {
-		cfg.MirostatETA = &defaultMirostatETA
-	}
-
-	if cfg.MirostatTAU == nil {
-		cfg.MirostatTAU = &defaultMirostatTAU
-	}
-
-	if cfg.LowVRAM == nil {
-		cfg.LowVRAM = &falseV
-	}
-
-	if cfg.Embeddings == nil {
-		cfg.Embeddings = &falseV
-	}
-
-	if cfg.Reranking == nil {
-		cfg.Reranking = &falseV
-	}
-
-	if cfg.PromptCacheAll == nil {
-		// Match upstream llama.cpp's default (common/common.h: cache_prompt = true)
-		// and let cache_idle_slots / kv_unified actually do useful work; users can
-		// opt out with an explicit `prompt_cache_all: false` in the model YAML.
-		cfg.PromptCacheAll = &trueV
-	}
 
 	if threads == 0 {
 		// Threads can't be 0
@@ -1279,6 +1204,22 @@ func (cfg *ModelConfig) SetDefaults(opts ...ConfigLoaderOption) {
 }
 
 func (c *ModelConfig) Validate() (bool, error) {
+	// An alias is a pure redirect: validate only its own shape here. Target
+	// existence and the no-chain rule need the full config set, so the loader
+	// (load-time) and the create/swap endpoints enforce those.
+	if c.IsAlias() {
+		if c.Name == "" {
+			return false, fmt.Errorf("alias config requires a name")
+		}
+		if c.Alias == c.Name {
+			return false, fmt.Errorf("alias %q cannot point to itself", c.Name)
+		}
+		if c.Backend != "" || c.Model != "" {
+			return false, fmt.Errorf("alias config %q must not set backend or parameters.model: an alias is a pure redirect", c.Name)
+		}
+		return true, nil
+	}
+
 	downloadedFileNames := []string{}
 	for _, f := range c.DownloadFiles {
 		downloadedFileNames = append(downloadedFileNames, f.Filename)
