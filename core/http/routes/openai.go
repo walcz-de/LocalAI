@@ -16,7 +16,8 @@ import (
 
 func RegisterOpenAIRoutes(app *echo.Echo,
 	re *middleware.RequestExtractor,
-	application *application.Application) {
+	application *application.Application,
+) {
 	// openAI compatible API endpoint
 	traceMiddleware := middleware.TraceMiddleware(application)
 	usageMiddleware := middleware.UsageMiddleware(application.StatsRecorder(), application.FallbackUser())
@@ -42,7 +43,7 @@ func RegisterOpenAIRoutes(app *echo.Echo,
 	}
 
 	// chat
-	chatHandler := openai.ChatEndpoint(application.ModelConfigLoader(), application.ModelLoader(), application.TemplatesEvaluator(), application.ApplicationConfig(), natsClient, application.LocalAIAssistant(), application.PIIRedactor(), application.PIIEvents())
+	chatHandler := openai.ChatEndpoint(application.ModelConfigLoader(), application.ModelLoader(), application.TemplatesEvaluator(), application.ApplicationConfig(), natsClient, application.LocalAIAssistant())
 	chatMiddleware := []echo.MiddlewareFunc{
 		nodeHeaderMiddleware,
 		usageMiddleware,
@@ -87,9 +88,12 @@ func RegisterOpenAIRoutes(app *echo.Echo,
 		// router-model has slack.
 		middleware.AdmissionControl(application.AdmissionLimiter(), application.PIIEvents()),
 		// PII redaction runs before compression, so the summariser
-		// model never sees raw PII either. Per-model PII configs
-		// honour the RouteModel-resolved target.
-		pii.RequestMiddleware(application.PIIRedactor(), application.PIIEvents(), piiadapter.OpenAI(), application.FallbackUser()),
+		// model never sees raw PII either. It honours the RouteModel-
+		// resolved target via the NER + policy resolvers, so per-model
+		// PII configs apply to the routed model (e.g. a router fanout
+		// to claude-strict uses that model's pii block, not the
+		// router model's).
+		pii.RequestMiddleware(application.PIIRedactor(), application.PIIEvents(), piiadapter.OpenAI(), application.FallbackUser(), pii.WithNERResolver(application.PIINERResolver()), pii.WithPolicyResolver(application.PIIPolicyResolver())),
 		// CompressionMiddleware runs INNERMOST: it operates on the
 		// PII-redacted request and uses the served model's
 		// CompressionConfig, so routed candidates can opt-in to
@@ -115,12 +119,13 @@ func RegisterOpenAIRoutes(app *echo.Echo,
 				return next(c)
 			}
 		},
+		pii.RequestMiddleware(application.PIIRedactor(), application.PIIEvents(), piiadapter.OpenAICompletion(), application.FallbackUser(), pii.WithNERResolver(application.PIINERResolver()), pii.WithPolicyResolver(application.PIIPolicyResolver())),
 	}
 	app.POST("/v1/edits", editHandler, editMiddleware...)
 	app.POST("/edits", editHandler, editMiddleware...)
 
 	// completion
-	completionHandler := openai.CompletionEndpoint(application.ModelConfigLoader(), application.ModelLoader(), application.TemplatesEvaluator(), application.ApplicationConfig(), application.PIIRedactor(), application.PIIEvents())
+	completionHandler := openai.CompletionEndpoint(application.ModelConfigLoader(), application.ModelLoader(), application.TemplatesEvaluator(), application.ApplicationConfig())
 	completionMiddleware := []echo.MiddlewareFunc{
 		nodeHeaderMiddleware,
 		usageMiddleware,
@@ -136,6 +141,7 @@ func RegisterOpenAIRoutes(app *echo.Echo,
 				return next(c)
 			}
 		},
+		pii.RequestMiddleware(application.PIIRedactor(), application.PIIEvents(), piiadapter.OpenAICompletion(), application.FallbackUser(), pii.WithNERResolver(application.PIINERResolver()), pii.WithPolicyResolver(application.PIIPolicyResolver())),
 	}
 	app.POST("/v1/completions", completionHandler, completionMiddleware...)
 	app.POST("/completions", completionHandler, completionMiddleware...)
@@ -158,6 +164,7 @@ func RegisterOpenAIRoutes(app *echo.Echo,
 				return next(c)
 			}
 		},
+		pii.RequestMiddleware(application.PIIRedactor(), application.PIIEvents(), piiadapter.OpenAICompletion(), application.FallbackUser(), pii.WithNERResolver(application.PIINERResolver()), pii.WithPolicyResolver(application.PIIPolicyResolver())),
 	}
 	app.POST("/v1/embeddings", embeddingHandler, embeddingMiddleware...)
 	app.POST("/embeddings", embeddingHandler, embeddingMiddleware...)
