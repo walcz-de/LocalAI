@@ -1,4 +1,210 @@
 ---
+- name: "qwen3.6-35b-a3b-nvfp4-mtp"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/michaelw9999/Qwen3.6-35B-A3B-NVFP4-MTP-GGUF
+  description: |
+    # Qwen3.6-35B-A3B
+
+    [](https://chat.qwen.ai)
+
+    > [!Note]
+    > This repository contains model weights and configuration files for the post-trained model in the Hugging Face Transformers format.
+    >
+    > These artifacts are compatible with Hugging Face Transformers, vLLM, SGLang, KTransformers, etc.
+
+    Following the February release of the Qwen3.5 series, we're pleased to share the first open-weight variant of Qwen3.6. Built on direct feedback from the community, Qwen3.6 prioritizes stability and real-world utility, offering developers a more intuitive, responsive, and genuinely productive coding experience.
+
+    ## Qwen3.6 Highlights
+
+    This release delivers substantial upgrades, particularly in
+
+      - **Agentic Coding:** the model now handles frontend workflows and repository-level reasoning with greater fluency and precision.
+      - **Thinking Preservation:** we've introduced a new option to retain reasoning context from historical messages, streamlining iterative development and reducing overhead.
+
+    For more details, please refer to our blog post Qwen3.6-35B-A3B.
+
+    ## Model Overview
+
+    ...
+  tags:
+    - llm
+    - gguf
+    - qwen
+  icon: https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3.6/Figures/qwen3.6_35b_a3b_score.png
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      min_p: 0
+      model: llama-cpp/models/Qwen3.6-35B-A3B-NVFP4-MTP-GGUF/Qwen3.6-35B-A3B-NVFP4-MTP-TURBO.gguf
+      presence_penalty: 1.5
+      repeat_penalty: 1
+      temperature: 0.7
+      top_k: 20
+      top_p: 0.8
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Qwen3.6-35B-A3B-NVFP4-MTP-GGUF/Qwen3.6-35B-A3B-NVFP4-MTP-TURBO.gguf
+      sha256: f3d2fdc74e3ef19925ccbf794b04d7f6f11fb12eba7722b7749219d0cc5c36ed
+      uri: https://huggingface.co/michaelw9999/Qwen3.6-35B-A3B-NVFP4-MTP-GGUF/resolve/main/Qwen3.6-35B-A3B-NVFP4-MTP-TURBO.gguf
+- name: "qwopus3.6-27b-v2-mtp-nvfp4"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/michaelw9999/Qwopus3.6-27B-v2-MTP-NVFP4-GGUF
+  description: |
+    🪐 Qwopus3.6-27B-v2-MTP
+    MTP Release
+
+    Multi-Token Prediction reasoning model fine-tuned from Qwen3.6-27B
+
+    🧬 Trace Inversion & Negentropy
+    🧠 27B Parameters
+    ⚡ Speculative Decoding
+    🛠️ Coding / DevOps / Math
+
+    💡 What is Qwopus3.6-27B-v2-MTP?
+    🪐 Qwopus3.6-27B-v2-MTP is a speed-oriented reasoning release built on top of Qwen3.6-27B. It keeps the Qwopus line's focus on reconstructed reasoning traces, coding discipline, DevOps procedures, and mathematical derivations, while adding Multi-Token Prediction for faster generation. The goal is simple: preserve the depth and structure of a 27B reasoning model while making real interactive use noticeably faster.
+
+    ⚡ MTP DecodingAuxiliary future-token prediction improves throughput on long reasoning, code, math, and strict-format prompts.
+    🧩 Structured ReasoningInherits the Qwopus training recipe built around reconstructed step-by-step reasoning trajectories.
+    🧪 GB10 TestedValidated on a 30-question local benchmark across Logic, Coding, DevOps, Math, and Edge tasks.
+    🚀 Practical SpeedDesigned for workflows where strong answers matter, but waiting several extra minutes per task does not.
+
+    ...
+  tags:
+    - llm
+    - gguf
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/Qwopus3.6-27B-v2-MTP-NVFP4-GGUF/Qwopus3.6-27B-v2-MTP-NVFP4-GGUF.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Qwopus3.6-27B-v2-MTP-NVFP4-GGUF/Qwopus3.6-27B-v2-MTP-NVFP4-GGUF.gguf
+      sha256: 2a0a36fd10374c2a85356121c7c315bda725c7eaca0b3ae14838567629c6924a
+      uri: https://huggingface.co/michaelw9999/Qwopus3.6-27B-v2-MTP-NVFP4-GGUF/resolve/main/Qwopus3.6-27B-v2-MTP-NVFP4-GGUF.gguf
+- name: "qwopus3.6-27b-coder-mtp-nvfp4"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/michaelw9999/Qwopus3.6-27B-Coder-MTP-NVFP4-GGUF
+  description: |
+    🪐 Qwopus-3.6-27B-Coder
+    Coder SFT Release
+
+    Agentic Coding &amp; Tool-Use Reasoning Model Fine-Tuned on Qwopus3.6-27B-v2
+
+    🧬 Trace Inversion & Negentropy
+    🧠 27B Dense Model
+    ⚡ Agentic Coding
+    🛠️ Tool Calling & Agent
+    🏆 SWE-bench Verified: 67.0% (off-thinking)
+
+    💡 What is Qwopus-3.6-27B-Coder?
+    🪐 Qwopus-3.6-27B-Coder is a reasoning-enhanced agentic coding model built on top of Qwopus3.6-27B-v2. It inherits the powerful reasoning foundation of the v2 base — which achieved 87.43% MMLU-Pro (300ex) and 75.25% SWE-bench Verified — and further specializes it for agentic code generation, structured tool calling, debugging, and instruction-following in developer workflows. The model is designed to excel at repository-level coding tasks, multi-turn tool orchestration, and complex logical reasoning under realistic agent environments.
+
+    🧩 Agentic Coding
+    Optimized for repository-level coding, debugging, patch generation, and structured multi-step development workflows.
+
+    🛠️ Tool Calling
+    Learns from real agent trajectories with tool definitions, tool calls, and environment feedback for robust multi-turn execution.
+
+    ...
+  tags:
+    - llm
+    - gguf
+  icon: https://cdn-uploads.huggingface.co/production/uploads/66309bd090589b7c65950665/sGQKmrMc6L6guMoaB5_Y2.png
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/Qwopus3.6-27B-Coder-MTP-NVFP4-GGUF/Qwopus3.6-27B-Coder-MTP-NVFP4-TURBO.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Qwopus3.6-27B-Coder-MTP-NVFP4-GGUF/Qwopus3.6-27B-Coder-MTP-NVFP4-TURBO.gguf
+      sha256: 1c163f0e1f29485d432b466b9e5e0593ea9b10c5a62cf3eb71b77fcfe41db46c
+      uri: https://huggingface.co/michaelw9999/Qwopus3.6-27B-Coder-MTP-NVFP4-GGUF/resolve/main/Qwopus3.6-27B-Coder-MTP-NVFP4-TURBO.gguf
+- name: "qwen3.6-27b-nvfp4-mtp"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/michaelw9999/Qwen3.6-27B-NVFP4-MTP-GGUF
+  description: |
+    # Qwen3.6-27B
+
+    [](https://chat.qwen.ai)
+
+    > [!Note]
+    > This repository contains model weights and configuration files for the post-trained model in the Hugging Face Transformers format.
+    >
+    > These artifacts are compatible with Hugging Face Transformers, vLLM, SGLang, KTransformers, etc.
+
+    Following the February release of the Qwen3.5 series, we're pleased to share the first open-weight variant of Qwen3.6. Built on direct feedback from the community, Qwen3.6 prioritizes stability and real-world utility, offering developers a more intuitive, responsive, and genuinely productive coding experience.
+
+    ## Qwen3.6 Highlights
+
+    This release delivers substantial upgrades, particularly in
+
+      - **Agentic Coding:** the model now handles frontend workflows and repository-level reasoning with greater fluency and precision.
+      - **Thinking Preservation:** we've introduced a new option to retain reasoning context from historical messages, streamlining iterative development and reducing overhead.
+
+    For more details, please refer to our blog post Qwen3.6-27B.
+
+    ## Model Overview
+
+    ...
+  tags:
+    - llm
+    - gguf
+  icon: https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3.6/Figures/qwen3.6_27b_score.png
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      min_p: 0
+      model: llama-cpp/models/Qwen3.6-27B-NVFP4-MTP-GGUF/Qwen3.6-27B-NVFP4-MTP-GGUF.gguf
+      presence_penalty: 1.5
+      repeat_penalty: 1
+      temperature: 0.7
+      top_k: 20
+      top_p: 0.8
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Qwen3.6-27B-NVFP4-MTP-GGUF/Qwen3.6-27B-NVFP4-MTP-GGUF.gguf
+      sha256: d088e57e8c35ff62c2a420cb888dad3fd53c8db3ed9ead4286bd383224f81b50
+      uri: https://huggingface.co/michaelw9999/Qwen3.6-27B-NVFP4-MTP-GGUF/resolve/main/Qwen3.6-27B-NVFP4-MTP-GGUF.gguf
 - name: "gemma-4-12b-agentic-fable5-composer2.5-v2-3.5x-tau2"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -2871,6 +3077,190 @@
       - transcript
     parameters:
       model: tiny
+- name: ced-base-f16
+  url: github:mudler/LocalAI/gallery/ced.yaml@master
+  urls:
+    - https://huggingface.co/mudler/ced-gguf
+    - https://huggingface.co/mispeech/ced-base
+  description: |
+    CED (Consistent Ensemble Distillation, Xiaomi) is a sound-event classifier that tags everyday sounds (baby cry, footsteps, glass breaking, alarms, dog bark, ...) into the 527-class AudioSet ontology. This is the f16 GGUF for the ced backend (a standalone C++/ggml port). Recommended default: fastest on CPU and near-lossless. Use POST /v1/audio/classification, or the realtime websocket API for live recognition.
+  license: apache-2.0
+  tags:
+    - audio-classification
+    - sound-event-detection
+    - audio-tagging
+    - audioset
+    - ced
+    - gguf
+    - f16
+  overrides:
+    parameters:
+      model: ced-base-f16.gguf
+  files:
+    - filename: ced-base-f16.gguf
+      sha256: 5c058d9f7b737167195fa54eae4a2ae17658ac2c0a8073f7f116ba006b2ab32c
+      uri: https://huggingface.co/mudler/ced-gguf/resolve/main/ced-base-f16.gguf
+- name: ced-base-q8
+  url: github:mudler/LocalAI/gallery/ced.yaml@master
+  urls:
+    - https://huggingface.co/mudler/ced-gguf
+    - https://huggingface.co/mispeech/ced-base
+  description: |
+    CED (Consistent Ensemble Distillation, Xiaomi) sound-event classifier over the 527-class AudioSet ontology (baby cry, footsteps, glass breaking, alarms, dog bark, ...). This is the q8_0 GGUF for the ced backend: smallest footprint (~88 MB, ~6.5x less memory than the PyTorch reference) and near-lossless (identical top-5 tags). Use POST /v1/audio/classification, or the realtime websocket API for live recognition.
+  license: apache-2.0
+  tags:
+    - audio-classification
+    - sound-event-detection
+    - audio-tagging
+    - audioset
+    - ced
+    - gguf
+    - q8
+  overrides:
+    parameters:
+      model: ced-base-q8_0.gguf
+  files:
+    - filename: ced-base-q8_0.gguf
+      sha256: bd34a7710169f0047fea17267965d211f967828ab25ba6fb9d3768481393f6e2
+      uri: https://huggingface.co/mudler/ced-gguf/resolve/main/ced-base-q8_0.gguf
+- name: ced-tiny-f16
+  url: github:mudler/LocalAI/gallery/ced.yaml@master
+  urls:
+    - https://huggingface.co/mudler/ced-gguf
+    - https://huggingface.co/mispeech/ced-tiny
+  description: |
+    CED-tiny (5.5M params, Pi-class / edge) sound-event classifier over the 527-class AudioSet ontology (baby cry, footsteps, glass breaking, alarms, dog bark, ...). f16 GGUF for the ced backend (recommended (fastest on CPU)). Use POST /v1/audio/classification, or the realtime websocket API for live recognition.
+  license: apache-2.0
+  tags:
+    - audio-classification
+    - sound-event-detection
+    - audio-tagging
+    - audioset
+    - ced
+    - gguf
+    - f16
+  overrides:
+    parameters:
+      model: ced-tiny-f16.gguf
+  files:
+    - filename: ced-tiny-f16.gguf
+      sha256: af8b81c67bae50bfca4ea83dbba77b3bae4fa6180d36c17d6877f7700aeeb77b
+      uri: https://huggingface.co/mudler/ced-gguf/resolve/main/ced-tiny-f16.gguf
+- name: ced-tiny-q8
+  url: github:mudler/LocalAI/gallery/ced.yaml@master
+  urls:
+    - https://huggingface.co/mudler/ced-gguf
+    - https://huggingface.co/mispeech/ced-tiny
+  description: |
+    CED-tiny (5.5M params, Pi-class / edge) sound-event classifier over the 527-class AudioSet ontology (baby cry, footsteps, glass breaking, alarms, dog bark, ...). q8_0 GGUF for the ced backend (smallest footprint, near-lossless). Use POST /v1/audio/classification, or the realtime websocket API for live recognition.
+  license: apache-2.0
+  tags:
+    - audio-classification
+    - sound-event-detection
+    - audio-tagging
+    - audioset
+    - ced
+    - gguf
+    - q8
+  overrides:
+    parameters:
+      model: ced-tiny-q8_0.gguf
+  files:
+    - filename: ced-tiny-q8_0.gguf
+      sha256: 48bee4e2fc3cc85d7806e03471db24e77fda6c2a2e81ffe9ef67caebaf2bd674
+      uri: https://huggingface.co/mudler/ced-gguf/resolve/main/ced-tiny-q8_0.gguf
+- name: ced-mini-f16
+  url: github:mudler/LocalAI/gallery/ced.yaml@master
+  urls:
+    - https://huggingface.co/mudler/ced-gguf
+    - https://huggingface.co/mispeech/ced-mini
+  description: |
+    CED-mini (9.6M params, low-power) sound-event classifier over the 527-class AudioSet ontology (baby cry, footsteps, glass breaking, alarms, dog bark, ...). f16 GGUF for the ced backend (recommended (fastest on CPU)). Use POST /v1/audio/classification, or the realtime websocket API for live recognition.
+  license: apache-2.0
+  tags:
+    - audio-classification
+    - sound-event-detection
+    - audio-tagging
+    - audioset
+    - ced
+    - gguf
+    - f16
+  overrides:
+    parameters:
+      model: ced-mini-f16.gguf
+  files:
+    - filename: ced-mini-f16.gguf
+      sha256: 3c6a8936c77312f07a9ecb7b4bbbcb1f93ad137920ca6656bae9306571fb0c03
+      uri: https://huggingface.co/mudler/ced-gguf/resolve/main/ced-mini-f16.gguf
+- name: ced-mini-q8
+  url: github:mudler/LocalAI/gallery/ced.yaml@master
+  urls:
+    - https://huggingface.co/mudler/ced-gguf
+    - https://huggingface.co/mispeech/ced-mini
+  description: |
+    CED-mini (9.6M params, low-power) sound-event classifier over the 527-class AudioSet ontology (baby cry, footsteps, glass breaking, alarms, dog bark, ...). q8_0 GGUF for the ced backend (smallest footprint, near-lossless). Use POST /v1/audio/classification, or the realtime websocket API for live recognition.
+  license: apache-2.0
+  tags:
+    - audio-classification
+    - sound-event-detection
+    - audio-tagging
+    - audioset
+    - ced
+    - gguf
+    - q8
+  overrides:
+    parameters:
+      model: ced-mini-q8_0.gguf
+  files:
+    - filename: ced-mini-q8_0.gguf
+      sha256: 7062cef9ca31459f339ce24a5914f3b65bde76ffd9ca4fc924a040327ff292bd
+      uri: https://huggingface.co/mudler/ced-gguf/resolve/main/ced-mini-q8_0.gguf
+- name: ced-small-f16
+  url: github:mudler/LocalAI/gallery/ced.yaml@master
+  urls:
+    - https://huggingface.co/mudler/ced-gguf
+    - https://huggingface.co/mispeech/ced-small
+  description: |
+    CED-small (22M params, balanced size/accuracy) sound-event classifier over the 527-class AudioSet ontology (baby cry, footsteps, glass breaking, alarms, dog bark, ...). f16 GGUF for the ced backend (recommended (fastest on CPU)). Use POST /v1/audio/classification, or the realtime websocket API for live recognition.
+  license: apache-2.0
+  tags:
+    - audio-classification
+    - sound-event-detection
+    - audio-tagging
+    - audioset
+    - ced
+    - gguf
+    - f16
+  overrides:
+    parameters:
+      model: ced-small-f16.gguf
+  files:
+    - filename: ced-small-f16.gguf
+      sha256: c391ed8697a1b08d7c1a463e4940a5c3a2f670e0544ab0d8ee23b544583602a8
+      uri: https://huggingface.co/mudler/ced-gguf/resolve/main/ced-small-f16.gguf
+- name: ced-small-q8
+  url: github:mudler/LocalAI/gallery/ced.yaml@master
+  urls:
+    - https://huggingface.co/mudler/ced-gguf
+    - https://huggingface.co/mispeech/ced-small
+  description: |
+    CED-small (22M params, balanced size/accuracy) sound-event classifier over the 527-class AudioSet ontology (baby cry, footsteps, glass breaking, alarms, dog bark, ...). q8_0 GGUF for the ced backend (smallest footprint, near-lossless). Use POST /v1/audio/classification, or the realtime websocket API for live recognition.
+  license: apache-2.0
+  tags:
+    - audio-classification
+    - sound-event-detection
+    - audio-tagging
+    - audioset
+    - ced
+    - gguf
+    - q8
+  overrides:
+    parameters:
+      model: ced-small-q8_0.gguf
+  files:
+    - filename: ced-small-q8_0.gguf
+      sha256: 888275fe43491cf832fb7b8125eccba34d1120745166f40cc12e93b79dea8efe
+      uri: https://huggingface.co/mudler/ced-gguf/resolve/main/ced-small-q8_0.gguf
 - name: omnilingual-0.3b-ctc-q8-sherpa
   url: github:mudler/LocalAI/gallery/sherpa-onnx-asr.yaml@master
   urls:
