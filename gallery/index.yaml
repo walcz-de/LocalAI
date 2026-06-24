@@ -1,4 +1,225 @@
 ---
+- name: "lfm2.5-1.2b-instruct"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF
+  description: |
+    Try LFM • Docs • LEAP • Discord
+
+    # LFM2.5-1.2B-Instruct
+
+    LFM2.5 is a new family of hybrid models designed for **on-device deployment**. It builds on the LFM2 architecture with extended pre-training and reinforcement learning.
+
+      - **Best-in-class performance**: A 1.2B model rivaling much larger models, bringing high-quality AI to your pocket.
+      - **Fast edge inference**: 239 tok/s decode on AMD CPU, 82 tok/s on mobile NPU. Runs under 1GB of memory with day-one support for llama.cpp, MLX, and vLLM.
+      - **Scaled training**: Extended pre-training from 10T to 28T tokens and large-scale multi-stage reinforcement learning.
+
+    Find more information about LFM2.5 in our blog post.
+
+    ## 🗒️ Model Details
+
+    LFM2.5-1.2B-Instruct is a general-purpose text-only model with the following features:
+
+    ...
+  license: "other"
+  tags:
+    - llm
+    - gguf
+  icon: https://cdn-uploads.huggingface.co/production/uploads/61b8e2ba285851687028d395/dxnYF2fuLpulismtFSGFi.png
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      min_p: 0.15
+      model: llama-cpp/models/LFM2.5-1.2B-Instruct-GGUF/LFM2.5-1.2B-Instruct-Q4_K_M.gguf
+      repeat_penalty: 1.05
+      temperature: 0.1
+      top_k: 50
+      top_p: 0.1
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/LFM2.5-1.2B-Instruct-GGUF/LFM2.5-1.2B-Instruct-Q4_K_M.gguf
+      sha256: b1b3de114215d9507409a662a501a631095a479a419584e8a2ded6304b19b4f5
+      uri: https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF/resolve/main/LFM2.5-1.2B-Instruct-Q4_K_M.gguf
+- name: "qwopus3.6-27b-coder-compat-mtp"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/Jackrong/Qwopus3.6-27B-Coder-Compat-MTP-GGUF
+  description: "\U0001FA90 Qwopus-3.6-27B-Coder\nCoder SFT Release\n\nAgentic Coding &amp; Tool-Use Reasoning Model Fine-Tuned on Qwopus3.6-27B-v2\n\n\U0001F9EC Trace Inversion & Negentropy\n\U0001F9E0 27B Dense Model\n⚡ Agentic Coding\n\U0001F6E0️ Tool Calling & Agent\n\U0001F3C6 SWE-bench Verified: 67.0% (off-thinking)\n\n\U0001F4A1 What is Qwopus-3.6-27B-Coder?\n\U0001FA90 Qwopus-3.6-27B-Coder is a reasoning-enhanced agentic coding model built on top of Qwopus3.6-27B-v2. It inherits the powerful reasoning foundation of the v2 base — which achieved 87.43% MMLU-Pro and 75.25% SWE-bench Verified — and further specializes it for agentic code generation, structured tool calling, debugging, and instruction-following in developer workflows. The model is designed to excel at repository-level coding tasks, multi-turn tool orchestration, and complex logical reasoning under realistic agent environments.\n\n\U0001F9E9 Agentic Coding\nOptimized for repository-level coding, debugging, patch generation, and structured multi-step development workflows.\n\n\U0001F6E0️ Tool Calling\nLearns from real agent trajectories with tool definitions, tool calls, and environment feedback for robust multi-turn execution.\n\n...\n"
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+    - vision
+    - multimodal
+    - reasoning
+  icon: https://cdn-uploads.huggingface.co/production/uploads/66309bd090589b7c65950665/sGQKmrMc6L6guMoaB5_Y2.png
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    mmproj: llama-cpp/mmproj/Qwopus3.6-27B-Coder-Compat-MTP-GGUF/mmproj-F32.gguf
+    options:
+      - use_jinja:true
+      - spec_type:draft-mtp
+      - spec_n_max:6
+      - spec_p_min:0.75
+    parameters:
+      model: llama-cpp/models/Qwopus3.6-27B-Coder-Compat-MTP-GGUF/Qwopus3.6-27B-Coder-Compat-MTP-Q4_K_M.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Qwopus3.6-27B-Coder-Compat-MTP-GGUF/Qwopus3.6-27B-Coder-Compat-MTP-Q4_K_M.gguf
+      sha256: f893632170124da60e159b7bcc9d91e1cda3014b2c6b8ad9c6cde38a1fcd2f6f
+      uri: https://huggingface.co/Jackrong/Qwopus3.6-27B-Coder-Compat-MTP-GGUF/resolve/main/Qwopus3.6-27B-Coder-Compat-MTP-Q4_K_M.gguf
+    - filename: llama-cpp/mmproj/Qwopus3.6-27B-Coder-Compat-MTP-GGUF/mmproj-F32.gguf
+      sha256: 32f7ea0600c07272547da401d460f8abbd980f3a57b69d6df87be0e2505e0b9c
+      uri: https://huggingface.co/Jackrong/Qwopus3.6-27B-Coder-Compat-MTP-GGUF/resolve/main/mmproj-F32.gguf
+- name: "kimi-k2.7-code"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/unsloth/Kimi-K2.7-Code-GGUF
+  description: |
+    ## 1. Model Introduction
+
+    Kimi K2.7 Code is a coding-focused agentic model built upon Kimi K2.6. With substantial improvements on real-world long-horizon coding tasks, it strengthens end-to-end task completion across complex software engineering workflows while improving token efficiency, reducing thinking-token usage by approximately 30% compared with Kimi K2.6.
+
+    ## 2. Model Summary
+
+    ## 3. Evaluation Results
+
+    Benchmark
+    Kimi K2.6
+    Kimi K2.7 Code
+    GPT-5.5
+    Claude Opus 4.8
+
+    Coding
+
+    Kimi Code Bench v2
+    50.9
+    62.0
+    69.0
+    67.4
+
+    Program Bench
+    48.3
+    53.6
+    69.1
+    63.8
+
+    MLS Bench Lite
+    26.7
+    35.1
+    35.5
+    42.8
+
+    Agentic
+
+    Kimi Claw 24/7 Bench
+    42.9
+    46.9
+    52.8
+    50.4
+
+    MCP Atlas
+    69.4
+    76.0
+    79.4
+    81.3
+
+    MCP Mark Verified
+    72.8
+    81.1
+    92.9
+    76.4
+
+    Footnotes
+
+    ...
+  license: "other"
+  tags:
+    - llm
+    - gguf
+  icon: https://huggingface.co/moonshotai/Kimi-K2.7-Code/resolve/main/figures/kimi-logo.png
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    mmproj: llama-cpp/mmproj/Kimi-K2.7-Code-GGUF/mmproj-F32.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      min_p: 0.01
+      model: llama-cpp/models/Kimi-K2.7-Code-GGUF/Kimi-K2.7-Code-UD-Q8_K_XL-00001-of-00014.gguf
+      repeat_penalty: 1
+      temperature: 0.6
+      top_k: -1
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Kimi-K2.7-Code-GGUF/Kimi-K2.7-Code-UD-Q8_K_XL-00001-of-00014.gguf
+      sha256: 65f0aca336f876902323a90e2aff32cac76d071b2cdd818c6a8d78be8fc2c680
+      uri: https://huggingface.co/unsloth/Kimi-K2.7-Code-GGUF/resolve/main/UD-Q8_K_XL/Kimi-K2.7-Code-UD-Q8_K_XL-00001-of-00014.gguf
+    - filename: llama-cpp/models/Kimi-K2.7-Code-GGUF/Kimi-K2.7-Code-UD-Q8_K_XL-00002-of-00014.gguf
+      sha256: 40f4416c130827a11502778891f4ef95b2144db90f51d63aa3548d0952a39683
+      uri: https://huggingface.co/unsloth/Kimi-K2.7-Code-GGUF/resolve/main/UD-Q8_K_XL/Kimi-K2.7-Code-UD-Q8_K_XL-00002-of-00014.gguf
+    - filename: llama-cpp/models/Kimi-K2.7-Code-GGUF/Kimi-K2.7-Code-UD-Q8_K_XL-00003-of-00014.gguf
+      sha256: ba2ba0b5168784ace7c752ecadfc3631279b2bb023824cb0fe9e2dab3dd28f22
+      uri: https://huggingface.co/unsloth/Kimi-K2.7-Code-GGUF/resolve/main/UD-Q8_K_XL/Kimi-K2.7-Code-UD-Q8_K_XL-00003-of-00014.gguf
+    - filename: llama-cpp/models/Kimi-K2.7-Code-GGUF/Kimi-K2.7-Code-UD-Q8_K_XL-00004-of-00014.gguf
+      sha256: 10298a6c98b13ef49be286fefbea8663e16473fb69bbeabe153bc80c60ae116e
+      uri: https://huggingface.co/unsloth/Kimi-K2.7-Code-GGUF/resolve/main/UD-Q8_K_XL/Kimi-K2.7-Code-UD-Q8_K_XL-00004-of-00014.gguf
+    - filename: llama-cpp/models/Kimi-K2.7-Code-GGUF/Kimi-K2.7-Code-UD-Q8_K_XL-00005-of-00014.gguf
+      sha256: 8e9e4c8e35d34fc4fef6bfb65a715ad7defbd196970d833c1df6924d701c88b3
+      uri: https://huggingface.co/unsloth/Kimi-K2.7-Code-GGUF/resolve/main/UD-Q8_K_XL/Kimi-K2.7-Code-UD-Q8_K_XL-00005-of-00014.gguf
+    - filename: llama-cpp/models/Kimi-K2.7-Code-GGUF/Kimi-K2.7-Code-UD-Q8_K_XL-00006-of-00014.gguf
+      sha256: ccff6e7f299742f82cf6f51a871e3eb3167511efaee967477cc8387f54d16442
+      uri: https://huggingface.co/unsloth/Kimi-K2.7-Code-GGUF/resolve/main/UD-Q8_K_XL/Kimi-K2.7-Code-UD-Q8_K_XL-00006-of-00014.gguf
+    - filename: llama-cpp/models/Kimi-K2.7-Code-GGUF/Kimi-K2.7-Code-UD-Q8_K_XL-00007-of-00014.gguf
+      sha256: 1a3b639633a2d22f71156a9f643ded2329cdd969cc21177b644b5741bac1af8e
+      uri: https://huggingface.co/unsloth/Kimi-K2.7-Code-GGUF/resolve/main/UD-Q8_K_XL/Kimi-K2.7-Code-UD-Q8_K_XL-00007-of-00014.gguf
+    - filename: llama-cpp/models/Kimi-K2.7-Code-GGUF/Kimi-K2.7-Code-UD-Q8_K_XL-00008-of-00014.gguf
+      sha256: bde28f682a1eab973538b2102007d952f37a13c1f7d55e2ed99177445ddc4282
+      uri: https://huggingface.co/unsloth/Kimi-K2.7-Code-GGUF/resolve/main/UD-Q8_K_XL/Kimi-K2.7-Code-UD-Q8_K_XL-00008-of-00014.gguf
+    - filename: llama-cpp/models/Kimi-K2.7-Code-GGUF/Kimi-K2.7-Code-UD-Q8_K_XL-00009-of-00014.gguf
+      sha256: b6a23a95b61e100f7593fa75e2363966323fa767b7e4fdf45d963b59e8fdc69f
+      uri: https://huggingface.co/unsloth/Kimi-K2.7-Code-GGUF/resolve/main/UD-Q8_K_XL/Kimi-K2.7-Code-UD-Q8_K_XL-00009-of-00014.gguf
+    - filename: llama-cpp/models/Kimi-K2.7-Code-GGUF/Kimi-K2.7-Code-UD-Q8_K_XL-00010-of-00014.gguf
+      sha256: fb10231c2e6d76921d40f22690f4aa08a8090c708edeaf7e581abafc24d3b25c
+      uri: https://huggingface.co/unsloth/Kimi-K2.7-Code-GGUF/resolve/main/UD-Q8_K_XL/Kimi-K2.7-Code-UD-Q8_K_XL-00010-of-00014.gguf
+    - filename: llama-cpp/models/Kimi-K2.7-Code-GGUF/Kimi-K2.7-Code-UD-Q8_K_XL-00011-of-00014.gguf
+      sha256: d2290be7ed1a22ac1f9f8a4813389689e075ce2ab8abc3aaaa1157a3cb1462d8
+      uri: https://huggingface.co/unsloth/Kimi-K2.7-Code-GGUF/resolve/main/UD-Q8_K_XL/Kimi-K2.7-Code-UD-Q8_K_XL-00011-of-00014.gguf
+    - filename: llama-cpp/models/Kimi-K2.7-Code-GGUF/Kimi-K2.7-Code-UD-Q8_K_XL-00012-of-00014.gguf
+      sha256: ce0d028314aa3fc783082dbca097e1055d69686a17ab8306574e2949568f26a5
+      uri: https://huggingface.co/unsloth/Kimi-K2.7-Code-GGUF/resolve/main/UD-Q8_K_XL/Kimi-K2.7-Code-UD-Q8_K_XL-00012-of-00014.gguf
+    - filename: llama-cpp/models/Kimi-K2.7-Code-GGUF/Kimi-K2.7-Code-UD-Q8_K_XL-00013-of-00014.gguf
+      sha256: 217864ce63a1d130ab39dcb0996b6097e1aa78eb896e38efaefdbbac3a00b7ec
+      uri: https://huggingface.co/unsloth/Kimi-K2.7-Code-GGUF/resolve/main/UD-Q8_K_XL/Kimi-K2.7-Code-UD-Q8_K_XL-00013-of-00014.gguf
+    - filename: llama-cpp/models/Kimi-K2.7-Code-GGUF/Kimi-K2.7-Code-UD-Q8_K_XL-00014-of-00014.gguf
+      sha256: eb7582ad7066c5eaa01bde95acb00b4ad9cd7b07cd50a6cf5c9ee427258bc9dd
+      uri: https://huggingface.co/unsloth/Kimi-K2.7-Code-GGUF/resolve/main/UD-Q8_K_XL/Kimi-K2.7-Code-UD-Q8_K_XL-00014-of-00014.gguf
+    - filename: llama-cpp/mmproj/Kimi-K2.7-Code-GGUF/mmproj-F32.gguf
+      sha256: b2cc50c8c13fe70fc4968a83332f31e9007ea09ebb9ae91d46a4e4cd2a3053cd
+      uri: https://huggingface.co/unsloth/Kimi-K2.7-Code-GGUF/resolve/main/mmproj-F32.gguf
 - name: "qwythos-9b-claude-mythos-5-1m"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -49,33 +270,7 @@
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
     - https://huggingface.co/unsloth/GLM-5.2-GGUF
-  description: |
-    # GLM-5.2
-
-    👋 Join our WeChat or Discord community.
-
-    📖 Check out the GLM-5.2 blog and GLM-5 Technical report.
-
-    📍 Use GLM-5.2 API services on Z.ai API Platform.
-
-    🔜 Try GLM-5.2 here.
-
-    [Paper]
-    [GitHub]
-
-    ## Introduction
-
-    We're introducing GLM-5.2, our latest flagship model for long-horizon tasks. It marks a substantial leap in long-horizon task capability over its predecessor GLM-5.1 and, for the first time, delivers that capability on a **solid 1M-token context**. GLM-5.2's new capabilities include:
-      - **Solid 1M Context:** A solid 1M-token context that stably sustains long-horizon work
-      - **Advanced Coding with Flexible Effort**: Stronger coding capabilities with multiple thinking effort levels to balance performance and latency
-      - **Improved Architecture**: We propose IndexShare, which reuses the same indexer across every four sparse attention layers, reducing per-token FLOPs by 2.9× at a 1M context length. We also improve GLM-5.2’s MTP layer for speculative decoding, increasing the acceptance length by up to 20%
-      - **Pure Open**: An MIT open-source license — no regional limits, technical access without borders
-
-    ## Benchmark
-
-    ## Serve GLM-5.2 Locally
-
-    ...
+  description: "# GLM-5.2\n\n\U0001F44B Join our WeChat or Discord community.\n\n\U0001F4D6 Check out the GLM-5.2 blog and GLM-5 Technical report.\n\n\U0001F4CD Use GLM-5.2 API services on Z.ai API Platform.\n\n\U0001F51C Try GLM-5.2 here.\n\n[Paper]\n[GitHub]\n\n## Introduction\n\nWe're introducing GLM-5.2, our latest flagship model for long-horizon tasks. It marks a substantial leap in long-horizon task capability over its predecessor GLM-5.1 and, for the first time, delivers that capability on a **solid 1M-token context**. GLM-5.2's new capabilities include:\n  - **Solid 1M Context:** A solid 1M-token context that stably sustains long-horizon work\n  - **Advanced Coding with Flexible Effort**: Stronger coding capabilities with multiple thinking effort levels to balance performance and latency\n  - **Improved Architecture**: We propose IndexShare, which reuses the same indexer across every four sparse attention layers, reducing per-token FLOPs by 2.9× at a 1M context length. We also improve GLM-5.2’s MTP layer for speculative decoding, increasing the acceptance length by up to 20%\n  - **Pure Open**: An MIT open-source license — no regional limits, technical access without borders\n\n## Benchmark\n\n## Serve GLM-5.2 Locally\n\n...\n"
   license: "mit"
   tags:
     - llm
@@ -198,26 +393,7 @@
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
     - https://huggingface.co/michaelw9999/Qwopus3.6-27B-v2-MTP-NVFP4-GGUF
-  description: |
-    🪐 Qwopus3.6-27B-v2-MTP
-    MTP Release
-
-    Multi-Token Prediction reasoning model fine-tuned from Qwen3.6-27B
-
-    🧬 Trace Inversion & Negentropy
-    🧠 27B Parameters
-    ⚡ Speculative Decoding
-    🛠️ Coding / DevOps / Math
-
-    💡 What is Qwopus3.6-27B-v2-MTP?
-    🪐 Qwopus3.6-27B-v2-MTP is a speed-oriented reasoning release built on top of Qwen3.6-27B. It keeps the Qwopus line's focus on reconstructed reasoning traces, coding discipline, DevOps procedures, and mathematical derivations, while adding Multi-Token Prediction for faster generation. The goal is simple: preserve the depth and structure of a 27B reasoning model while making real interactive use noticeably faster.
-
-    ⚡ MTP DecodingAuxiliary future-token prediction improves throughput on long reasoning, code, math, and strict-format prompts.
-    🧩 Structured ReasoningInherits the Qwopus training recipe built around reconstructed step-by-step reasoning trajectories.
-    🧪 GB10 TestedValidated on a 30-question local benchmark across Logic, Coding, DevOps, Math, and Edge tasks.
-    🚀 Practical SpeedDesigned for workflows where strong answers matter, but waiting several extra minutes per task does not.
-
-    ...
+  description: "\U0001FA90 Qwopus3.6-27B-v2-MTP\nMTP Release\n\nMulti-Token Prediction reasoning model fine-tuned from Qwen3.6-27B\n\n\U0001F9EC Trace Inversion & Negentropy\n\U0001F9E0 27B Parameters\n⚡ Speculative Decoding\n\U0001F6E0️ Coding / DevOps / Math\n\n\U0001F4A1 What is Qwopus3.6-27B-v2-MTP?\n\U0001FA90 Qwopus3.6-27B-v2-MTP is a speed-oriented reasoning release built on top of Qwen3.6-27B. It keeps the Qwopus line's focus on reconstructed reasoning traces, coding discipline, DevOps procedures, and mathematical derivations, while adding Multi-Token Prediction for faster generation. The goal is simple: preserve the depth and structure of a 27B reasoning model while making real interactive use noticeably faster.\n\n⚡ MTP DecodingAuxiliary future-token prediction improves throughput on long reasoning, code, math, and strict-format prompts.\n\U0001F9E9 Structured ReasoningInherits the Qwopus training recipe built around reconstructed step-by-step reasoning trajectories.\n\U0001F9EA GB10 TestedValidated on a 30-question local benchmark across Logic, Coding, DevOps, Math, and Edge tasks.\n\U0001F680 Practical SpeedDesigned for workflows where strong answers matter, but waiting several extra minutes per task does not.\n\n...\n"
   tags:
     - llm
     - gguf
@@ -243,28 +419,7 @@
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
     - https://huggingface.co/michaelw9999/Qwopus3.6-27B-Coder-MTP-NVFP4-GGUF
-  description: |
-    🪐 Qwopus-3.6-27B-Coder
-    Coder SFT Release
-
-    Agentic Coding &amp; Tool-Use Reasoning Model Fine-Tuned on Qwopus3.6-27B-v2
-
-    🧬 Trace Inversion & Negentropy
-    🧠 27B Dense Model
-    ⚡ Agentic Coding
-    🛠️ Tool Calling & Agent
-    🏆 SWE-bench Verified: 67.0% (off-thinking)
-
-    💡 What is Qwopus-3.6-27B-Coder?
-    🪐 Qwopus-3.6-27B-Coder is a reasoning-enhanced agentic coding model built on top of Qwopus3.6-27B-v2. It inherits the powerful reasoning foundation of the v2 base — which achieved 87.43% MMLU-Pro (300ex) and 75.25% SWE-bench Verified — and further specializes it for agentic code generation, structured tool calling, debugging, and instruction-following in developer workflows. The model is designed to excel at repository-level coding tasks, multi-turn tool orchestration, and complex logical reasoning under realistic agent environments.
-
-    🧩 Agentic Coding
-    Optimized for repository-level coding, debugging, patch generation, and structured multi-step development workflows.
-
-    🛠️ Tool Calling
-    Learns from real agent trajectories with tool definitions, tool calls, and environment feedback for robust multi-turn execution.
-
-    ...
+  description: "\U0001FA90 Qwopus-3.6-27B-Coder\nCoder SFT Release\n\nAgentic Coding &amp; Tool-Use Reasoning Model Fine-Tuned on Qwopus3.6-27B-v2\n\n\U0001F9EC Trace Inversion & Negentropy\n\U0001F9E0 27B Dense Model\n⚡ Agentic Coding\n\U0001F6E0️ Tool Calling & Agent\n\U0001F3C6 SWE-bench Verified: 67.0% (off-thinking)\n\n\U0001F4A1 What is Qwopus-3.6-27B-Coder?\n\U0001FA90 Qwopus-3.6-27B-Coder is a reasoning-enhanced agentic coding model built on top of Qwopus3.6-27B-v2. It inherits the powerful reasoning foundation of the v2 base — which achieved 87.43% MMLU-Pro (300ex) and 75.25% SWE-bench Verified — and further specializes it for agentic code generation, structured tool calling, debugging, and instruction-following in developer workflows. The model is designed to excel at repository-level coding tasks, multi-turn tool orchestration, and complex logical reasoning under realistic agent environments.\n\n\U0001F9E9 Agentic Coding\nOptimized for repository-level coding, debugging, patch generation, and structured multi-step development workflows.\n\n\U0001F6E0️ Tool Calling\nLearns from real agent trajectories with tool definitions, tool calls, and environment feedback for robust multi-turn execution.\n\n...\n"
   tags:
     - llm
     - gguf
@@ -1484,8 +1639,8 @@
       use_tokenizer_template: true
   files:
     - filename: llama-cpp/models/Qwopus3.6-27B-v2-MTP-GGUF/Qwopus3.6-27B-v2-MTP-Q4_K_M.gguf
-      sha256: 818d68223be4d8518dac0b3b5604dde633cbbcbae1f491d842a3e26711c6606d
       uri: https://huggingface.co/Jackrong/Qwopus3.6-27B-v2-MTP-GGUF/resolve/main/Qwopus3.6-27B-v2-MTP-Q4_K_M.gguf
+      sha256: 31cf5fc2406a0c7aaebcc26d440bf0df94e215d0589d5205bf319649c052b50a
 - name: "qwen3.6-40b-claude-4.6-opus-deckard-heretic-uncensored-thinking-neo-code-di-imatrix-max"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
