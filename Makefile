@@ -103,7 +103,7 @@ COVERAGE_E2E_LABELS?=!real-models
 COVERAGE_EXCLUDE_RE?=grpc/proto/.*[.]pb[.]go
 
 
-.PHONY: all test test-coverage test-coverage-baseline test-coverage-check test-ui test-ui-coverage-baseline test-ui-coverage-check install-hooks build vendor lint lint-all
+.PHONY: all test test-coverage test-coverage-baseline test-coverage-check test-backend-cpp test-ui test-ui-coverage-baseline test-ui-coverage-check install-hooks build vendor lint lint-all
 
 all: help
 
@@ -200,6 +200,13 @@ test: prepare-test
 	export GO_TAGS="debug"
 	OPUS_SHIM_LIBRARY=$(abspath ./pkg/opus/shim/libopusshim.so) \
 	$(GOCMD) run github.com/onsi/ginkgo/v2/ginkgo --flake-attempts $(TEST_FLAKES) --fail-fast -v -r $(TEST_PATHS)
+
+## Compiles and runs the standalone C++ unit tests for the backends (pure
+## helpers that depend only on the stdlib + nlohmann/json, no full backend
+## build). Discovers every *_test.cpp under backend/cpp/ - see
+## backend/cpp/run-unit-tests.sh. Set NLOHMANN_INCLUDE to skip the header fetch.
+test-backend-cpp:
+	bash backend/cpp/run-unit-tests.sh
 
 ## Runs the core suite ($(TEST_PATHS)) with statement-coverage instrumentation
 ## and writes a merged profile to $(COVERAGE_PROFILE). Deliberately omits
@@ -1453,13 +1460,32 @@ docs: docs/static/gallery.html
 ########################################################
 
 ## fyne cross-platform build
-build-launcher-darwin: build-launcher
-	go run github.com/tiagomelo/macos-dmg-creator/cmd/createdmg@latest \
-	--appName "LocalAI" \
-	--appBinaryPath "$(LAUNCHER_BINARY_NAME)" \
-	--bundleIdentifier "com.localai.launcher" \
-	--iconPath "core/http/static/logo.png" \
-	--outputDir "dist/"
+# Build LocalAI.app from the launcher via fyne (metadata read from cmd/launcher/FyneApp.toml).
+# Signing happens via contrib/macos/sign-and-notarize.sh, which is a no-op when the signing
+# secrets are unset, so unsigned local/fork builds keep working.
+build-launcher-darwin:
+	rm -rf dist/LocalAI.app cmd/launcher/LocalAI.app
+	mkdir -p dist
+	cd cmd/launcher && go run fyne.io/tools/cmd/fyne@latest package -os darwin -icon ../../core/http/static/logo.png --executable $(LAUNCHER_BINARY_NAME)
+	mv cmd/launcher/LocalAI.app dist/LocalAI.app
+	bash contrib/macos/sign-and-notarize.sh sign dist/LocalAI.app
+
+# Wrap the (signed) app into a drag-to-Applications DMG via hdiutil, then sign the DMG.
+dmg-launcher-darwin: build-launcher-darwin
+	rm -rf dist/dmg dist/LocalAI.dmg
+	mkdir -p dist/dmg
+	cp -R dist/LocalAI.app dist/dmg/LocalAI.app
+	ln -s /Applications dist/dmg/Applications
+	hdiutil create -volname "LocalAI" -srcfolder dist/dmg -ov -format UDZO dist/LocalAI.dmg
+	bash contrib/macos/sign-and-notarize.sh sign dist/LocalAI.dmg
+
+# Submit the DMG to Apple notarization and staple the ticket (no-op without notary secrets).
+notarize-launcher-darwin: dmg-launcher-darwin
+	bash contrib/macos/sign-and-notarize.sh notarize dist/LocalAI.dmg
+
+# Single entrypoint for CI: build -> sign app -> dmg -> sign dmg -> notarize -> staple.
+release-launcher-darwin: notarize-launcher-darwin
+	@echo "dist/LocalAI.dmg is ready"
 
 build-launcher-linux:
-	cd cmd/launcher && go run fyne.io/tools/cmd/fyne@latest package -os linux -icon ../../core/http/static/logo.png --executable $(LAUNCHER_BINARY_NAME)-linux && mv launcher.tar.xz ../../$(LAUNCHER_BINARY_NAME)-linux.tar.xz
+	cd cmd/launcher && go run fyne.io/tools/cmd/fyne@latest package -os linux -icon ../../core/http/static/logo.png --executable $(LAUNCHER_BINARY_NAME)-linux && mv LocalAI.tar.xz ../../$(LAUNCHER_BINARY_NAME)-linux.tar.xz
