@@ -510,3 +510,5 @@ require (
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9 // indirect
 	lukechampine.com/blake3 v1.4.1 // indirect
 )
+
+replace github.com/mudler/LocalAGI => github.com/walcz-de/LocalAGI v0.0.0-20260629205030-b9c1dfb0d8e5
