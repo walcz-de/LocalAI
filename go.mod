@@ -511,4 +511,4 @@ require (
 	lukechampine.com/blake3 v1.4.1 // indirect
 )
 
-replace github.com/mudler/LocalAGI => github.com/walcz-de/LocalAGI v0.0.0-20260629205030-b9c1dfb0d8e5
+replace github.com/mudler/LocalAGI => github.com/walcz-de/LocalAGI v0.0.0-20260630141621-a40ce3427ad0
