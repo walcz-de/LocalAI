@@ -142,19 +142,14 @@ func buildAnthropicRequest(opts *pb.PredictOptions, cfg *proxyConfig, stream boo
 	if req.MaxTokens <= 0 {
 		req.MaxTokens = anthropicDefaultMaxTokens
 	}
-	// Newer Anthropic models 400 when both temperature and top_p are
-	// set ("`temperature` and `top_p` cannot both be specified for
-	// this model. Please use only one.") even though their docs only
-	// "recommend" picking one. The OpenAI-compatible chat UI almost
-	// always sends both with default values, so prefer temperature
-	// and drop top_p when both are present.
-	if t := opts.GetTemperature(); t != 0 {
-		v := float64(t)
-		req.Temperature = &v
-	} else if t := opts.GetTopP(); t != 0 {
-		v := float64(t)
-		req.TopP = &v
-	}
+	// walcz-de fork fix (2026-07-01): DO NOT forward temperature/top_p at all.
+	// The newest reasoning models (claude-opus-4-8, claude-sonnet-5, gpt-5.x-pro)
+	// 400 when temperature is present ("`temperature` is deprecated for this model"),
+	// and the OpenAI-compatible chat UI sends only LocalAI's DEFAULT sampling values
+	// (0.9 / defaultTopP), not user intent — so dropping them loses nothing and lets
+	// the upstream use its own defaults. Restore per-model opt-in if fine sampling
+	// control against older models is ever needed.
+	_ = opts
 
 	req.Tools = convertOpenAITools(opts.GetTools())
 	req.ToolChoice = convertOpenAIToolChoice(opts.GetToolChoice())
