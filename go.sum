@@ -1365,6 +1365,8 @@ github.com/walcz-de/LocalAGI v0.0.0-20260629205030-b9c1dfb0d8e5 h1:fI3qhYsrdJKRg
 github.com/walcz-de/LocalAGI v0.0.0-20260629205030-b9c1dfb0d8e5/go.mod h1:U+g6u8mF2wQxhkdBl3dr8G4db1cv3n7KTKmraoJ7D0c=
 github.com/walcz-de/LocalAGI v0.0.0-20260630141621-a40ce3427ad0 h1:I345zL/4vIx4OLkoIgztK3eFRo0YqlKhJVi1aP8602E=
 github.com/walcz-de/LocalAGI v0.0.0-20260630141621-a40ce3427ad0/go.mod h1:U+g6u8mF2wQxhkdBl3dr8G4db1cv3n7KTKmraoJ7D0c=
+github.com/walcz-de/LocalAGI v0.0.0-20260701070850-d11d1fa3f221 h1:RfVtCTMhod701N838as+IslfjO58/GA9zaLM+Wzs6iM=
+github.com/walcz-de/LocalAGI v0.0.0-20260701070850-d11d1fa3f221/go.mod h1:U+g6u8mF2wQxhkdBl3dr8G4db1cv3n7KTKmraoJ7D0c=
 github.com/warpfork/go-wish v0.0.0-20220906213052-39a1cc7a02d0 h1:GDDkbFiaK8jsSDJfjId/PEGEShv6ugrt4kYsC5UIDaQ=
 github.com/warpfork/go-wish v0.0.0-20220906213052-39a1cc7a02d0/go.mod h1:x6AKhvSSexNrVSrViXSHUEbICjmGXhtgABaHIySUSGw=
 github.com/whyrusleeping/go-keyspace v0.0.0-20160322163242-5b898ac5add1 h1:EKhdznlJHPMoKr0XTrX+IlJs1LH3lyx2nfr1dOlZ79k=
