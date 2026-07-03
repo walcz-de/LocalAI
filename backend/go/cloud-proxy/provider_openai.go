@@ -30,7 +30,7 @@ type openAIRequest struct {
 	Stream           bool            `json:"stream,omitempty"`
 	Temperature      *float64        `json:"temperature,omitempty"`
 	TopP             *float64        `json:"top_p,omitempty"`
-	MaxTokens        *int32          `json:"max_completion_tokens,omitempty"` // walcz-de: gpt-5.x verlangt max_completion_tokens statt max_tokens
+	MaxTokens        *int32          `json:"max_completion_tokens,omitempty"` // newer OpenAI models reject max_tokens ("use max_completion_tokens instead")
 	Stop             []string        `json:"stop,omitempty"`
 	FrequencyPenalty *float64        `json:"frequency_penalty,omitempty"`
 	PresencePenalty  *float64        `json:"presence_penalty,omitempty"`
@@ -107,9 +107,10 @@ func buildOpenAIRequest(opts *pb.PredictOptions, cfg *proxyConfig, stream bool) 
 		Tools:      parseRawJSON(opts.GetTools()),
 		ToolChoice: parseRawJSON(opts.GetToolChoice()),
 	}
-	// walcz-de fork fix (2026-07-01): DO NOT forward temperature/top_p. gpt-5.x-pro
-	// (and peers) reject temperature as deprecated; the chat UI sends only LocalAI's
-	// DEFAULT sampling values, not user intent. Let the upstream use its own defaults.
+	// Do not forward temperature/top_p. Newer OpenAI reasoning models reject
+	// temperature as deprecated, and clients typically send only default
+	// sampling values rather than user intent — let the upstream apply its
+	// own defaults.
 	if n := opts.GetTokens(); n > 0 {
 		req.MaxTokens = &n
 	}
