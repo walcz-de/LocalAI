@@ -1,0 +1,23 @@
+# Vorgeschlagener Eintrag für backend/index.yaml (Backend-Gallery).
+# Bewusst NICHT direkt in die 871-Einträge-index.yaml gemerged (Reihenfolge/
+# Kommentare/CI-Ownership) — hier merge-ready abgelegt. `capabilities.amd` muss
+# in die Backend-Build-Matrix (.github/workflows) verdrahtet werden, damit das
+# rocm-hipengine-Image tatsächlich gebaut/publiziert wird.
+- name: hipengine
+  license: agpl-3.0
+  urls:
+    - https://github.com/shisa-ai/hipEngine
+  tags:
+    - text-to-text
+    - AMD
+    - ROCm
+    - RDNA3
+    - gfx1151
+  description: |
+    hipEngine is a torch-free, ROCm-native LLM inference engine for AMD RDNA3
+    (gfx1100 / gfx1151 Strix Halo). Custom HIP kernels (hipblasLt, hipGraph,
+    AOTriton) instead of a PyTorch/llama.cpp path. Currently targets Qwen3.5/3.6
+    PARO-packed models; beats llama.cpp on prefill at long context.
+  alias: hipengine
+  capabilities:
+    amd: rocm-hipengine
