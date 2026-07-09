@@ -43,16 +43,15 @@ from hipengine import LLM, SamplingParams as HipSamplingParams
 _ONE_DAY_IN_SECONDS = 60 * 60 * 24
 MAX_WORKERS = int(os.environ.get('PYTHON_GRPC_MAX_WORKERS', '1'))
 
-# PredictOptions (proto) -> hipEngine SamplingParams kwarg. Only fields that
-# hipEngine's SamplingParams is documented/known to accept; unknown ones are
-# dropped defensively at construction time (see _sampling_params).
+# PredictOptions (proto) -> hipEngine SamplingParams kwarg. Verified against
+# hipengine 0.2.2: SamplingParams(max_tokens, temperature, top_p, ignore_eos,
+# kv_storage, kv_scale_dtype, kv_scale_granularity). It has NO top_k / seed /
+# stop, so those proto fields are intentionally not mapped. _sampling_params
+# still drops unknowns defensively in case the signature drifts across versions.
 _SAMPLING_MAP = {
     "Tokens": "max_tokens",
     "Temperature": "temperature",
     "TopP": "top_p",
-    "TopK": "top_k",
-    "Seed": "seed",
-    "StopPrompts": "stop",
 }
 
 
