@@ -1,4 +1,61 @@
 ---
+- name: "minicpm5-1b-claude-opus-fable5-thinking"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/GnLOLot/MiniCPM5-1B-Claude-Opus-Fable5-Thinking-GGUF
+  description: |
+    # MiniCPM5-1B-Claude-Opus-Fable5-Thinking
+
+    GGUF quantizations for local deployment: **MiniCPM5-1B-Claude-Opus-Fable5-Thinking-GGUF**
+
+    中文说明
+
+    **MiniCPM5-1B-Claude-Opus-Fable5-Thinking** is a compact 1B **Thinking** language model built on openbmb/MiniCPM5-1B. It is further fine-tuned on **Fable 5** data to improve **coding** and **instruction-following** while keeping MiniCPM5's native Thinking chat template and tool-call format.
+
+    For llama.cpp / Ollama / LM Studio deployment, see the **GGUF repository**.
+
+    ## Overview
+
+    ## Capabilities
+
+      - **Coding** — code generation, debugging, and software-engineering-style tasks
+      - **Instruction following** — more reliable adherence to user prompts and structured constraints
+      - **Thinking mode** — chain-of-thought reasoning via the MiniCPM5 chat template
+      - **Tool calling** — inherits MiniCPM5's XML tool-call format
+      - **Long context** — up to **128K tokens** (131,072 tokens per `config.json`)
+
+    ## Quick start
+
+    ```python
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    import torch
+
+    model_id = "GnLOLot/MiniCPM5-1B-Claude-Opus-Fable5-Thinking"
+
+    ...
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+    - thinking
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/MiniCPM5-1B-Claude-Opus-Fable5-Thinking-Q4_K_M/MiniCPM5-1B-Claude-Opus-Fable5-Thinking-Q4_K_M.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/MiniCPM5-1B-Claude-Opus-Fable5-Thinking-Q4_K_M/MiniCPM5-1B-Claude-Opus-Fable5-Thinking-Q4_K_M.gguf
+      sha256: 3d20b45b4ffdfb71716c3aa121dab56b5d9a563d26088719167fcc7688083b16
+      uri: https://huggingface.co/GnLOLot/MiniCPM5-1B-Claude-Opus-Fable5-Thinking-GGUF/resolve/main/MiniCPM5-1B-Claude-Opus-Fable5-Thinking-Q4_K_M.gguf
 - name: "deepseek-v4-flash"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -24,7 +81,7 @@
   files:
     - filename: ds4flash.gguf
       uri: https://huggingface.co/unsloth/DeepSeek-V4-Flash-GGUF
-      sha256: 58a206328080d51b0a374b1e4684c173e3e151b9282be47ee935bfb27047ddfa
+      sha256: df58dd40f8ffa648c65a9cf963b0028a78ffba9caaf0c1c97361f1f2eef52dcd
 - name: "qwopus3.6-35b-a3b-coder-mtp"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -36199,6 +36256,37 @@
     - filename: parakeet-cpp/nemotron-3.5-asr-streaming-0.6b-q8_0.gguf
       uri: huggingface://mudler/parakeet-cpp-gguf/nemotron-3.5-asr-streaming-0.6b-q8_0.gguf
       sha256: ba2f13eccd4a5245be728f77e6149bd6a4fdcdd133ff2e08ac6005bcef7a99f1
+- name: moss-transcribe-cpp-0.9b
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://huggingface.co/mudler/moss-transcribe.cpp-gguf
+    - https://github.com/mudler/moss-transcribe.cpp
+  description: |
+    MOSS-Transcribe-Diarize 0.9B, an end-to-end audio understanding model for joint multi-speaker transcription,
+    speaker diarization and timestamping in a single pass. Q5_K GGUF for the moss-transcribe-cpp backend (C++/ggml
+    port of OpenMOSS MOSS-Transcribe-Diarize), byte-identical to the reference at ~1/6 the size. Faster than the
+    reference PyTorch runtime on CPU (1.6 to 2.2x).
+  license: apache-2.0
+  tags:
+    - moss
+    - moss-transcribe-cpp
+    - asr
+    - diarization
+    - speech-recognition
+    - stt
+    - gguf
+    - ggml
+  overrides:
+    backend: moss-transcribe-cpp
+    known_usecases:
+      - transcript
+    name: moss-transcribe-cpp-0.9b
+    parameters:
+      model: moss-transcribe-cpp/moss-transcribe-q5_k.gguf
+  files:
+    - filename: moss-transcribe-cpp/moss-transcribe-q5_k.gguf
+      uri: huggingface://mudler/moss-transcribe.cpp-gguf/moss-transcribe-q5_k.gguf
+      sha256: 6fe985fd9a9cd043728f7be49659d10de6901872dad73b49e3c30e1340582e79
 - name: parakeet-crispasr
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
@@ -36811,6 +36899,34 @@
     - filename: snac-24khz.gguf
       uri: huggingface://cstr/snac-24khz-GGUF/snac-24khz.gguf
       sha256: b4b044631df62ececa86ab080516b3e619cd8f93caabd5f6758c7eae14981bd8
+- name: f5-tts-crispasr
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://huggingface.co/SWivid/F5-TTS
+    - https://huggingface.co/cstr/f5-tts-GGUF
+  description: |
+    F5-TTS v1 Base (SWivid, MIT) text-to-speech synthesized through the CrispASR backend. A 22-layer DiT flow-matching model with a built-in Vocos vocoder in a single self-contained GGUF (no separate codec). Auto-detected by CrispASR and runs end-to-end on CPU, producing 24 kHz mono audio.
+
+    F5-TTS is a voice-cloning model with no built-in speaker: you must supply a reference clip and its transcript. Add `voice:<reference.wav>` and `voice_text:<transcript of the reference>` to the model's `options` (paths resolve against the model directory) before synthesizing; without a reference the model cannot generate audio.
+
+    Default GGUF size ~945 MB (f16). Quantization below f16 is not recommended for flow-matching models. Synthesis runs a 32-step ODE solver and is compute-heavy on CPU (expect long generation times without a GPU-enabled CrispASR build).
+  tags:
+    - crispasr
+    - tts
+    - text-to-speech
+    - gguf
+    - voice-cloning
+  overrides:
+    backend: crispasr
+    known_usecases:
+      - tts
+    name: f5-tts-crispasr
+    parameters:
+      model: f5-tts-v1-base-f16.gguf
+  files:
+    - filename: f5-tts-v1-base-f16.gguf
+      uri: huggingface://cstr/f5-tts-GGUF/f5-tts-v1-base-f16.gguf
+      sha256: 25a4d273048dad072774ff139cf19b96fe442bebda8392c08009d73256cf1e81
 - name: piper-it_IT-riccardo-x_low-crispasr
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
