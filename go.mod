@@ -512,3 +512,5 @@ require (
 )
 
 replace github.com/mudler/LocalAGI => github.com/walcz-de/LocalAGI v0.0.0-20260703133518-ad5ef2e455ba
+
+replace github.com/mudler/skillserver => github.com/walcz-de/skillserver v0.0.7-0.20260711083112-62ca2188b2a7
