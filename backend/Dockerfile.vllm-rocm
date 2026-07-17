@@ -26,9 +26,15 @@ COPY backend/python/${BACKEND} /${BACKEND}
 COPY backend/backend.proto /${BACKEND}/backend.proto
 COPY backend/python/common/ /${BACKEND}/common
 
-# Nur die gRPC-Schicht nachrüsten (vLLM/torch/transformers sind im Base vorhanden).
-RUN ${VLLM_PYTHON} -m pip install --no-cache-dir \
-        grpcio==1.82.1 grpcio-tools protobuf certifi pillow charset-normalizer chardet
+# Nur die gRPC-Schicht nachrüsten — MINIMAL. Der Base-Container hat torch/vLLM/
+# transformers/pillow/certifi bereits; sie NICHT neu installieren (der pip-Resolver
+# hat sonst pillow/PIL zerschossen → backend.py-Multimodal-Import bricht, 2026-07-17).
+# Nur grpcio-Stack, --no-deps damit keine Base-Pakete angefasst werden.
+# Base hat grpcio 1.78.0 + protobuf 6.33.6 bereits — NUR grpcio-tools (zum Stub-Gen)
+# nachrüsten, exakt gepinnt auf die grpcio-Version → generierter Gencode ist mit der
+# protobuf-6.33-Runtime kompatibel (sonst „gencode 7.35 > runtime 6.33"-VersionError).
+RUN ${VLLM_PYTHON} -m pip install --no-cache-dir --no-deps grpcio-tools==1.78.0 \
+    && ${VLLM_PYTHON} -c "import PIL, grpc_tools, grpc; print('PIL + grpc_tools + grpc ok')"
 
 # gRPC-Stubs generieren (backend_pb2*, sonst importiert backend.py nicht).
 RUN cd /${BACKEND} && ${VLLM_PYTHON} -m grpc_tools.protoc \
