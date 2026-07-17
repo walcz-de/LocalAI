@@ -1,0 +1,46 @@
+# =============================================================================
+# vLLM-Backend für gfx1151 / ROCm 7.14 (Strix Halo, RDNA3.5)
+# =============================================================================
+# FROM AMDs offiziellem gfx1151-vLLM-Container — bringt vLLM 0.23 + PyTorch 2.11
+# + ROCm 7.14 versionssynchron mit (im De-Risk 2026-07-17 auf gfx1151 verifiziert:
+# compressed-tensors-4bit-A3B-MoE lädt + serving; 203 t/s @K=16 > llama.cpp 119).
+# Statt vLLM mühsam selbst zu bauen (LocalAIs requirements-hipblas.txt installiert
+# nur torch, KEIN vllm) → auf den funktionierenden AMD-Container aufsetzen.
+#
+# LocalAIs backend.py nutzt die vLLM-V0-API (AsyncLLMEngine.from_engine_args);
+# in 0.23.1 verifiziert weiterhin importierbar → kein backend.py-Patch nötig.
+# Doku: project_vllm_gfx1151_derisk. Upstream-Kontext: LocalAI#10883.
+# =============================================================================
+ARG BASE_IMAGE=rocm/vllm:rocm7.14.0_rdna_ubuntu24.04_py3.14_pytorch_2.11.0_vllm_0.23.0
+FROM ${BASE_IMAGE}
+
+ARG BACKEND=vllm
+ENV BACKEND=${BACKEND}
+# AMD-Container-Python-Env (vLLM/torch liegen hier)
+ENV VLLM_PYTHON=/opt/python/bin/python
+
+WORKDIR /${BACKEND}
+
+# LocalAI-gRPC-Wrapper + Proto + gemeinsame Helfer
+COPY backend/python/${BACKEND} /${BACKEND}
+COPY backend/backend.proto /${BACKEND}/backend.proto
+COPY backend/python/common/ /${BACKEND}/common
+
+# Nur die gRPC-Schicht nachrüsten (vLLM/torch/transformers sind im Base vorhanden).
+RUN ${VLLM_PYTHON} -m pip install --no-cache-dir \
+        grpcio==1.82.1 grpcio-tools protobuf certifi pillow charset-normalizer chardet
+
+# gRPC-Stubs generieren (backend_pb2*, sonst importiert backend.py nicht).
+RUN cd /${BACKEND} && ${VLLM_PYTHON} -m grpc_tools.protoc \
+        -I. --python_out=. --grpc_python_out=. backend.proto
+
+# gfx1151-UMA-Pflicht-Defaults (De-Risk-Learning: sonst OOM-Kill Exit 137).
+# Überschreibbar via Modell-YAML options/EngineArgs.
+ENV HSA_XNACK=1 \
+    VLLM_GPU_MEMORY_UTILIZATION=0.5 \
+    PYTHONUNBUFFERED=1
+
+# LocalAI startet das Backend als gRPC-Server (run.sh legt den Wrapper auf PATH
+# und ruft backend.py mit --addr). Kein Enforce-eager hart gesetzt — Graphs
+# on/off wird am Modell-YAML/EngineArgs getunt (De-Risk: 203 t/s war eager-Floor).
+ENTRYPOINT ["bash", "run.sh"]
