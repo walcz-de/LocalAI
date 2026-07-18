@@ -216,6 +216,24 @@ def get_scheduler(name: str, config: dict = {}):
 # Implement the BackendServicer class with the service methods
 class BackendServicer(backend_pb2_grpc.BackendServicer):
 
+    def __init__(self):
+        # Defaults so GenerateImage/Video never AttributeError when a request
+        # arrives on a servicer whose LoadModel didn't set every attribute —
+        # e.g. an external-gRPC backend that was restarted while LocalAI still
+        # had the model cached, so it calls GenerateImage before re-LoadModel
+        # (observed 2026-07-18: `'BackendServicer' object has no attribute
+        # 'controlnet'`/`'options'` on the ZImagePipeline path). These are
+        # otherwise only assigned inside LoadModel.
+        super().__init__()
+        self.controlnet = None
+        self.img2vid = False
+        self.txt2vid = False
+        self.ltx2_pipeline = False
+        self.compel = None
+        self.clip_skip = 0
+        self.pipe = None
+        self.options = {}
+
     def _load_pipeline(self, request, model_ref, from_single_file, local_only, torchType, variant, device_map=None):
         """
         Load a diffusers pipeline dynamically using the dynamic loader.
