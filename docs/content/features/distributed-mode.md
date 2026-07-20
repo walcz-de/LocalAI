@@ -72,7 +72,10 @@ The frontend is a standard LocalAI instance with distributed mode enabled. These
 | `--auth-database-url` | `LOCALAI_AUTH_DATABASE_URL` | *(required)* | PostgreSQL connection URL |
 | `--backend-install-timeout` | `LOCALAI_NATS_BACKEND_INSTALL_TIMEOUT` | `15m` | How long the frontend waits for a worker to acknowledge a backend install before considering the request stalled. Raise it when workers pull large backend images over slow links. If a worker takes longer than this, the operation shows as "still installing in background" in the admin UI and clears once the worker finishes. |
 | `--backend-upgrade-timeout` | `LOCALAI_NATS_BACKEND_UPGRADE_TIMEOUT` | `15m` | Same as the install timeout, applied to backend upgrades (force-reinstall). |
+| `--model-load-timeout` | `LOCALAI_NATS_MODEL_LOAD_TIMEOUT` | `5m` | Deadline for the `LoadModel` gRPC call the frontend issues to a worker. It starts *after* the backend is installed and the model files are staged, so it covers only the worker backend's own checkpoint load and pipeline init. Raise it for very large checkpoints: a multi-tens-of-GB diffusion or video model on unified memory routinely needs more than 5 minutes, and the load then fails with `rpc error: code = DeadlineExceeded` at exactly the timeout. Raising this also widens the cold-load lock ceiling below, so the two knobs never fight. |
 | `--expose-node-header` | `LOCALAI_EXPOSE_NODE_HEADER` | `false` | When enabled, inference responses carry an `X-LocalAI-Node` header with the ID of the worker node that served the request. Coverage spans the OpenAI-compatible endpoints (chat completions, completions, embeddings, audio transcriptions, audio speech / TTS, image generations, image inpainting), the Jina rerank endpoint (`/v1/rerank`), the VAD endpoints (`/v1/vad`, `/vad`), and the Anthropic Messages (`/v1/messages`) and Ollama (`/api/chat`, `/api/generate`, `/api/embed`) shims. Useful for debugging, observability and load-balancer attribution. Off by default: the node ID reveals internal cluster topology and should not be exposed on a public endpoint. Best-effort: under heavy concurrency for the same model across multiple replicas, the header may reflect a recent routing decision rather than this exact request's. Acceptable for observability and debugging. |
+
+The router also bounds how long a single cold load may hold the per-model advisory lock, so a worker that dies mid-install cannot pin every other replica's request for that model. That ceiling is **derived**, not configured: `max(backend-install-timeout + model-load-timeout + 5m, 25m)`. With the defaults that is `15m + 5m + 5m = 25m`, matching previous releases; raising either timeout widens the ceiling in step, so a longer load deadline is never clipped by it.
 
 ### NATS JWT authentication (recommended for production)
 
@@ -202,6 +205,7 @@ local-ai worker \
 | Flag | Env Var | Default | Description |
 |------|---------|---------|-------------|
 | `--addr` | `LOCALAI_SERVE_ADDR` | `0.0.0.0:50051` | gRPC listen address |
+| `--grpc-max-port` | `LOCALAI_GRPC_MAX_PORT` | `65535` | Highest port the worker may assign to a backend gRPC process. Each backend gets its own port, allocated upward from the base port, so the width of `[base port, this]` caps how many backends this worker can run at once (see [Backend gRPC port range](#backend-grpc-port-range)) |
 | `--advertise-addr` | `LOCALAI_ADVERTISE_ADDR` | *(auto)* | Address the frontend uses to reach this node (see below) |
 | `--http-addr` | `LOCALAI_HTTP_ADDR` | gRPC port - 1 | HTTP file transfer server bind address |
 | `--advertise-http-addr` | `LOCALAI_ADVERTISE_HTTP_ADDR` | *(auto)* | HTTP address the frontend uses for file transfer |
@@ -250,9 +254,46 @@ For advanced networking scenarios (NAT, load balancers, separate gRPC/HTTP ports
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `LOCALAI_SERVE_ADDR` | gRPC base port bind address | `0.0.0.0:50051` |
+| `LOCALAI_GRPC_MAX_PORT` | Highest port assignable to a backend gRPC process | `65535` |
 | `LOCALAI_HTTP_ADDR` | HTTP file transfer bind address | `0.0.0.0:{gRPC port - 1}` |
 | `LOCALAI_ADVERTISE_ADDR` | Public gRPC address (if different from `LOCALAI_ADDR`) | Derived from `LOCALAI_ADDR` |
 | `LOCALAI_ADVERTISE_HTTP_ADDR` | Public HTTP address (if different from gRPC host) | Derived from advertise host + HTTP port |
+
+### Backend gRPC port range
+
+Every backend process a worker starts listens on its own gRPC port, allocated
+upward from the worker's base port (`LOCALAI_SERVE_ADDR`, default `50051`).
+`LOCALAI_GRPC_MAX_PORT` sets the top of that range. The width of
+`[base port, LOCALAI_GRPC_MAX_PORT]` is therefore a hard cap on how many
+backend processes one worker can run concurrently.
+
+Set it when the worker shares a host with other services and you need to keep
+the rest of the ephemeral range clear, or when you want a worker's backend
+count bounded explicitly rather than by whatever the host happens to allow:
+
+```bash
+# Confine this worker's backends to 50051-50150 (100 concurrent backends).
+LOCALAI_SERVE_ADDR=0.0.0.0:50051
+LOCALAI_GRPC_MAX_PORT=50150
+```
+
+Leave it unset (the default) and the worker may use anything up to 65535.
+
+Budget headroom above your real concurrency. When a backend stops, its port is
+held briefly before it can be reused, so a worker with heavy start/stop churn
+has more ports tied up than it has running backends at any instant. If the
+range does fill, backend starts fail with:
+
+```
+no free gRPC port in range: 50051-50150 is fully consumed by 100 running
+backend(s) and 12 port(s) still in quarantine; raise LOCALAI_GRPC_MAX_PORT to
+widen the range
+```
+
+Raise `LOCALAI_GRPC_MAX_PORT` (or reduce how many models you schedule onto that
+worker). A value above 65535 is clamped, and a value below the base port is
+ignored in favour of the full range, so a typo degrades the setting rather than
+wedging every backend start on the node.
 
 ### NVIDIA GPU support
 

@@ -20,40 +20,94 @@ import (
 var forceBackendShutdown bool = os.Getenv("LOCALAI_FORCE_BACKEND_SHUTDOWN") == "true"
 
 var (
-	modelNotFoundErr = errors.New("model not found")
+	// ErrModelNotFound reports that a model is not loaded. Exported so HTTP
+	// handlers can map it to 404 instead of a blanket 500.
+	ErrModelNotFound = errors.New("model not found")
+	// ErrModelBusy indicates that a graceful shutdown context ended while
+	// requests were still in flight.
+	ErrModelBusy = errors.New("model is still busy")
 )
+
+const (
+	gracefulShutdownTimeout = 30 * time.Second
+	forcedShutdownTimeout   = 30 * time.Second
+	backendFreeTimeout      = 5 * time.Second
+	busyPollInterval        = 100 * time.Millisecond
+)
+
+// unloadRemote asks the remote unloader to stop `s` on whichever node holds
+// it, preferring the context-aware extension so a forced shutdown and the
+// caller's deadline both survive the distributed boundary.
+func unloadRemote(ctx context.Context, u RemoteModelUnloader, s string, force bool) error {
+	if contextUnloader, ok := u.(RemoteModelContextUnloader); ok {
+		return contextUnloader.UnloadRemoteModelContext(ctx, s, force)
+	}
+	return u.UnloadRemoteModel(s)
+}
 
 // deleteProcess stops and removes a backend. The force flag trades a graceful
 // shutdown for a prompt one and is meant for the watchdog's busy-killer: a
-// backend that has been busy past the watchdog timeout is, by definition,
-// stuck in an in-flight gRPC call. Waiting for that call to finish before
-// stopping the process (the graceful path) would block forever — and since
-// deleteProcess runs under ml.mu, it would stall every other model load,
-// including the shared opus backend load at the start of every realtime
-// (WebRTC) session, hanging new connections at "Connected, waiting for
-// session...". The force path stops the process first, which drops the
-// in-flight call's gRPC connection and unblocks it, then cleans up.
-func (ml *ModelLoader) deleteProcess(s string, force bool) error {
-	model, ok := ml.store.Get(s)
+// backend that has been busy past the watchdog timeout may be stuck in an
+// in-flight gRPC call. The graceful path waits only until ctx expires; the
+// force path skips that wait and Free(), stops the process, then cleans up.
+// Callers serialize this operation per model, never with the global loader
+// mutex, so a faulty backend cannot stall unrelated model lifecycle work.
+func (ml *ModelLoader) deleteProcess(ctx context.Context, s string, force bool) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	// Snapshot mutable loader configuration while holding ml.mu, then perform
+	// every wait, callback, RPC, and process operation without the global lock.
+	// Same-model ordering is provided by modelOperationLocks at the public
+	// lifecycle boundary.
+	ml.mu.Lock()
+	store := ml.store
+	wd := ml.wd
+	hooks := append([]ModelUnloadHook(nil), ml.onUnloadHooks...)
+	remoteUnloader := ml.remoteUnloader
+	ml.mu.Unlock()
+
+	model, ok := store.Get(s)
 	if !ok {
+		// A local-store miss is not proof the model is unloaded. In
+		// distributed mode the model runs on a worker and the authoritative
+		// record is the shared node registry: any frontend replica that did
+		// not itself serve the model (load balancer picked a peer, or this
+		// replica restarted) has no local entry. Returning "model not found"
+		// here reported a model that was demonstrably running as absent, and
+		// left its backend process untouched.
+		if remoteUnloader != nil {
+			xlog.Debug("Model not in local store; asking the remote unloader", "model", s)
+			// Ask BEFORE unloading. Unloading is idempotent by contract, so it
+			// cannot afterwards tell us whether anything was actually stopped,
+			// and only a model absent locally AND cluster-wide may be reported
+			// as not found.
+			if checker, ok := remoteUnloader.(RemoteModelPresenceChecker); ok {
+				loaded, err := checker.HasRemoteModel(ctx, s)
+				if err != nil {
+					// An unreachable registry is not evidence of absence;
+					// saying "not found" here would be a guess presented as fact.
+					return fmt.Errorf("checking whether model %q is loaded on any node: %w", s, err)
+				}
+				if !loaded {
+					return ErrModelNotFound
+				}
+			}
+			return unloadRemote(ctx, remoteUnloader, s, force)
+		}
 		xlog.Debug("Model not found", "model", s)
-		return modelNotFoundErr
+		return ErrModelNotFound
 	}
 
 	if !force {
-		retries := 1
-		for model.GRPC(false, ml.wd).IsBusy() {
+		client := model.GRPC(false, wd)
+		for client.IsBusy() {
 			xlog.Debug("Model busy. Waiting.", "model", s)
-			dur := time.Duration(retries*2) * time.Second
-			if dur > retryTimeout {
-				dur = retryTimeout
-			}
-			time.Sleep(dur)
-			retries++
-
-			if retries > 10 && forceBackendShutdown {
-				xlog.Warn("Model is still busy after retries. Forcing shutdown.", "model", s, "retries", retries)
-				break
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("%w: %s: %w", ErrModelBusy, s, ctx.Err())
+			case <-time.After(busyPollInterval):
 			}
 		}
 	}
@@ -61,7 +115,7 @@ func (ml *ModelLoader) deleteProcess(s string, force bool) error {
 	xlog.Debug("Deleting process", "model", s, "force", force)
 
 	// Run unload hooks (e.g. close MCP sessions)
-	for _, hook := range ml.onUnloadHooks {
+	for _, hook := range hooks {
 		hook(s)
 	}
 
@@ -76,7 +130,10 @@ func (ml *ModelLoader) deleteProcess(s string, force bool) error {
 	// don't surface it as an error.
 	if !force {
 		xlog.Debug("Calling Free() to release GPU resources", "model", s)
-		if err := model.GRPC(false, ml.wd).Free(context.Background()); err != nil {
+		freeCtx, cancel := context.WithTimeout(ctx, backendFreeTimeout)
+		err := model.GRPC(false, wd).Free(freeCtx)
+		cancel()
+		if err != nil {
 			if grpcerrors.IsUnimplemented(err) {
 				xlog.Debug("Backend does not implement Free(); GPU release handled on process stop", "model", s)
 			} else {
@@ -92,16 +149,22 @@ func (ml *ModelLoader) deleteProcess(s string, force bool) error {
 		// No local process — this is a remote/external backend.
 		// In distributed mode, delegate to the remote unloader to tell
 		// the backend node to free the model (GPU resources, etc.).
-		if ml.remoteUnloader != nil {
+		var unloadErr error
+		if remoteUnloader != nil {
 			xlog.Debug("Delegating model unload to remote unloader", "model", s)
-			if err := ml.remoteUnloader.UnloadRemoteModel(s); err != nil {
-				xlog.Warn("Remote model unload failed", "model", s, "error", err)
+			unloadErr = unloadRemote(ctx, remoteUnloader, s, force)
+			if unloadErr != nil {
+				xlog.Warn("Remote model unload failed", "model", s, "error", unloadErr)
 			}
 		} else {
 			xlog.Debug("No local process and no remote unloader", "model", s)
 		}
-		ml.store.Delete(s)
-		return nil
+		// The store is only the frontend's local representative of a remote
+		// model. Never retain it after an unload attempt: on failure it may point
+		// at a known-unreachable worker, while the distributed registry remains
+		// the source of truth for anything that is still running remotely.
+		store.Delete(s)
+		return unloadErr
 	}
 
 	// Mark the stop as intentional so the exit-watcher logs it as an
@@ -110,29 +173,34 @@ func (ml *ModelLoader) deleteProcess(s string, force bool) error {
 	err := process.Stop()
 	if err != nil {
 		xlog.Error("(deleteProcess) error while deleting process", "error", err, "model", s)
+		if !process.IsAlive() {
+			// A concurrently crashed/already-reaped process can no longer own
+			// resources even if Stop could not read or signal its PID.
+			store.Delete(s)
+			return nil
+		}
+		return err
 	}
 
-	if err == nil {
-		ml.store.Delete(s)
-	}
-
-	return err
+	store.Delete(s)
+	return nil
 }
 func (ml *ModelLoader) StopGRPC(filter GRPCProcessFilter) error {
 	var err error = nil
 	ml.mu.Lock()
-	defer ml.mu.Unlock()
+	store := ml.store
+	ml.mu.Unlock()
 
 	// Collect matching keys first — can't mutate store during Range
 	var toDelete []string
-	ml.store.Range(func(k string, m *Model) bool {
+	store.Range(func(k string, m *Model) bool {
 		if filter(k, m.Process()) {
 			toDelete = append(toDelete, k)
 		}
 		return true
 	})
 	for _, k := range toDelete {
-		e := ml.deleteProcess(k, false)
+		e := ml.ShutdownModel(k)
 		err = errors.Join(err, e)
 	}
 	return err
@@ -144,15 +212,16 @@ func (ml *ModelLoader) StopAllGRPC() error {
 
 func (ml *ModelLoader) GetGRPCPID(id string) (int, error) {
 	ml.mu.Lock()
-	defer ml.mu.Unlock()
-	p, exists := ml.store.Get(id)
+	store := ml.store
+	ml.mu.Unlock()
+	p, exists := store.Get(id)
 	if !exists {
 		return -1, fmt.Errorf("no grpc backend found for %s", id)
 	}
 	if p.Process() == nil {
 		return -1, fmt.Errorf("no grpc backend found for %s", id)
 	}
-	return strconv.Atoi(p.Process().PID)
+	return strconv.Atoi(p.Process().CurrentPID())
 }
 
 // StartProcess starts a gRPC backend process and returns its process handle.
