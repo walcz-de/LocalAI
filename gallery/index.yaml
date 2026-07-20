@@ -1,4 +1,55 @@
 ---
+- name: "qwythos-9b-v2"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/empero-ai/Qwythos-9B-v2-GGUF
+  description: |
+    Empero AI
+
+    # Qwythos-9B-v2 — the new and improved Qwythos
+
+    The next iteration of Qwythos: **all the reasoning of Qwythos-9B, with the looping behavior fixed.** v2 keeps the deep chain-of-thought, the uncensored research posture, and the 1M-token context of its predecessor, and cleans up the rough edges that showed up in real use.
+
+      - 🔁 **Looping behavior eliminated** — repetition/degeneration under greedy or low-temperature decoding dropped from **6.7% → 0%**. You can serve it *without* leaning on `repetition_penalty` as a band-aid.
+      - 🧠 **Reasoning fully preserved** — MMLU, GSM8K, GPQA, ARC and HumanEval are all held at (or above) the v1 level. This is a *hygiene* upgrade, not a capability regression.
+      - 🧩 **MTP head restored** — the native multi-token-prediction module (dropped in the previous export) is back, so config and weights agree and speculative-decoding setups work.
+      - 🪪 **Cleaner identity** — the model no longer prefaces unrelated answers with its identity; it introduces itself only when you actually ask.
+      - 🔓 **Still intentionally uncensored** for research, cybersecurity, red-teaming, biology, chemistry, pharmacology and clinical work.
+      - 📜 **St
+
+    ...
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+    - vision
+    - multimodal
+    - reasoning
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    mmproj: llama-cpp/mmproj/Qwythos-9B-v2-MTP-Q4_K_M/mmproj-Qwythos-9B-v2-BF16.gguf
+    options:
+      - use_jinja:true
+      - spec_type:draft-mtp
+      - spec_n_max:6
+      - spec_p_min:0.75
+    parameters:
+      model: llama-cpp/models/Qwythos-9B-v2-MTP-Q4_K_M/Qwythos-9B-v2-MTP-Q4_K_M.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Qwythos-9B-v2-MTP-Q4_K_M/Qwythos-9B-v2-MTP-Q4_K_M.gguf
+      sha256: cfdd00ac1c1dc9ced33f23817fb4282f2594067e02e34d82e3e63bc0ea275b05
+      uri: https://huggingface.co/empero-ai/Qwythos-9B-v2-GGUF/resolve/main/Qwythos-9B-v2-MTP-Q4_K_M.gguf
+    - filename: llama-cpp/mmproj/Qwythos-9B-v2-MTP-Q4_K_M/mmproj-Qwythos-9B-v2-BF16.gguf
+      sha256: 0d1687cb33124c78acab788b342d4a2eaf85b3035e87c3abe4ee9d0b84ddb4f5
+      uri: https://huggingface.co/empero-ai/Qwythos-9B-v2-GGUF/resolve/main/mmproj-Qwythos-9B-v2-BF16.gguf
 - name: "qwen3.6-27b-fable-fusion-711-uncensored-heretic-nm-dau-neo-max-mtp"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -121,6 +172,7 @@
   tags:
     - llm
     - gguf
+    - mtp
   overrides:
     backend: llama-cpp
     function:
@@ -182,6 +234,9 @@
       uri: huggingface://prism-ml/Bonsai-8B-gguf/Bonsai-8B-Q1_0.gguf
 - &ternary-bonsai-8b
   name: "ternary-bonsai-8b"
+  variants:
+    - model: ternary-bonsai-8b-q2-g64
+    - model: ternary-bonsai-8b-pq2
   url: "github:mudler/LocalAI/gallery/qwen3.yaml@master"
   license: apache-2.0
   icon: https://huggingface.co/prism-ml/Ternary-Bonsai-8B-gguf/resolve/main/assets/bonsai-logo.svg
@@ -218,6 +273,7 @@
       uri: huggingface://prism-ml/Ternary-Bonsai-8B-gguf/Ternary-Bonsai-8B-Q2_0.gguf
 - !!merge <<: *ternary-bonsai-8b
   name: "ternary-bonsai-8b-q2-g64"
+  variants: []
   description: |
     Ternary Bonsai 8B (PrismML), GGUF Q2_0 with group-64 packing (each FP16 scale shared
     across 64 weights instead of 128). Slightly larger (~2.31 GB) but matches llama.cpp's
@@ -235,6 +291,7 @@
       uri: huggingface://prism-ml/Ternary-Bonsai-8B-gguf/Ternary-Bonsai-8B-Q2_0_g64.gguf
 - !!merge <<: *ternary-bonsai-8b
   name: "ternary-bonsai-8b-pq2"
+  variants: []
   description: |
     Ternary Bonsai 8B (PrismML), GGUF PQ2_0 (packed Q2_0) ternary variant (~2.18 GB).
     Same {-1, 0, +1} weight alphabet as Q2_0. Runs on LocalAI's `bonsai` backend.
@@ -294,6 +351,9 @@
       uri: huggingface://prism-ml/Bonsai-27B-gguf/Bonsai-27B-mmproj-Q8_0.gguf
 - &ternary-bonsai-27b
   name: "ternary-bonsai-27b"
+  variants:
+    - model: ternary-bonsai-27b-pq2
+    - model: ternary-bonsai-27b-q2-g64
   url: "github:mudler/LocalAI/gallery/qwen3.yaml@master"
   license: apache-2.0
   icon: https://huggingface.co/prism-ml/Ternary-Bonsai-27B-gguf/resolve/main/assets/bonsai-logo.svg
@@ -336,6 +396,7 @@
       uri: huggingface://prism-ml/Ternary-Bonsai-27B-gguf/Ternary-Bonsai-27B-mmproj-Q8_0.gguf
 - !!merge <<: *ternary-bonsai-27b
   name: "ternary-bonsai-27b-pq2"
+  variants: []
   description: |
     Ternary Bonsai 27B (PrismML), GGUF PQ2_0 (packed Q2_0) ternary variant (~7.17 GB) with
     the 4-bit vision tower (mmproj) included. Runs on LocalAI's `bonsai` backend.
@@ -357,6 +418,7 @@
       uri: huggingface://prism-ml/Ternary-Bonsai-27B-gguf/Ternary-Bonsai-27B-mmproj-Q8_0.gguf
 - !!merge <<: *ternary-bonsai-27b
   name: "ternary-bonsai-27b-q2-g64"
+  variants: []
   description: |
     Ternary Bonsai 27B (PrismML), GGUF Q2_0 with group-64 packing (~7.59 GB), matching
     llama.cpp's native 64-value Q2_0 block layout, with the 4-bit vision tower (mmproj)
@@ -434,6 +496,11 @@
       uri: https://huggingface.co/GnLOLot/MiniCPM5-1B-Claude-Opus-Fable5-Thinking-GGUF/resolve/main/MiniCPM5-1B-Claude-Opus-Fable5-Thinking-Q4_K_M.gguf
       sha256: b1c3bf2995e96cb792a0031e4e1497a500e9244c68ba17c24a7e6edf1fc59019
 - name: "deepseek-v4-flash"
+  variants:
+    - model: deepseek-v4-flash-q2
+    - model: deepseek-v4-flash-q2-q4
+    - model: deepseek-v4-flash-q4-ssd
+    - model: deepseek-v4-flash-q2-mtp
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
     - https://huggingface.co/unsloth/DeepSeek-V4-Flash-GGUF
@@ -470,6 +537,7 @@
     - gguf
     - vision
     - multimodal
+    - mtp
   icon: https://cdn-uploads.huggingface.co/production/uploads/66309bd090589b7c65950665/ztbyGV_zGhzcLuTCSVyq3.png
   overrides:
     backend: llama-cpp
@@ -505,6 +573,7 @@
   tags:
     - llm
     - gguf
+    - mtp
   overrides:
     backend: llama-cpp
     function:
@@ -556,6 +625,8 @@
       sha256: e7a8eafdd8013443b6bcc4b6fb47b2d2025f772d359650b9ceb7d75971e22cad
       uri: https://huggingface.co/unsloth/Qwen-AgentWorld-35B-A3B-GGUF/resolve/main/Qwen-AgentWorld-35B-A3B-UD-Q4_K_M.gguf
 - name: "ornith-1.0-9b"
+  variants:
+    - model: ornith-1.0-9b-mtp
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
     - https://huggingface.co/deepreinforce-ai/Ornith-1.0-9B-GGUF
@@ -663,6 +734,7 @@
     - llm
     - gguf
     - reasoning
+    - mtp
   icon: https://storage.ko-fi.com/cdn/kofi6.png
   overrides:
     backend: llama-cpp
@@ -734,6 +806,7 @@
     - vision
     - multimodal
     - reasoning
+    - mtp
   icon: https://cdn-uploads.huggingface.co/production/uploads/66309bd090589b7c65950665/sGQKmrMc6L6guMoaB5_Y2.png
   overrides:
     backend: llama-cpp
@@ -1164,6 +1237,7 @@
     - vision
     - multimodal
     - reasoning
+    - mtp
   overrides:
     backend: llama-cpp
     function:
@@ -1198,6 +1272,7 @@
   tags:
     - llm
     - gguf
+    - mtp
   icon: https://raw.githubusercontent.com/zai-org/GLM-5/refs/heads/main/resources/bench_52.png
   overrides:
     backend: llama-cpp
@@ -1519,6 +1594,7 @@
     - vision
     - multimodal
     - reasoning
+    - mtp
   icon: https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3.6/Figures/qwen3.6_27b_score.png
   overrides:
     backend: llama-cpp
@@ -1748,6 +1824,8 @@
       sha256: 88956c71d20444d3ebf890e4495afed3257c6be877d4e82f0c26ce58e79b340f
       uri: https://huggingface.co/ReadyArt/Dark-Scarlett-v0.3-26B-A4B-GGUF/resolve/main/Dark-Scarlett-v0.3-26B-A4B-Q4_K_M.gguf
 - name: "qwopus3.6-27b-coder-mtp"
+  variants:
+    - model: qwopus3.6-27b-coder-mtp-nvfp4
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
     - https://huggingface.co/Jackrong/Qwopus3.6-27B-Coder-MTP-GGUF
@@ -1759,6 +1837,7 @@
     - vision
     - multimodal
     - reasoning
+    - mtp
   overrides:
     backend: llama-cpp
     function:
@@ -1839,6 +1918,8 @@
       sha256: ef269e294502d6ee3722cbf129681b2586c2e6ceb79d0507963c92146e058cd4
       uri: https://huggingface.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF/resolve/main/mmproj-F32.gguf
 - name: "gemma-4-12b-it-qat-q4_0"
+  variants:
+    - model: gemma-4-12b-it-qat-mtp
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
     - https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf
@@ -2399,6 +2480,8 @@
       sha256: 01b76572f80b7d2ebee80a27cb9c3699c26b04cae1c402eee7664fc17a4b5ce6
       uri: https://huggingface.co/LocalAI-io/privacy-filter-multilingual-GGUF/resolve/main/privacy-filter-multilingual-f16.gguf
 - name: "privacy-filter-nemotron"
+  variants:
+    - model: privacy-filter-nemotron-q8
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   icon: https://cdn-avatars.huggingface.co/v1/production/uploads/5fd5e18a90b6dc4633f6d292/QPiv8pt4JNxr0FdGnpFef.png
   urls:
@@ -2575,6 +2658,7 @@
     - llm
     - gguf
     - reasoning
+    - mtp
   icon: https://cdn-uploads.huggingface.co/production/uploads/66309bd090589b7c65950665/9EnS13MSxNU3snpAgEiLq.jpeg
   overrides:
     backend: llama-cpp
@@ -2602,6 +2686,8 @@
       sha256: f48daca405a1c768a9514e392c3955dcc4a9d66a5cf64cf45e064092b5f20ee4
       uri: https://huggingface.co/Jackrong/Qwopus3.5-9B-Coder-MTP-GGUF/resolve/main/Qwopus3.5-9B-Coder-MTP-mmproj.gguf
 - name: "qwopus3.6-27b-v2-mtp"
+  variants:
+    - model: qwopus3.6-27b-v2-mtp-nvfp4
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
     - https://huggingface.co/Jackrong/Qwopus3.6-27B-v2-MTP-GGUF
@@ -2611,6 +2697,7 @@
     - llm
     - gguf
     - reasoning
+    - mtp
   overrides:
     backend: llama-cpp
     function:
@@ -3191,6 +3278,9 @@
       sha256: 13bd039f95c9ea46ef1d75905faa7be6ca4e47a5af9d4cf62e298a738a5b195f
       uri: https://huggingface.co/KyleHessling1/Qwopus-GLM-18B-Merged-GGUF/resolve/main/Qwopus-GLM-18B-Healed-Q4_K_M.gguf
 - name: qwen3.6-27b
+  variants:
+    - model: qwen3.6-27b-dflash
+    - model: qwen3.6-27b-nvfp4-mtp
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
     - https://huggingface.co/unsloth/Qwen3.6-27B-GGUF
@@ -3383,37 +3473,6 @@
     - filename: llama-cpp/models/supergemma4-26b-uncensored-gguf-v2/supergemma4-26b-uncensored-fast-v2-Q4_K_M.gguf
       sha256: e773b0a209d48524f9d485bca0818247f75d7ddde7cce951367a7e441fb59137
       uri: https://huggingface.co/Jiunsong/supergemma4-26b-uncensored-gguf-v2/resolve/main/supergemma4-26b-uncensored-fast-v2-Q4_K_M.gguf
-- name: qwopus-glm-18b-merged
-  url: github:mudler/LocalAI/gallery/virtual.yaml@master
-  urls:
-    - https://huggingface.co/KyleHessling1/Qwopus-GLM-18B-Merged-GGUF
-  description: "# \U0001FA90 Qwen3.5-9B-GLM5.1-Distill-v1\n\n## \U0001F4CC Model Overview\n\n**Model Name:** `Jackrong/Qwen3.5-9B-GLM5.1-Distill-v1`\n**Base Model:** Qwen3.5-9B\n**Training Type:** Supervised Fine-Tuning (SFT, Distillation)\n**Parameter Scale:** 9B\n**Training Framework:** Unsloth\n\nThis model is a distilled variant of **Qwen3.5-9B**, trained on high-quality reasoning data derived from **GLM-5.1**.\n\nThe primary goals are to:\n\n  - Improve **structured reasoning ability**\n  - Enhance **instruction-following consistency**\n  - Activate **latent knowledge via better reasoning structure**\n\n## \U0001F4CA Training Data\n\n### Main Dataset\n\n  - `Jackrong/GLM-5.1-Reasoning-1M-Cleaned`\n  - Cleaned from the original `Kassadin88/GLM-5.1-1000000x` dataset.\n  - Generated from a **GLM-5.1 teacher model**\n  - Approximately **700x** the scale of `Qwen3.5-reasoning-700x`\n  - Training used a **filtered subset**, not the full source dataset.\n\n### Auxiliary Dataset\n\n  - `Jackrong/Qwen3.5-reasoning-700x`\n\n...\n"
-  license: apache-2.0
-  icon: https://cdn-uploads.huggingface.co/production/uploads/66309bd090589b7c65950665/BnSg_x99v9bG9T5-8sKa1.png
-  tags:
-    - llm
-    - gguf
-    - reasoning
-  last_checked: "2026-04-30"
-  overrides:
-    backend: llama-cpp
-    function:
-      automatic_tool_parsing_fallback: true
-      grammar:
-        disable: true
-    known_usecases:
-      - chat
-      - completion
-    options:
-      - use_jinja:true
-    parameters:
-      model: llama-cpp/models/Qwopus-GLM-18B-Merged-GGUF/Qwopus-GLM-18B-Healed-Q4_K_M.gguf
-    template:
-      use_tokenizer_template: true
-  files:
-    - filename: llama-cpp/models/Qwopus-GLM-18B-Merged-GGUF/Qwopus-GLM-18B-Healed-Q4_K_M.gguf
-      sha256: 13bd039f95c9ea46ef1d75905faa7be6ca4e47a5af9d4cf62e298a738a5b195f
-      uri: https://huggingface.co/KyleHessling1/Qwopus-GLM-18B-Merged-GGUF/resolve/main/Qwopus-GLM-18B-Healed-Q4_K_M.gguf
 - name: qwen3.6-35b-a3b-apex
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
@@ -3481,6 +3540,10 @@
       sha256: b5aa0676be588bf6ef3bbdb89905d7d239b2a809637f0766a6ce23aed6c6b5b4
       uri: https://huggingface.co/mudler/Qwen3.6-35B-A3B-APEX-GGUF/resolve/main/Qwen3.6-35B-A3B-APEX-Quality.gguf
 - name: qwen3.6-35b-a3b
+  variants:
+    - model: qwen3.6-35b-a3b-dflash
+    - model: qwen3.6-35b-a3b-nvfp4-mtp
+    - model: qwen3.6-35b-a3b-apex
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
     - https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF
@@ -3577,6 +3640,10 @@
       sha256: e92ab30c10422ff1863f0d57cf2c206ec3ae47b4903e70c672589dcb7cbec2c6
       uri: https://huggingface.co/mudler/gemma-4-26B-A4B-it-APEX-GGUF/resolve/main/gemma-4-26B-A4B-APEX-Quality.gguf
 - name: gemma-4-26b-a4b-it
+  variants:
+    - model: gemma-4-26b-a4b-it-qat
+    - model: gemma-4-26b-a4b-it-qat-q4_0
+    - model: gemma-4-26b-a4b-it-apex
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
     - https://huggingface.co/google/gemma-4-26B-A4B-it
@@ -3619,6 +3686,10 @@
       sha256: 2aa99ffb47033ead4a3f1584fec5283905302c1c16fed59c99e0eec131c6dc53
       uri: huggingface://ggml-org/gemma-4-26B-A4B-it-GGUF/mmproj-gemma-4-26B-A4B-it-bf16.gguf
 - name: gemma-4-e2b-it
+  variants:
+    - model: "gemma-4-e2b-it:sglang-mtp"
+    - model: gemma-4-e2b-it-qat-q4_0
+    - model: gemma-4-e2b-it-qat-mtp
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
     - https://huggingface.co/google/gemma-4-E2B-it
@@ -3662,6 +3733,10 @@
       sha256: e42083b71a9e31e0f722171d551f6d92b101544001c4dde040306a8f2160fe8c
       uri: huggingface://ggml-org/gemma-4-E2B-it-GGUF/mmproj-gemma-4-E2B-it-bf16.gguf
 - name: gemma-4-e4b-it
+  variants:
+    - model: "gemma-4-e4b-it:sglang-mtp"
+    - model: gemma-4-e4b-it-qat-q4_0
+    - model: gemma-4-e4b-it-qat-mtp
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
     - https://huggingface.co/google/gemma-4-E4B-it
@@ -3704,6 +3779,9 @@
       sha256: 4c199e460410ba219a8c63930a7121154e1c70cdf66044858f767966332e5a54
       uri: huggingface://ggml-org/gemma-4-E4B-it-GGUF/mmproj-gemma-4-E4B-it-bf16.gguf
 - name: gemma-4-31b-it
+  variants:
+    - model: gemma-4-31b-it-qat-q4_0
+    - model: gemma-4-31b-it-qat-mtp
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
     - https://huggingface.co/google/gemma-4-31B-it
@@ -4079,6 +4157,8 @@
       sha256: 8221b6a48c714db6829a92760c31034d7ecd436f830c61624ccc92b461b4a1c4
       uri: https://huggingface.co/mradermacher/Q3.5-BlueStar-27B-GGUF/resolve/main/Q3.5-BlueStar-27B.mmproj-f16.gguf
 - name: qwen3.5-9b
+  variants:
+    - model: qwen3.5-9b-dflash
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
     - https://huggingface.co/unsloth/Qwen3.5-9B-GGUF
@@ -4357,6 +4437,13 @@
     - code
     - math
   last_checked: "2026-04-30"
+  # This entry installs the Q4_K_M build as-is, on any client and any host.
+  # variants lists other builds of the same model the installer may pick
+  # instead when this host can run them and has the memory for them, sizing
+  # each one live from its weights. Clients that predate variants support drop
+  # the key and install this entry unchanged.
+  variants:
+    - model: nanbeige4.1-3b-q8
   overrides:
     parameters:
       model: nanbeige4.1-3b-q4_k_m.gguf
@@ -4497,6 +4584,8 @@
       sha256: 5c058d9f7b737167195fa54eae4a2ae17658ac2c0a8073f7f116ba006b2ab32c
       uri: https://huggingface.co/mudler/ced-gguf/resolve/main/ced-base-f16.gguf
 - name: ced-base-q8
+  variants:
+    - model: ced-base-f16
   url: github:mudler/LocalAI/gallery/ced.yaml@master
   urls:
     - https://huggingface.co/mudler/ced-gguf
@@ -4543,6 +4632,8 @@
       sha256: af8b81c67bae50bfca4ea83dbba77b3bae4fa6180d36c17d6877f7700aeeb77b
       uri: https://huggingface.co/mudler/ced-gguf/resolve/main/ced-tiny-f16.gguf
 - name: ced-tiny-q8
+  variants:
+    - model: ced-tiny-f16
   url: github:mudler/LocalAI/gallery/ced.yaml@master
   urls:
     - https://huggingface.co/mudler/ced-gguf
@@ -4589,6 +4680,8 @@
       sha256: 3c6a8936c77312f07a9ecb7b4bbbcb1f93ad137920ca6656bae9306571fb0c03
       uri: https://huggingface.co/mudler/ced-gguf/resolve/main/ced-mini-f16.gguf
 - name: ced-mini-q8
+  variants:
+    - model: ced-mini-f16
   url: github:mudler/LocalAI/gallery/ced.yaml@master
   urls:
     - https://huggingface.co/mudler/ced-gguf
@@ -4635,6 +4728,8 @@
       sha256: c391ed8697a1b08d7c1a463e4940a5c3a2f670e0544ab0d8ee23b544583602a8
       uri: https://huggingface.co/mudler/ced-gguf/resolve/main/ced-small-f16.gguf
 - name: ced-small-q8
+  variants:
+    - model: ced-small-f16
   url: github:mudler/LocalAI/gallery/ced.yaml@master
   urls:
     - https://huggingface.co/mudler/ced-gguf
@@ -6006,6 +6101,8 @@
       sha256: 0599862ac5d15cd308e1d2e368373aea6c02e25ebd1737ad4a4562a0901b0ef8
       uri: huggingface://Serveurperso/ACE-Step-1.5-GGUF/vae-BF16.gguf
 - name: vibevoice-cpp
+  variants:
+    - model: vibevoice-tts-crispasr
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
     - https://huggingface.co/mudler/vibevoice.cpp-models
@@ -6052,6 +6149,8 @@
       sha256: b15cd8b9cae6ee2c3d20b0ee6e7bfe93f13489f8b63b6834e9bbf0dfabf6505a
       uri: huggingface://mudler/vibevoice.cpp-models/voice-en-Carter_man.gguf
 - name: vibevoice-cpp-asr
+  variants:
+    - model: vibevoice-crispasr
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
     - https://huggingface.co/mudler/vibevoice.cpp-models
@@ -6095,6 +6194,8 @@
       uri: huggingface://mudler/vibevoice.cpp-models/tokenizer.gguf
 - &qwenttscpp_gallery
   name: qwen3-tts-cpp
+  variants:
+    - model: qwen3-tts-cpp-0.6b-base-q4
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
     - https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF
@@ -6130,6 +6231,7 @@
       uri: huggingface://Serveurperso/Qwen3-TTS-GGUF/qwen-tokenizer-12hz-Q8_0.gguf
 - !!merge <<: *qwenttscpp_gallery
   name: qwen3-tts-cpp-0.6b-base-q4
+  variants: []
   description: |
     Qwen3-TTS 0.6B Base (C++ / GGML, qwentts.cpp), Q4_K_M (~0.6 GB talker).
     Streaming + voice cloning, 24kHz mono, 11 languages.
@@ -6149,6 +6251,8 @@
       uri: huggingface://Serveurperso/Qwen3-TTS-GGUF/qwen-tokenizer-12hz-Q4_K_M.gguf
 - !!merge <<: *qwenttscpp_gallery
   name: qwen3-tts-cpp-1.7b-base
+  variants:
+    - model: qwen3-tts-cpp-1.7b-base-q4
   description: |
     Qwen3-TTS 1.7B Base (C++ / GGML, qwentts.cpp), Q8_0 (~2.0 GB talker).
     Higher-quality streaming + voice cloning, 24kHz mono, 11 languages.
@@ -6168,6 +6272,7 @@
       uri: huggingface://Serveurperso/Qwen3-TTS-GGUF/qwen-tokenizer-12hz-Q8_0.gguf
 - !!merge <<: *qwenttscpp_gallery
   name: qwen3-tts-cpp-1.7b-base-q4
+  variants: []
   description: |
     Qwen3-TTS 1.7B Base (C++ / GGML, qwentts.cpp), Q4_K_M (~1.2 GB talker).
     Streaming + voice cloning, 24kHz mono, 11 languages.
@@ -6187,6 +6292,8 @@
       uri: huggingface://Serveurperso/Qwen3-TTS-GGUF/qwen-tokenizer-12hz-Q4_K_M.gguf
 - !!merge <<: *qwenttscpp_gallery
   name: qwen3-tts-cpp-customvoice
+  variants:
+    - model: qwen3-tts-cpp-customvoice-q4
   description: |
     Qwen3-TTS 0.6B CustomVoice (C++ / GGML, qwentts.cpp), Q8_0. Named speakers
     selected via the `voice` field: serena, vivian, uncle_fu, ryan, aiden,
@@ -6216,6 +6323,7 @@
       uri: huggingface://Serveurperso/Qwen3-TTS-GGUF/qwen-tokenizer-12hz-Q8_0.gguf
 - !!merge <<: *qwenttscpp_gallery
   name: qwen3-tts-cpp-customvoice-q4
+  variants: []
   description: |
     Qwen3-TTS 0.6B CustomVoice (C++ / GGML, qwentts.cpp), Q4_K_M. Named speakers
     via the `voice` field (serena, vivian, ryan, aiden, eric, dylan, ...).
@@ -6244,6 +6352,8 @@
       uri: huggingface://Serveurperso/Qwen3-TTS-GGUF/qwen-tokenizer-12hz-Q4_K_M.gguf
 - !!merge <<: *qwenttscpp_gallery
   name: qwen3-tts-cpp-1.7b-customvoice
+  variants:
+    - model: qwen3-tts-cpp-1.7b-customvoice-q4
   description: |
     Qwen3-TTS 1.7B CustomVoice (C++ / GGML, qwentts.cpp), Q8_0. Named speakers via
     the `voice` field (serena, vivian, ryan, aiden, eric, dylan, ...). Streaming,
@@ -6272,6 +6382,7 @@
       uri: huggingface://Serveurperso/Qwen3-TTS-GGUF/qwen-tokenizer-12hz-Q8_0.gguf
 - !!merge <<: *qwenttscpp_gallery
   name: qwen3-tts-cpp-1.7b-customvoice-q4
+  variants: []
   description: |
     Qwen3-TTS 1.7B CustomVoice (C++ / GGML, qwentts.cpp), Q4_K_M. Named speakers
     via the `voice` field. Streaming, 24kHz mono, 11 languages.
@@ -6299,6 +6410,8 @@
       uri: huggingface://Serveurperso/Qwen3-TTS-GGUF/qwen-tokenizer-12hz-Q4_K_M.gguf
 - !!merge <<: *qwenttscpp_gallery
   name: qwen3-tts-cpp-1.7b-voicedesign
+  variants:
+    - model: qwen3-tts-cpp-1.7b-voicedesign-q4
   description: |
     Qwen3-TTS 1.7B VoiceDesign (C++ / GGML, qwentts.cpp), Q8_0. Synthesises a
     speaker from a free-text attribute instruction - REQUIRES the OpenAI
@@ -6328,6 +6441,7 @@
       uri: huggingface://Serveurperso/Qwen3-TTS-GGUF/qwen-tokenizer-12hz-Q8_0.gguf
 - !!merge <<: *qwenttscpp_gallery
   name: qwen3-tts-cpp-1.7b-voicedesign-q4
+  variants: []
   description: |
     Qwen3-TTS 1.7B VoiceDesign (C++ / GGML, qwentts.cpp), Q4_K_M. Synthesises a
     speaker from a free-text attribute instruction - REQUIRES the `instructions`
@@ -6356,6 +6470,8 @@
       uri: huggingface://Serveurperso/Qwen3-TTS-GGUF/qwen-tokenizer-12hz-Q4_K_M.gguf
 - &mossttscpp_gallery
   name: moss-tts-cpp-v1_5-q8_0
+  variants:
+    - model: moss-tts-cpp-v1_5-f16
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
     - https://huggingface.co/mudler/MOSS-TTS-Local-Transformer-v1.5-GGUF
@@ -6397,6 +6513,7 @@
       uri: huggingface://mudler/MOSS-TTS-Local-Transformer-v1.5-GGUF/moss-tokenizer-v1_5.gguf
 - !!merge <<: *mossttscpp_gallery
   name: moss-tts-cpp-v1_5-f16
+  variants: []
   description: |
     MOSS-TTS-Local v1.5 (C++/ggml, moss-tts.cpp), F16 (~9.4 GB), code-exact versus the
     reference. 48kHz stereo text-to-speech with reference-audio voice cloning.
@@ -6418,6 +6535,8 @@
       sha256: d0f4f371f80ff32ba222b1b39c192df8285c7b88986a55f954454db69618479e
       uri: huggingface://mudler/MOSS-TTS-Local-Transformer-v1.5-GGUF/moss-tokenizer-v1_5.gguf
 - name: omnivoice-cpp
+  variants:
+    - model: omnivoice-cpp-hq
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
     - https://huggingface.co/Serveurperso/OmniVoice-GGUF
@@ -8112,6 +8231,8 @@
       sha256: cd5a851d3928697fa1bd76d459d2cc409b6cf40c9d9682b2f5c8e7c6a9f9630f
       uri: huggingface://unsloth/Qwen3-VL-2B-Instruct-GGUF/mmproj-F16.gguf
 - name: huihui-qwen3-vl-30b-a3b-instruct-abliterated
+  variants:
+    - model: huihui-qwen3-vl-30b-a3b-instruct-abliterated-mxfp4_moe
   url: github:mudler/LocalAI/gallery/qwen3.yaml@master
   urls:
     - https://huggingface.co/noctrex/Huihui-Qwen3-VL-30B-A3B-Instruct-abliterated-GGUF
@@ -8303,54 +8424,6 @@
     - filename: mmproj-Qwen3-Omni-30B-A3B-Thinking-Q8_0.gguf
       sha256: 2bd5459571f8230a0c251d3d0dd36267753f0800ed145449a34f220a31f93898
       uri: huggingface://ggml-org/Qwen3-Omni-30B-A3B-Thinking-GGUF/mmproj-Qwen3-Omni-30B-A3B-Thinking-Q8_0.gguf
-- name: qwen3-asr-0.6b
-  url: github:mudler/LocalAI/gallery/virtual.yaml@master
-  urls:
-    - https://huggingface.co/Qwen/Qwen3-ASR-0.6B
-  description: |
-    Qwen3-ASR is an automatic speech recognition model supporting multiple languages and batch inference.
-  license: apache-2.0
-  icon: https://cdn-avatars.huggingface.co/v1/production/uploads/620760a26e3b7210c2ff1943/-s1gyJfvbE1RgO5iBeNOi.png
-  tags:
-    - speech-recognition
-    - asr
-  last_checked: "2026-04-30"
-  overrides:
-    backend: qwen-asr
-    known_usecases:
-      - transcript
-    parameters:
-      model: Qwen/Qwen3-ASR-0.6B
-    artifacts:
-      - name: model
-        target: model
-        source:
-          type: huggingface
-          repo: Qwen/Qwen3-ASR-0.6B
-- name: qwen3-asr-1.7b
-  url: github:mudler/LocalAI/gallery/virtual.yaml@master
-  urls:
-    - https://huggingface.co/Qwen/Qwen3-ASR-1.7B
-  description: |
-    Qwen3-ASR is an automatic speech recognition model supporting multiple languages and batch inference.
-  license: apache-2.0
-  icon: https://cdn-avatars.huggingface.co/v1/production/uploads/620760a26e3b7210c2ff1943/-s1gyJfvbE1RgO5iBeNOi.png
-  tags:
-    - speech-recognition
-    - asr
-  last_checked: "2026-04-30"
-  overrides:
-    backend: qwen-asr
-    known_usecases:
-      - transcript
-    parameters:
-      model: Qwen/Qwen3-ASR-1.7B
-    artifacts:
-      - name: model
-        target: model
-        source:
-          type: huggingface
-          repo: Qwen/Qwen3-ASR-1.7B
 - name: glm-ocr
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
@@ -8631,6 +8704,8 @@
       sha256: c5c38bfa5d8d5100e91a2e0050a0b2f3e082cd4bfd423cb527abc3b6f1ae180c
       uri: huggingface://bartowski/Aurore-Reveil_Koto-Small-7B-IT-GGUF/Aurore-Reveil_Koto-Small-7B-IT-Q4_K_M.gguf
 - name: opengvlab_internvl3_5-30b-a3b
+  variants:
+    - model: opengvlab_internvl3_5-30b-a3b-q8_0
   url: github:mudler/LocalAI/gallery/qwen3.yaml@master
   urls:
     - https://huggingface.co/OpenGVLab/InternVL3_5-30B-A3B
@@ -8728,6 +8803,8 @@
       sha256: c9625c981969d267052464e2d345f8ff5bc7e841871f5284a2bd972461c7356d
       uri: huggingface://bartowski/OpenGVLab_InternVL3_5-14B-GGUF/mmproj-OpenGVLab_InternVL3_5-14B-f16.gguf
 - name: opengvlab_internvl3_5-14b
+  variants:
+    - model: opengvlab_internvl3_5-14b-q8_0
   url: github:mudler/LocalAI/gallery/qwen3.yaml@master
   urls:
     - https://huggingface.co/OpenGVLab/InternVL3_5-14B
@@ -8760,6 +8837,8 @@
       sha256: c9625c981969d267052464e2d345f8ff5bc7e841871f5284a2bd972461c7356d
       uri: huggingface://bartowski/OpenGVLab_InternVL3_5-14B-GGUF/mmproj-OpenGVLab_InternVL3_5-14B-f16.gguf
 - name: opengvlab_internvl3_5-8b
+  variants:
+    - model: opengvlab_internvl3_5-8b-q8_0
   url: github:mudler/LocalAI/gallery/qwen3.yaml@master
   urls:
     - https://huggingface.co/OpenGVLab/InternVL3_5-8B
@@ -8822,6 +8901,8 @@
       sha256: 212cc090f81ea2981b870186d4b424fae69489a5313a14e52ffdb2e877852389
       uri: huggingface://bartowski/OpenGVLab_InternVL3_5-8B-GGUF/mmproj-OpenGVLab_InternVL3_5-8B-f16.gguf
 - name: opengvlab_internvl3_5-4b
+  variants:
+    - model: opengvlab_internvl3_5-4b-q8_0
   url: github:mudler/LocalAI/gallery/qwen3.yaml@master
   urls:
     - https://huggingface.co/OpenGVLab/InternVL3_5-4B
@@ -10049,6 +10130,8 @@
       sha256: ebab7f90c7833fbccd46d3a555410e78d969db5438e169b6524be444862b3676
       uri: https://github.com/yakhyo/face-anti-spoofing/releases/download/weights/MiniFASNetV1SE.onnx
 - name: insightface-opencv
+  variants:
+    - model: insightface-opencv-int8
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
     - https://github.com/opencv/opencv_zoo
@@ -10742,6 +10825,10 @@
       sha256: 0909d8a1aba584b482d501baae032611d1559878be1b7f6606ba516687c5380d
 - &depth-anything-3-base
   name: depth-anything-3-base
+  variants:
+    - model: depth-anything-3-base-q8_0
+    - model: depth-anything-3-base-f16
+    - model: depth-anything-3-base-f32
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
     - https://github.com/mudler/depth-anything.cpp
@@ -10773,6 +10860,7 @@
       sha256: "43cd45d00f9024f4319f4beabd73155db5132e4b575bc52eff4131262c9d78f1"
 - !!merge <<: *depth-anything-3-base
   name: depth-anything-3-base-q8_0
+  variants: []
   description: |
     Depth Anything 3 (base), q8_0 — near-lossless 8-bit quant (~149 MB). Same
     depth + camera pose output as the q4_k default at higher fidelity.
@@ -10786,6 +10874,7 @@
       sha256: "71b1c953113657f9a4fbef43ab6a16fe7a6f87b36da113a184f13c4a564968a0"
 - !!merge <<: *depth-anything-3-base
   name: depth-anything-3-base-f16
+  variants: []
   description: |
     Depth Anything 3 (base), f16 — half precision (~233 MB), no measurable
     accuracy loss vs f32. Depth + camera pose.
@@ -10799,6 +10888,7 @@
       sha256: "2975419c99702ca646d5b7120c53e35c9fee158f0a803577241d16957f75624b"
 - !!merge <<: *depth-anything-3-base
   name: depth-anything-3-base-f32
+  variants: []
   description: |
     Depth Anything 3 (base), f32 — maximum fidelity (~412 MB). Reference-parity
     depth + camera pose.
@@ -10812,6 +10902,7 @@
       sha256: "1b13b166e8a8b4f2c862f42d36edb2f9aab995a18cc527a52b9f160b99c6b8da"
 - !!merge <<: *depth-anything-3-base
   name: depth-anything-3-giant
+  variants: []
   description: |
     Depth Anything 3 (giant / vitg), f32 — the large backbone (~4.9 GB) for
     maximum quality depth + camera pose. GPU recommended.
@@ -10832,6 +10923,7 @@
       sha256: "392edf64626be6a985487beb39c8d54cdc14f7feb2b53323742c96b71e7e7181"
 - !!merge <<: *depth-anything-3-base
   name: depth-anything-3-small
+  variants: []
   description: |
     Depth Anything 3 (small / vits), f32 — the smallest backbone (~131 MB) for
     fast CPU depth + camera pose. Same output as base at lower latency.
@@ -10845,6 +10937,7 @@
       sha256: "eab5597e01dedde1a20c038590ae8c887b85ec35b882581138c08308e92c41e5"
 - !!merge <<: *depth-anything-3-base
   name: depth-anything-3-large
+  variants: []
   description: |
     Depth Anything 3 (large / vitl), f32 (~1.6 GB) — higher quality depth +
     camera pose than base. GPU recommended for interactive use.
@@ -10865,6 +10958,7 @@
       sha256: "a79eb3e19e8ec49f4daac484fb5fb67e15baac61518d229cf819e40c87080906"
 - !!merge <<: *depth-anything-3-base
   name: depth-anything-3-mono-large
+  variants: []
   description: |
     Depth Anything 3 (monocular large / vitl), f32 (~1.3 GB) — single-image
     monocular depth + a sky mask (no camera pose). DPT single-head variant; use
@@ -10879,6 +10973,7 @@
       sha256: "291b1a554af907c3f79986ee225da8933be5f7a31d73c81d06784cda284535de"
 - !!merge <<: *depth-anything-3-base
   name: depth-anything-3-metric-large
+  variants: []
   description: |
     Depth Anything 3 (metric large / vitl), f32 (~1.3 GB) — single-image
     metric-scale depth (meters) + a sky mask. DPT single-head metric variant; use
@@ -10894,6 +10989,7 @@
       sha256: "d10b7450c2238244b2d72e2749537a1876255180149cd630a18bc1619c9286be"
 - !!merge <<: *depth-anything-3-base
   name: depth-anything-3-nested
+  variants: []
   description: |
     Depth Anything 3 (nested giant+large), f32 — the recommended metric model. A
     two-branch pipeline: the anyview GIANT (vitg) branch and a metric ViT-L branch
@@ -10925,6 +11021,10 @@
       sha256: "b54ed50cbc0b0c14fae1f8edd0fea8bd1cac0850485fd6e7eb2422c7a19e570e"
 - &depth-anything-2-base
   name: depth-anything-2-base
+  variants:
+    - model: depth-anything-2-base-q8_0
+    - model: depth-anything-2-base-f16
+    - model: depth-anything-2-base-f32
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
     - https://github.com/mudler/depth-anything.cpp
@@ -10955,6 +11055,7 @@
       sha256: "49e77ec7e593080111242fa76017cae3e26498d550841cf8a70dfcd36bb175f2"
 - !!merge <<: *depth-anything-2-base
   name: depth-anything-2-base-q8_0
+  variants: []
   description: |
     Depth Anything V2 (base / ViT-B), q8_0 — near-lossless 8-bit quant. Same
     relative monocular depth output as the q4_k default at higher fidelity. Use
@@ -10969,6 +11070,7 @@
       sha256: "11920ec7a8dfc2fa7fe8ed44811a46fafe415c641d13144bb733d1437832291b"
 - !!merge <<: *depth-anything-2-base
   name: depth-anything-2-base-f16
+  variants: []
   description: |
     Depth Anything V2 (base / ViT-B), f16 — half precision, no measurable
     accuracy loss vs f32. Relative monocular depth only (no pose). Use
@@ -10983,6 +11085,7 @@
       sha256: "e91c011fbbf90a44639fea55b8d61ca9e80dfb5541220946c8b6e6261fe67ab1"
 - !!merge <<: *depth-anything-2-base
   name: depth-anything-2-base-f32
+  variants: []
   description: |
     Depth Anything V2 (base / ViT-B), f32 — maximum reference fidelity. Relative
     monocular depth only (no pose). Use GenerateImage (src -> depth PNG) or the
@@ -10997,6 +11100,7 @@
       sha256: "2d3d2e4d8fae9646c17577b84c870c7d77a34ded8cf8d5da0a60b2bee1530ccc"
 - !!merge <<: *depth-anything-2-base
   name: depth-anything-2-small
+  variants: []
   description: |
     Depth Anything V2 (small / ViT-S), f32 — the smallest, fastest backbone for
     relative monocular depth on CPU. Depth only (no pose). Use GenerateImage
@@ -11011,6 +11115,7 @@
       sha256: "1f6622aa70cbd0eba34d34e2f635a156ed8c3f8e158fb149eb355366e2deb899"
 - !!merge <<: *depth-anything-2-base
   name: depth-anything-2-large
+  variants: []
   description: |
     Depth Anything V2 (large / ViT-L), f32 — higher-quality relative monocular
     depth than base. Depth only (no pose). Use GenerateImage (src -> depth PNG)
@@ -11025,6 +11130,7 @@
       sha256: "e187658b01b6df62e1553b03df9973606a7287551d4771b09802fc10b26f19f3"
 - !!merge <<: *depth-anything-2-base
   name: depth-anything-2-metric-hypersim-small
+  variants: []
   description: |
     Depth Anything V2 Metric (Hypersim, indoor / ViT-S), q4_k — metric monocular
     depth in METRES (indoor, max_depth 20). Depth only (no pose). Use
@@ -11046,6 +11152,7 @@
       sha256: "decd99f5c756b564aae5ca1a1612f896e7f76889060e1d25ba610549bbc39b52"
 - !!merge <<: *depth-anything-2-base
   name: depth-anything-2-metric-hypersim-base
+  variants: []
   description: |
     Depth Anything V2 Metric (Hypersim, indoor / ViT-B), q4_k — metric monocular
     depth in METRES (indoor, max_depth 20). Depth only (no pose). Use
@@ -11067,6 +11174,7 @@
       sha256: "c7c6a8628ac154f2ad43db09b8146518e863375be2cb03b8b46caec49a4fcf3a"
 - !!merge <<: *depth-anything-2-base
   name: depth-anything-2-metric-hypersim-large
+  variants: []
   description: |
     Depth Anything V2 Metric (Hypersim, indoor / ViT-L), q4_k — highest-quality
     metric monocular depth in METRES (indoor, max_depth 20). Depth only (no
@@ -11088,6 +11196,7 @@
       sha256: "3664506bea55e64926fff2cb112ea5a9ad923d13647b9c69617184a89dd1e473"
 - !!merge <<: *depth-anything-2-base
   name: depth-anything-2-metric-vkitti-small
+  variants: []
   description: |
     Depth Anything V2 Metric (Virtual KITTI, outdoor / ViT-S), q4_k — metric
     monocular depth in METRES (outdoor, max_depth 80). Depth only (no pose). Use
@@ -11109,6 +11218,7 @@
       sha256: "8dcaa5d0f8475c3dc5de59e28faacd6d46e5ef73c73ecc58e365d7751bc2279f"
 - !!merge <<: *depth-anything-2-base
   name: depth-anything-2-metric-vkitti-base
+  variants: []
   description: |
     Depth Anything V2 Metric (Virtual KITTI, outdoor / ViT-B), q4_k — metric
     monocular depth in METRES (outdoor, max_depth 80). Depth only (no pose). Use
@@ -11130,6 +11240,7 @@
       sha256: "1de5a7aae674df6afb8fa5e06d67843dccfbab92cd64b7c816c1218229446d6d"
 - !!merge <<: *depth-anything-2-base
   name: depth-anything-2-metric-vkitti-large
+  variants: []
   description: |
     Depth Anything V2 Metric (Virtual KITTI, outdoor / ViT-L), q4_k —
     highest-quality metric monocular depth in METRES (outdoor, max_depth 80).
@@ -12082,6 +12193,8 @@
       sha256: 376902d50612ecfc5bd8b268f376c04d10ad7e480f99a1483b833f04344a549e
       uri: huggingface://MaziyarPanahi/Qwen3-8B-GGUF/Qwen3-8B.Q4_K_M.gguf
 - name: qwen3-4b
+  variants:
+    - model: qwen3-4b-dflash
   url: github:mudler/LocalAI/gallery/qwen3.yaml@master
   urls:
     - https://huggingface.co/Qwen/Qwen3-4B
@@ -15306,6 +15419,9 @@
       sha256: fadc3e5f8d42bf7e894a785b05082e47daee4df26680389817e2093056f088ad
       uri: huggingface://unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
 - name: gemma-3-27b-it
+  variants:
+    - model: gemma-3-27b-it-qat
+    - model: google-gemma-3-27b-it-qat-q4_0-small
   url: github:mudler/LocalAI/gallery/gemma.yaml@master
   urls:
     - https://ai.google.dev/gemma/docs
@@ -15337,6 +15453,8 @@
       sha256: 54cb61c842fe49ac3c89bc1a614a2778163eb49f3dec2b90ff688b4c0392cb48
       uri: huggingface://lmstudio-community/gemma-3-27b-it-GGUF/mmproj-model-f16.gguf
 - name: gemma-3-12b-it
+  variants:
+    - model: gemma-3-12b-it-qat
   url: github:mudler/LocalAI/gallery/gemma.yaml@master
   urls:
     - https://ai.google.dev/gemma/docs/core
@@ -15368,6 +15486,8 @@
       sha256: 30c02d056410848227001830866e0a269fcc28aaf8ca971bded494003de9f5a5
       uri: huggingface://lmstudio-community/gemma-3-12b-it-GGUF/mmproj-model-f16.gguf
 - name: gemma-3-4b-it
+  variants:
+    - model: gemma-3-4b-it-qat
   url: github:mudler/LocalAI/gallery/gemma.yaml@master
   urls:
     - https://ai.google.dev/gemma/docs/core
@@ -19366,6 +19486,8 @@
       sha256: 555b91485955bc96eb445b57dd4bbf8809aa7d8cce7c313f4f8bc5b2340896b4
       uri: huggingface://bartowski/ibm-granite_granite-3.3-2b-instruct-GGUF/ibm-granite_granite-3.3-2b-instruct-Q4_K_M.gguf
 - name: llama-3.2-1b-instruct:q4_k_m
+  variants:
+    - model: "llama-3.2-1b-instruct:q8_0"
   url: github:mudler/LocalAI/gallery/llama3.2-quantized.yaml@master
   urls:
     - https://huggingface.co/hugging-quants/Llama-3.2-1B-Instruct-Q4_K_M-GGUF
@@ -19396,6 +19518,8 @@
       sha256: 1d0e9419ec4e12aef73ccf4ffd122703e94c48344a96bc7c5f0f2772c2152ce3
       uri: huggingface://hugging-quants/Llama-3.2-1B-Instruct-Q4_K_M-GGUF/llama-3.2-1b-instruct-q4_k_m.gguf
 - name: llama-3.2-3b-instruct:q4_k_m
+  variants:
+    - model: "llama-3.2-3b-instruct:q8_0"
   url: github:mudler/LocalAI/gallery/llama3.2-quantized.yaml@master
   urls:
     - https://huggingface.co/hugging-quants/Llama-3.2-3B-Instruct-Q4_K_M-GGUF
@@ -19861,33 +19985,6 @@
     - filename: calme-3.1-llamaloi-3b.Q5_K_M.gguf
       sha256: 06b900c7252423329ca57a02a8b8d18a1294934709861d09af96e74694c9a3f1
       uri: huggingface://MaziyarPanahi/calme-3.1-llamaloi-3b-GGUF/calme-3.1-llamaloi-3b.Q5_K_M.gguf
-- name: llama3.2-3b-enigma
-  url: github:mudler/LocalAI/gallery/llama3.2-quantized.yaml@master
-  urls:
-    - https://huggingface.co/QuantFactory/Llama3.2-3B-Enigma-GGUF
-  description: |
-    Enigma is a code-instruct model built on Llama 3.2 3b. It is a high quality code instruct model with the Llama 3.2 Instruct chat format. The model is finetuned on synthetic code-instruct data generated with Llama 3.1 405b and supplemented with generalist synthetic data. It uses the Llama 3.2 Instruct prompt format.
-  license: llama3.2
-  icon: https://cdn-uploads.huggingface.co/production/uploads/64f267a8a4f79a118e0fcc89/it7MY5MyLCLpFQev5dUis.jpeg
-  tags:
-    - llama
-    - llama-3.2
-    - 3b
-    - gguf
-    - quantized
-    - code
-    - code-instruct
-    - chat
-    - instruct
-    - llm
-  last_checked: "2026-05-04"
-  overrides:
-    parameters:
-      model: Llama3.2-3B-Enigma.Q4_K_M.gguf
-  files:
-    - filename: Llama3.2-3B-Enigma.Q4_K_M.gguf
-      sha256: 4304e6ee1e348b228470700ec1e9423f5972333d376295195ce6cd5c70cae5e4
-      uri: huggingface://QuantFactory/Llama3.2-3B-Enigma-GGUF/Llama3.2-3B-Enigma.Q4_K_M.gguf
 - name: llama3.2-3b-shiningvaliant2-i1
   url: github:mudler/LocalAI/gallery/llama3.2-quantized.yaml@master
   urls:
@@ -20806,6 +20903,9 @@
       sha256: decd2598bc2c8ed08c19adc3c8fdd461ee19ed5708679d1c54ef54a5a30d4f33
       uri: huggingface://HuggingFaceTB/SmolLM2-1.7B-Instruct-GGUF/smollm2-1.7b-instruct-q4_k_m.gguf
 - name: meta-llama-3.1-8b-instruct
+  variants:
+    - model: "meta-llama-3.1-8b-instruct:grammar-functioncall"
+    - model: "meta-llama-3.1-8b-instruct:Q8_grammar-functioncall"
   url: github:mudler/LocalAI/gallery/llama3.1-instruct.yaml@master
   urls:
     - https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct
@@ -25195,38 +25295,6 @@
     - filename: DeepSeek-R1-Distill-Qwen-32B-Q4_K_M.gguf
       sha256: bed9b0f551f5b95bf9da5888a48f0f87c37ad6b72519c4cbd775f54ac0b9fc62
       uri: huggingface://bartowski/DeepSeek-R1-Distill-Qwen-32B-GGUF/DeepSeek-R1-Distill-Qwen-32B-Q4_K_M.gguf
-- name: deepseek-r1-distill-llama-8b
-  url: github:mudler/LocalAI/gallery/llama3.1-instruct.yaml@master
-  urls:
-    - https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-8B
-    - https://huggingface.co/unsloth/DeepSeek-R1-Distill-Llama-8B-GGUF
-  description: |
-    DeepSeek-R1 is our advanced first-generation reasoning model designed to enhance performance in reasoning tasks.
-    Building on the foundation laid by its predecessor, DeepSeek-R1-Zero, which was trained using large-scale reinforcement learning (RL) without supervised fine-tuning, DeepSeek-R1 addresses the challenges faced by R1-Zero, such as endless repetition, poor readability, and language mixing.
-    By incorporating cold-start data prior to the RL phase,DeepSeek-R1 significantly improves reasoning capabilities and achieves performance levels comparable to OpenAI-o1 across a variety of domains, including mathematics, coding, and complex reasoning tasks.
-  license: llama3.1
-  icon: https://avatars.githubusercontent.com/u/148330874
-  tags:
-    - deepseek
-    - llama
-    - llama-3
-    - gguf
-    - quantized
-    - 8b
-    - llm
-    - reasoning
-    - code
-    - math
-    - distilled
-    - chat
-  last_checked: "2026-05-04"
-  overrides:
-    parameters:
-      model: deepseek-r1-distill-llama-8b-Q4_K_M.gguf
-  files:
-    - filename: deepseek-r1-distill-llama-8b-Q4_K_M.gguf
-      sha256: 0addb1339a82385bcd973186cd80d18dcc71885d45eabd899781a118d03827d9
-      uri: huggingface://unsloth/DeepSeek-R1-Distill-Llama-8B-GGUF/DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf
 - name: deepseek-r1-distill-llama-70b
   url: github:mudler/LocalAI/gallery/deepseek-r1.yaml@master
   urls:
@@ -29128,6 +29196,8 @@
 - &arch-router-1_5b
   url: github:mudler/LocalAI/gallery/chatml.yaml@master
   name: arch-router-1.5b-q4
+  variants:
+    - model: arch-router-1.5b-q8
   icon: https://cdn-avatars.huggingface.co/v1/production/uploads/66b681906c8d3b36786b764c/uyP7mxDVv0HbV9Hv_KfHk.jpeg
   license: other
   urls:
@@ -29173,6 +29243,7 @@
       uri: huggingface://mradermacher/Arch-Router-1.5B-GGUF/Arch-Router-1.5B.Q4_K_M.gguf
 - !!merge <<: *arch-router-1_5b
   name: arch-router-1.5b-q8
+  variants: []
   overrides:
     known_usecases:
       - score
@@ -29186,6 +29257,8 @@
       sha256: 236fcf372bb25f314dafa1605d84566db60ddad98b889aaa072a3108ec48ef22
       uri: huggingface://mradermacher/Arch-Router-1.5B-GGUF/Arch-Router-1.5B.Q8_0.gguf
 - name: dolphin-2.9-llama3-8b
+  variants:
+    - model: "dolphin-2.9-llama3-8b:Q6_K"
   url: github:mudler/LocalAI/gallery/hermes-2-pro-mistral.yaml@master
   urls:
     - https://huggingface.co/cognitivecomputations/dolphin-2.9-llama3-8b-gguf
@@ -29801,6 +29874,8 @@
       sha256: 0cf542a127c2c835066a78028009b7eddbaf773cc2a26e1cb157ce5e09c1a2e0
       uri: huggingface://l3utterfly/phi-2-layla-v1-chatml-gguf/phi-2-layla-v1-chatml-Q8_0.gguf
 - name: phi-2-chat
+  variants:
+    - model: "phi-2-chat:Q8_0"
   url: github:mudler/LocalAI/gallery/phi-2-chat.yaml@master
   urls:
     - https://huggingface.co/l3utterfly/phi-2-layla-v1-chatml
@@ -30753,6 +30828,9 @@
       sha256: f4df16c641a05c4a6ca717068ba3ee312875000f6fac0efbd152915553b5fc3e
       uri: huggingface://second-state/stable-diffusion-3.5-large-GGUF/t5xxl-Q5_0.gguf
 - name: flux.1-dev
+  variants:
+    - model: flux.1-dev-ggml
+    - model: flux.1-dev-ggml-q8_0
   url: github:mudler/LocalAI/gallery/flux.yaml@master
   urls:
     - https://huggingface.co/black-forest-labs/FLUX.1-dev
@@ -31002,6 +31080,8 @@
       sha256: 6e480b09fae049a72d2a8c5fbccb8d3e92febeb233bbe9dfe7256958a9167635
       uri: https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors
 - name: flux.1-krea-dev-ggml
+  variants:
+    - model: flux.1-krea-dev-ggml-q8_0
   url: github:mudler/LocalAI/gallery/flux-ggml.yaml@master
   urls:
     - https://huggingface.co/black-forest-labs/FLUX.1-Krea-dev
@@ -31242,6 +31322,8 @@
       sha256: afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38
       uri: https://huggingface.co/ChuckMcSneed/FLUX.1-dev/resolve/main/ae.safetensors
 - name: ideogram-4-iq4nl-ggml
+  variants:
+    - model: ideogram-4-q8_0-ggml
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
     - https://huggingface.co/ideogram-ai/ideogram-4-fp8
@@ -31395,6 +31477,8 @@
       sha256: 422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898
       uri: huggingface://ggerganov/whisper.cpp/ggml-base-q5_1.bin
 - name: whisper-base
+  variants:
+    - model: whisper-base-q5_1
   url: github:mudler/LocalAI/gallery/whisper-base.yaml@master
   urls:
     - https://github.com/ggerganov/whisper.cpp
@@ -31449,6 +31533,8 @@
       sha256: 4baf70dd0d7c4247ba2b81fafd9c01005ac77c2f9ef064e00dcf195d0e2fdd2f
       uri: huggingface://ggerganov/whisper.cpp/ggml-base.en-q5_1.bin
 - name: whisper-base-en
+  variants:
+    - model: whisper-base-en-q5_1
   url: github:mudler/LocalAI/gallery/whisper-base.yaml@master
   urls:
     - https://github.com/ggerganov/whisper.cpp
@@ -31503,6 +31589,8 @@
       sha256: d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1
       uri: huggingface://ggerganov/whisper.cpp/ggml-large-v3-q5_0.bin
 - name: whisper-medium
+  variants:
+    - model: whisper-medium-q5_0
   url: github:mudler/LocalAI/gallery/whisper-base.yaml@master
   urls:
     - https://github.com/ggerganov/whisper.cpp
@@ -31583,6 +31671,8 @@
       sha256: ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb
       uri: huggingface://ggerganov/whisper.cpp/ggml-small-q5_1.bin
 - name: whisper-small
+  variants:
+    - model: whisper-small-q5_1
   url: github:mudler/LocalAI/gallery/whisper-base.yaml@master
   urls:
     - https://github.com/ggerganov/whisper.cpp
@@ -31637,6 +31727,8 @@
       sha256: bfdff4894dcb76bbf647d56263ea2a96645423f1669176f4844a1bf8e478ad30
       uri: huggingface://ggerganov/whisper.cpp/ggml-small.en-q5_1.bin
 - name: whisper-small-en
+  variants:
+    - model: whisper-small-en-q5_1
   url: github:mudler/LocalAI/gallery/whisper-base.yaml@master
   urls:
     - https://github.com/ggerganov/whisper.cpp
@@ -31663,34 +31755,9 @@
     - filename: ggml-small.en.bin
       sha256: c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d
       uri: huggingface://ggerganov/whisper.cpp/ggml-small.en.bin
-- name: whisper-small-q5_1
-  url: github:mudler/LocalAI/gallery/whisper-base.yaml@master
-  urls:
-    - https://github.com/ggerganov/whisper.cpp
-    - https://huggingface.co/ggerganov/whisper.cpp
-  description: |
-    Port of OpenAI's Whisper model in C/C++
-  license: mit
-  icon: https://avatars.githubusercontent.com/u/14957082
-  tags:
-    - whisper
-    - small
-    - gguf
-    - quantized
-    - q5_1
-    - speech-recognition
-    - multilingual
-    - transcription
-    - whisper.cpp
-  last_checked: "2026-05-04"
-  overrides:
-    parameters:
-      model: ggml-small-q5_1.bin
-  files:
-    - filename: ggml-small-q5_1.bin
-      sha256: ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb
-      uri: huggingface://ggerganov/whisper.cpp/ggml-small-q5_1.bin
 - name: whisper-tiny
+  variants:
+    - model: whisper-tiny-q5_1
   url: github:mudler/LocalAI/gallery/whisper-base.yaml@master
   urls:
     - https://github.com/ggerganov/whisper.cpp
@@ -31770,6 +31837,9 @@
       sha256: c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b
       uri: huggingface://ggerganov/whisper.cpp/ggml-tiny.en-q5_1.bin
 - name: whisper-tiny-en
+  variants:
+    - model: whisper-tiny-en-q5_1
+    - model: whisper-tiny-en-q8_0
   url: github:mudler/LocalAI/gallery/whisper-base.yaml@master
   urls:
     - https://github.com/ggerganov/whisper.cpp
@@ -31821,6 +31891,8 @@
       sha256: 5bc2b3860aa151a4c6e7bb095e1fcce7cf12c7b020ca08dcec0c6d018bb7dd94
       uri: huggingface://ggerganov/whisper.cpp/ggml-tiny.en-q8_0.bin
 - name: whisper-large
+  variants:
+    - model: whisper-large-q5_0
   url: github:mudler/LocalAI/gallery/whisper-base.yaml@master
   urls:
     - https://github.com/ggerganov/whisper.cpp
@@ -31845,35 +31917,10 @@
     - filename: ggml-large-v3.bin
       sha256: 64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2
       uri: huggingface://ggerganov/whisper.cpp/ggml-large-v3.bin
-- name: whisper-large-q5_0
-  url: github:mudler/LocalAI/gallery/whisper-base.yaml@master
-  urls:
-    - https://github.com/ggerganov/whisper.cpp
-    - https://huggingface.co/ggerganov/whisper.cpp
-  description: |
-    Port of OpenAI's Whisper model in C/C++
-  license: mit
-  icon: https://avatars.githubusercontent.com/u/14957082
-  tags:
-    - whisper
-    - gguf
-    - quantized
-    - q5_0
-    - large
-    - asr
-    - speech-recognition
-    - transcription
-    - multilingual
-    - audio
-  last_checked: "2026-05-04"
-  overrides:
-    parameters:
-      model: ggml-large-v3-q5_0.bin
-  files:
-    - filename: ggml-large-v3-q5_0.bin
-      sha256: d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1
-      uri: huggingface://ggerganov/whisper.cpp/ggml-large-v3-q5_0.bin
 - name: whisper-large-turbo
+  variants:
+    - model: whisper-large-turbo-q5_0
+    - model: whisper-large-turbo-q8_0
   url: github:mudler/LocalAI/gallery/whisper-base.yaml@master
   urls:
     - https://github.com/ggerganov/whisper.cpp
@@ -32266,25 +32313,6 @@
     - filename: voice-en-us-danny-low.tar.gz
       sha256: 0c8fbb42526d5fbd3a0bded5f18041c0a893a70a7fb8756f97866624b932264b
       uri: https://github.com/rhasspy/piper/releases/download/v0.0.2/voice-en-us-danny-low.tar.gz
-- name: voice-en-us-kathleen-low
-  url: github:mudler/LocalAI/gallery/piper.yaml@master
-  urls:
-    - https://github.com/rhasspy/piper
-  description: |
-    A fast, local neural text to speech system that sounds great and is optimized for the Raspberry Pi 4. Piper is used in a variety of [projects](https://github.com/rhasspy/piper#people-using-piper).
-  license: mit
-  icon: https://github.com/rhasspy/piper/raw/master/etc/logo.png
-  tags:
-    - tts
-    - text-to-speech
-    - cpu
-  overrides:
-    parameters:
-      model: en-us-kathleen-low.onnx
-  files:
-    - filename: voice-en-us-kathleen-low.tar.gz
-      sha256: 18e32f009f864d8061af8a4be4ae9018b5aa8b49c37f9e108bbfd782c6a38fbf
-      uri: https://github.com/rhasspy/piper/releases/download/v0.0.2/voice-en-us-kathleen-low.tar.gz
 - name: voice-en-us-lessac-low
   url: github:mudler/LocalAI/gallery/piper.yaml@master
   urls:
@@ -35113,6 +35141,9 @@
       sha256: af8cb9e4ca0bf19eb54d08c612fdf325059264abbbd2c619527e5d2dda8de655
       uri: https://huggingface.co/mradermacher/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.f16.gguf
 - name: silero-vad
+  variants:
+    - model: silero-vad-ggml
+    - model: silero-vad-sherpa
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
     - https://github.com/snakers4/silero-vad
@@ -36407,6 +36438,8 @@
       sha256: 0a599099e93ad521045e17d82365a73c1738fff0603d6cb2c9557e96fbc907cb
       uri: huggingface://mradermacher/YanoljaNEXT-Rosetta-27B-2511-i1-GGUF/YanoljaNEXT-Rosetta-27B-2511.i1-Q4_K_M.gguf
 - name: orca-agent-v0.1
+  variants:
+    - model: orca-agent-v0.1-i1
   url: github:mudler/LocalAI/gallery/qwen3.yaml@master
   urls:
     - https://huggingface.co/mradermacher/Orca-Agent-v0.1-GGUF
@@ -36632,6 +36665,9 @@
       uri: huggingface://unsloth/LTX-2.3-GGUF/text_encoders/ltx-2.3-22b-dev_embeddings_connectors.safetensors
 - !!merge <<: *ltx-2-3-dev-ggml
   name: ltx-2.3-22b-dev-ggml-q4_k_m
+  variants:
+    - model: ltx-2.3-22b-dev-ggml
+    - model: ltx-2.3-22b-dev-ggml-q8_0
   description: |
     LTX-2.3 22B dev - non-dynamic Q4_K_M quantization (~14.3 GB). Same
     pipeline as ltx-2.3-22b-dev-ggml but with the plain Q4_K_M weights
@@ -36759,6 +36795,9 @@
       uri: huggingface://unsloth/LTX-2.3-GGUF/text_encoders/ltx-2.3-22b-distilled_embeddings_connectors.safetensors
 - !!merge <<: *ltx-2-3-distilled-ggml
   name: ltx-2.3-22b-distilled-ggml-q4_k_m
+  variants:
+    - model: ltx-2.3-22b-distilled-ggml
+    - model: ltx-2.3-22b-distilled-ggml-q8_0
   description: |
     LTX-2.3 22B distilled - non-dynamic Q4_K_M quantization (~14.3 GB).
     Same pipeline as ltx-2.3-22b-distilled-ggml but with the plain Q4_K_M
@@ -36907,6 +36946,7 @@
     - gguf
     - llm
     - chat
+    - mtp
   overrides:
     backend: ds4
     options:
