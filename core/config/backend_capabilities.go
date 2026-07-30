@@ -16,6 +16,7 @@ const (
 	UsecaseTokenize            = "tokenize"
 	UsecaseImage               = "image"
 	UsecaseVideo               = "video"
+	Usecase3D                  = "3d"
 	UsecaseTranscript          = "transcript"
 	UsecaseTTS                 = "tts"
 	UsecaseSoundGeneration     = "sound_generation"
@@ -30,6 +31,7 @@ const (
 	UsecaseFaceRecognition     = "face_recognition"
 	UsecaseSpeakerRecognition  = "speaker_recognition"
 	UsecaseTokenClassify       = "token_classify"
+	UsecaseScore               = "score"
 )
 
 // GRPCMethod identifies a Backend service RPC from backend.proto.
@@ -41,6 +43,7 @@ const (
 	MethodEmbedding          GRPCMethod = "Embedding"
 	MethodGenerateImage      GRPCMethod = "GenerateImage"
 	MethodGenerateVideo      GRPCMethod = "GenerateVideo"
+	MethodGenerate3D         GRPCMethod = "Generate3D"
 	MethodAudioTranscription GRPCMethod = "AudioTranscription"
 	MethodTTS                GRPCMethod = "TTS"
 	MethodTTSStream          GRPCMethod = "TTSStream"
@@ -60,6 +63,7 @@ const (
 	MethodVoiceEmbed         GRPCMethod = "VoiceEmbed"
 	MethodVoiceAnalyze       GRPCMethod = "VoiceAnalyze"
 	MethodTokenClassify      GRPCMethod = "TokenClassify"
+	MethodScore              GRPCMethod = "Score"
 )
 
 // UsecaseInfo describes a single known_usecase value and how it maps
@@ -121,6 +125,11 @@ var UsecaseInfoMap = map[string]UsecaseInfo{
 		Flag:        FLAG_VIDEO,
 		GRPCMethod:  MethodGenerateVideo,
 		Description: "Video generation via the GenerateVideo RPC, with optional image or audio conditioning when supported by the backend.",
+	},
+	Usecase3D: {
+		Flag:        FLAG_3D,
+		GRPCMethod:  MethodGenerate3D,
+		Description: "Image-conditioned 3D asset generation via the Generate3D RPC — a binary glTF (GLB) mesh with optional PBR material (TRELLIS.2).",
 	},
 	UsecaseTranscript: {
 		Flag:        FLAG_TRANSCRIPT,
@@ -192,6 +201,11 @@ var UsecaseInfoMap = map[string]UsecaseInfo{
 		GRPCMethod:  MethodTokenClassify,
 		Description: "Per-token classification (NER) via the TokenClassify RPC — the PII detector tier. Declared explicitly via known_usecases; never auto-guessed, since the token-classification head is not useful as general generation or embeddings.",
 	},
+	UsecaseScore: {
+		Flag:        FLAG_SCORE,
+		GRPCMethod:  MethodScore,
+		Description: "Joint log-probability scoring of candidate continuations via the Score RPC. Declared explicitly via known_usecases and usable alongside generation usecases.",
+	},
 }
 
 // BackendCapability describes which gRPC methods and usecases a backend supports.
@@ -241,8 +255,8 @@ func referenceVoiceCloning() *VoiceCloningCapability {
 var BackendCapabilities = map[string]BackendCapability{
 	// --- LLM / text generation backends ---
 	"llama-cpp": {
-		GRPCMethods:      []GRPCMethod{MethodPredict, MethodPredictStream, MethodEmbedding, MethodTokenizeString},
-		PossibleUsecases: []string{UsecaseChat, UsecaseCompletion, UsecaseEdit, UsecaseEmbeddings, UsecaseTokenize, UsecaseVision},
+		GRPCMethods:      []GRPCMethod{MethodPredict, MethodPredictStream, MethodEmbedding, MethodTokenizeString, MethodScore},
+		PossibleUsecases: []string{UsecaseChat, UsecaseCompletion, UsecaseEdit, UsecaseEmbeddings, UsecaseTokenize, UsecaseVision, UsecaseScore},
 		DefaultUsecases:  []string{UsecaseChat},
 		AcceptsImages:    true, // requires mmproj
 		Description:      "llama.cpp GGUF models — LLM inference with optional vision via mmproj",
@@ -342,6 +356,14 @@ var BackendCapabilities = map[string]BackendCapability{
 		PossibleUsecases: []string{UsecaseImage},
 		DefaultUsecases:  []string{UsecaseImage},
 		Description:      "Stable Diffusion via GGML quantized models",
+	},
+
+	// --- 3D generation backends ---
+	"trellis2cpp": {
+		GRPCMethods:      []GRPCMethod{MethodGenerate3D},
+		PossibleUsecases: []string{Usecase3D},
+		DefaultUsecases:  []string{Usecase3D},
+		Description:      "trellis2.cpp — C++/GGML port of Microsoft TRELLIS.2: single-image to textured 3D mesh (GLB)",
 	},
 
 	// --- Speech-to-text backends ---
