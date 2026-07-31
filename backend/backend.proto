@@ -35,6 +35,7 @@ service Backend {
   rpc TTSStream(TTSRequest) returns (stream Reply) {}
   rpc SoundGeneration(SoundGenerationRequest) returns (Result) {}
   rpc TokenizeString(PredictOptions) returns (TokenizationResponse) {}
+  rpc Detokenize(DetokenizeRequest) returns (DetokenizeResponse) {}
   rpc Status(HealthMessage) returns (StatusResponse) {}
   rpc Detect(DetectOptions) returns (DetectResponse) {}
   // SoundDetection runs an audio-tagging / sound-event-classification model
@@ -796,6 +797,14 @@ message TokenizationResponse {
   repeated int32 tokens = 2;
 }
 
+message DetokenizeRequest {
+  repeated int32 tokens = 1;
+}
+
+message DetokenizeResponse {
+  string content = 1;
+}
+
 message MemoryUsageData {
   uint64 total = 1;
   map<string, uint64> breakdown = 2;
@@ -1122,11 +1131,28 @@ message AudioTransformRequest {
   string ModelIdentity = 5;
 }
 
+// One named output of a transform that produces several from a single run.
+// Source separation is the case that needs it: htdemucs yields drums, bass,
+// other and vocals from one pass over the input.
+message AudioTransformStem {
+  string name = 1;                   // the model's own stem id, e.g. "vocals"
+  string dst = 2;                    // path of the file written for that stem
+}
+
 message AudioTransformResult {
   string dst = 1;
   int32  sample_rate = 2;
   int32  samples = 3;
   bool   reference_provided = 4;
+  // Every named output the run produced, in the model's own order, including
+  // the one copied into dst. Empty for a transform with a single output.
+  //
+  // It exists because dst carries one file while separation produces several,
+  // and running the model once per stem would cost four full separations of
+  // the same audio. The backend runs once, writes each stem beside dst, and
+  // names them here; without this field the other stems are on disk but no
+  // caller can find them, which is the same as not having produced them.
+  repeated AudioTransformStem stems = 5;
 }
 
 // Bidirectional streaming audio transform. The first message MUST carry a
