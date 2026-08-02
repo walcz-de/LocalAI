@@ -612,7 +612,16 @@ type AgentConfig struct {
 	LoopDetection         int  `yaml:"loop_detection,omitempty" json:"loop_detection,omitempty"`
 	MaxAdjustmentAttempts int  `yaml:"max_adjustment_attempts,omitempty" json:"max_adjustment_attempts,omitempty"`
 	ForceReasoningTool    bool `yaml:"force_reasoning_tool,omitempty" json:"force_reasoning_tool,omitempty"`
+	// MaxGenerationTokens caps tokens generated per LLM completion in the agent
+	// loop (backstop against runaway narration/emoji loops that neither
+	// loop_detection nor max_iterations can stop). 0 falls back to a safe default.
+	MaxGenerationTokens int `yaml:"max_generation_tokens,omitempty" json:"max_generation_tokens,omitempty"`
 }
+
+// DefaultAgentMaxGenerationTokens is the per-completion cap applied in the agent
+// path when a model does not set agent.max_generation_tokens. Guards against
+// runaway generation to full context; generous enough for tool-decisions/replies.
+const DefaultAgentMaxGenerationTokens = 4096
 
 // HasMCPServers returns true if any MCP servers (remote or stdio) are configured.
 func (c MCPConfig) HasMCPServers() bool {
