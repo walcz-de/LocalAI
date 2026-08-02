@@ -1,4 +1,30 @@
 ---
+- name: "deepseek-v4-flash-0731"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/unsloth/DeepSeek-V4-Flash-0731-GGUF
+  description: "# DeepSeek-V4-Flash-0731\n\nTechnical Report\U0001F441️\n\n## Introduction\n\n**DeepSeek-V4-Flash-0731** is the official release of **DeepSeek-V4-Flash**, superseding the preview version, with substantially enhanced agentic capabilities. It has the same model structure as DeepSeek-V4-Flash-DSpark, i.e. it comes with a speculative decoding module attached.\n\nDeepSeek-V4-Flash-0731 outperforms DeepSeek-V4-Pro (Preview) on benchmarks listed below despite its far smaller activated parameter count, and is broadly competitive with the strongest proprietary models available.\n\nNotes:\n\n1. For the Code Agent tasks among the public benchmarks above, DeepSeek-V4-Flash-0731 is evaluated with the minimal mode of DeepSeek Harness (to be released) as the agent framework, using the `max` reasoning effort level with `temperature = 1.0, top_p = 0.95`.\n2. † DSBench-FullStack is an internal full-stack development test set; DSBench-Hard is an internal test set of difficult coding-agent problems.\n\n## Chat Template\n\n...\n"
+  license: "mit"
+  tags:
+    - llm
+    - gguf
+    - deepseek
+  icon: https://github.com/deepseek-ai/DeepSeek-V2/blob/main/figures/logo.svg
+  overrides:
+    backend: ds4
+    function:
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    parameters:
+      model: ds4flash.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: ds4flash.gguf
+      uri: https://huggingface.co/unsloth/DeepSeek-V4-Flash-0731-GGUF
+      sha256: 7ab5e306300dd16d237d0f5ff07ee968d02be5c47afc87282778f4ec6b0f54a7
 - name: "parable-granite-4.1-3b-claude-fable-5"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -897,6 +923,90 @@
     - filename: llama-cpp/mmproj/inkling-UD-Q4_K_XL/mmproj-BF16.gguf
       sha256: 662c925e1df293cfba16ffd6bd53dac31d3c73160ba65dff7270d7a70f351e91
       uri: https://huggingface.co/unsloth/inkling-GGUF/resolve/main/mmproj-BF16.gguf
+- &inkling-small
+  name: "inkling-small"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/thinkingmachines/Inkling-Small
+    - https://huggingface.co/unsloth/Inkling-Small-GGUF
+  description: |
+    Inkling Small is a 276B-parameter mixture-of-experts multimodal model with 12B active parameters for text, image, and audio understanding, instruction following, coding, and tool use. This entry uses the Q4_K_M GGUF quantization, whose five language-model shards total approximately 162.5 GB.
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+    - vision
+    - audio
+    - multimodal
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    mmproj: llama-cpp/mmproj/Inkling-Small-UD-Q4_K_M/mmproj-BF16.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/Inkling-Small-UD-Q4_K_M/Inkling-Small-UD-Q4_K_M-00001-of-00005.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Inkling-Small-UD-Q4_K_M/Inkling-Small-UD-Q4_K_M-00001-of-00005.gguf
+      sha256: a51ac3f439198f2817219edd582be4b600c273be24e78cbd58ebff982d9f007e
+      uri: https://huggingface.co/unsloth/Inkling-Small-GGUF/resolve/main/UD-Q4_K_M/Inkling-Small-UD-Q4_K_M-00001-of-00005.gguf
+    - filename: llama-cpp/models/Inkling-Small-UD-Q4_K_M/Inkling-Small-UD-Q4_K_M-00002-of-00005.gguf
+      sha256: 3dccdd473cc3a191e6028f6105b01831ed3a8dc30ec4e02679f9e0c2ccb59671
+      uri: https://huggingface.co/unsloth/Inkling-Small-GGUF/resolve/main/UD-Q4_K_M/Inkling-Small-UD-Q4_K_M-00002-of-00005.gguf
+    - filename: llama-cpp/models/Inkling-Small-UD-Q4_K_M/Inkling-Small-UD-Q4_K_M-00003-of-00005.gguf
+      sha256: 1a7edf29bda1d278b4668e1a082d7db634b845a53ea58c918a8cea1f9006c21c
+      uri: https://huggingface.co/unsloth/Inkling-Small-GGUF/resolve/main/UD-Q4_K_M/Inkling-Small-UD-Q4_K_M-00003-of-00005.gguf
+    - filename: llama-cpp/models/Inkling-Small-UD-Q4_K_M/Inkling-Small-UD-Q4_K_M-00004-of-00005.gguf
+      sha256: 376f67568438da96b10566730e8a9e17e3f665ab1b9d82eba48ec33708b172f7
+      uri: https://huggingface.co/unsloth/Inkling-Small-GGUF/resolve/main/UD-Q4_K_M/Inkling-Small-UD-Q4_K_M-00004-of-00005.gguf
+    - filename: llama-cpp/models/Inkling-Small-UD-Q4_K_M/Inkling-Small-UD-Q4_K_M-00005-of-00005.gguf
+      sha256: e34364af0d04d2d295bc374f1a4fa80002e4277db1bcf4b56240dbd443ac21d3
+      uri: https://huggingface.co/unsloth/Inkling-Small-GGUF/resolve/main/UD-Q4_K_M/Inkling-Small-UD-Q4_K_M-00005-of-00005.gguf
+    - filename: llama-cpp/mmproj/Inkling-Small-UD-Q4_K_M/mmproj-BF16.gguf
+      sha256: 05d4475a956030be87b099865d6552a541a476db8cc3e266fcfa7c5a24846248
+      uri: https://huggingface.co/unsloth/Inkling-Small-GGUF/resolve/main/mmproj-BF16.gguf
+  variants:
+    - model: inkling-small-iq2-m
+- !!merge <<: *inkling-small
+  name: "inkling-small-iq2-m"
+  description: |
+    Inkling Small is a 276B-parameter mixture-of-experts multimodal model with 12B active parameters for text, image, and audio understanding, instruction following, coding, and tool use. This entry uses the IQ2_M GGUF quantization, whose three language-model shards total approximately 82.4 GB.
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    mmproj: llama-cpp/mmproj/Inkling-Small-UD-IQ2_M/mmproj-BF16.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/Inkling-Small-UD-IQ2_M/Inkling-Small-UD-IQ2_M-00001-of-00003.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Inkling-Small-UD-IQ2_M/Inkling-Small-UD-IQ2_M-00001-of-00003.gguf
+      sha256: 3b6ace30e488ad26e816cdba4e42714f40110a3142a210bd5c2e48f69e27cb31
+      uri: https://huggingface.co/unsloth/Inkling-Small-GGUF/resolve/main/UD-IQ2_M/Inkling-Small-UD-IQ2_M-00001-of-00003.gguf
+    - filename: llama-cpp/models/Inkling-Small-UD-IQ2_M/Inkling-Small-UD-IQ2_M-00002-of-00003.gguf
+      sha256: 5ca94e858ae116eb513a2af1facd35844d42ef4a209e1d85cc4ecc73cd21b894
+      uri: https://huggingface.co/unsloth/Inkling-Small-GGUF/resolve/main/UD-IQ2_M/Inkling-Small-UD-IQ2_M-00002-of-00003.gguf
+    - filename: llama-cpp/models/Inkling-Small-UD-IQ2_M/Inkling-Small-UD-IQ2_M-00003-of-00003.gguf
+      sha256: 8a84e00d4625d52491969f88f24f0999bc77527b7fa1d15cbe44ef88235bb377
+      uri: https://huggingface.co/unsloth/Inkling-Small-GGUF/resolve/main/UD-IQ2_M/Inkling-Small-UD-IQ2_M-00003-of-00003.gguf
+    - filename: llama-cpp/mmproj/Inkling-Small-UD-IQ2_M/mmproj-BF16.gguf
+      sha256: 05d4475a956030be87b099865d6552a541a476db8cc3e266fcfa7c5a24846248
+      uri: https://huggingface.co/unsloth/Inkling-Small-GGUF/resolve/main/mmproj-BF16.gguf
+  variants: []
 - name: "qwythos-9b-v2"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -1477,7 +1587,7 @@
   files:
     - filename: ds4flash.gguf
       uri: https://huggingface.co/unsloth/DeepSeek-V4-Flash-GGUF
-      sha256: 7d6d1691bc2d02c5a8194afb8bd9b57519343afebf020231c61d9236504b4a5c
+      sha256: efb3e92a73b877e69e1754212e132d90963ce9ced4f0b68f9173723fee7f85a4
 - name: "qwopus3.6-35b-a3b-coder-mtp"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -5262,6 +5372,82 @@
     - filename: llama-cpp/models/Qwen3.5-35B-A3B-APEX-GGUF/Qwen3.5-35B-A3B-APEX-Quality.gguf
       sha256: 50887b60c77ee5c95bc3657814ae993abcab7b2d71868b9af1e84d6badd09a57
       uri: https://huggingface.co/mudler/Qwen3.5-35B-A3B-APEX-GGUF/resolve/main/Qwen3.5-35B-A3B-APEX-Quality.gguf
+- &fara1-5-9b
+  name: fara1.5-9b
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  variants:
+    - model: fara1.5-9b-q8
+  urls:
+    - https://huggingface.co/microsoft/Fara1.5-9B
+    - https://huggingface.co/bartowski/Fara1.5-9B-GGUF
+  description: |
+    Fara1.5-9B is Microsoft's 9B-parameter multimodal computer-use agent for web browsers, fine-tuned from Qwen3.5-9B. It accepts screenshots and text, emits structured browser actions, supports a 262K-token context, and should be deployed with appropriate sandboxing and user-confirmation controls. This entry uses the recommended Q4_K_M GGUF quantization.
+  license: mit
+  tags:
+    - fara
+    - qwen
+    - qwen3.5
+    - 9b
+    - llm
+    - gguf
+    - quantized
+    - chat
+    - vision
+    - multimodal
+    - agent
+    - computer-use
+    - gpu
+    - cpu
+  last_checked: "2026-08-01"
+  overrides:
+    backend: llama-cpp
+    function:
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/Fara1.5-9B-GGUF/mmproj-Fara1.5-9B-f16.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/Fara1.5-9B-GGUF/Fara1.5-9B-Q4_K_M.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Fara1.5-9B-GGUF/Fara1.5-9B-Q4_K_M.gguf
+      sha256: a02e7220337b87290bca7ef7225ba4afa7104efa05c0851de6c29ec9c5d04c7d
+      uri: huggingface://bartowski/Fara1.5-9B-GGUF/Fara1.5-9B-Q4_K_M.gguf
+    - filename: llama-cpp/mmproj/Fara1.5-9B-GGUF/mmproj-Fara1.5-9B-f16.gguf
+      sha256: 97b423c81719ffc367124a9739d6feb6f62d62f60869a6d385a701b963ce1906
+      uri: huggingface://bartowski/Fara1.5-9B-GGUF/mmproj-Fara1.5-9B-f16.gguf
+- !!merge <<: *fara1-5-9b
+  name: fara1.5-9b-q8
+  variants: []
+  description: |
+    Fara1.5-9B is Microsoft's 9B-parameter multimodal computer-use agent for web browsers, fine-tuned from Qwen3.5-9B. It accepts screenshots and text, emits structured browser actions, supports a 262K-token context, and should be deployed with appropriate sandboxing and user-confirmation controls. This entry uses the higher-quality Q8_0 GGUF quantization.
+  overrides:
+    backend: llama-cpp
+    function:
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/Fara1.5-9B-GGUF/mmproj-Fara1.5-9B-f16.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/Fara1.5-9B-GGUF/Fara1.5-9B-Q8_0.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Fara1.5-9B-GGUF/Fara1.5-9B-Q8_0.gguf
+      sha256: a2e30cca7aec006266308153ae781347505af16baa514bbd4e0e3f4a79ea3a22
+      uri: huggingface://bartowski/Fara1.5-9B-GGUF/Fara1.5-9B-Q8_0.gguf
+    - filename: llama-cpp/mmproj/Fara1.5-9B-GGUF/mmproj-Fara1.5-9B-f16.gguf
+      sha256: 97b423c81719ffc367124a9739d6feb6f62d62f60869a6d385a701b963ce1906
+      uri: huggingface://bartowski/Fara1.5-9B-GGUF/mmproj-Fara1.5-9B-f16.gguf
 - name: fara1.5-27b
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   variants:
@@ -6010,14 +6196,14 @@
     - instruction-tuned
     - code
     - math
-  last_checked: "2026-07-28"
+  last_checked: "2026-08-01"
   overrides:
     parameters:
-      model: nanbeige4.2-3b-Q8_0.gguf
+      model: Nanbeige4.2-3B-Q8_0.gguf
   files:
-    - filename: nanbeige4.2-3b-Q8_0.gguf
-      sha256: 44707bb25e7ba3f2b0b5f3c2311da95ee3676986dd2014ce2aaeb14113590e33
-      uri: huggingface://owao/Nanbeige4.2-3B-GGUF/nanbeige4.2-3b-Q8_0.gguf
+    - filename: Nanbeige4.2-3B-Q8_0.gguf
+      sha256: 4f8bd17cdf58bea2a94aef03457e0b8f019c26fe4daee7ae49b61bfa935a9126
+      uri: huggingface://owao/Nanbeige4.2-3B-GGUF/Nanbeige4.2-3B-Q8_0.gguf
 - name: nanbeige4.2-3b
   url: github:mudler/LocalAI/gallery/nanbeige4.2.yaml@master
   urls:
@@ -6040,16 +6226,16 @@
     - instruction-tuned
     - code
     - math
-  last_checked: "2026-07-28"
+  last_checked: "2026-08-01"
   variants:
     - model: nanbeige4.2-3b-q8
   overrides:
     parameters:
-      model: nanbeige4.2-3b-Q4_K_M.gguf
+      model: Nanbeige4.2-3B-Q4_K_M.gguf
   files:
-    - filename: nanbeige4.2-3b-Q4_K_M.gguf
-      sha256: 9ffd17d14472ff208409b3f51a6d87a5e5ec1b878b9a6f4dfe15c2a883366104
-      uri: huggingface://owao/Nanbeige4.2-3B-GGUF/nanbeige4.2-3b-Q4_K_M.gguf
+    - filename: Nanbeige4.2-3B-Q4_K_M.gguf
+      sha256: ffe1b9b8ee95ec4b962c379905aa8be6f72ae9c4645c6c70e3b6ff7b197e6ef4
+      uri: huggingface://owao/Nanbeige4.2-3B-GGUF/Nanbeige4.2-3B-Q4_K_M.gguf
 - name: nemo-parakeet-tdt-0.6b
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
