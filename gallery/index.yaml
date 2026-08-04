@@ -1,8 +1,173 @@
 ---
+- &nemotron-3-embed-1b
+  name: "nemotron-3-embed-1b-q4"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  variants:
+    - model: nemotron-3-embed-8b-q4
+  license: openmdw-1.1
+  urls:
+    - https://huggingface.co/nvidia/Nemotron-3-Embed-1B-BF16
+    - https://huggingface.co/zenmagnets/Nemotron-3-Embed-1B-Q4_K_M-GGUF
+  description: |
+    Nemotron-3-Embed-1B is NVIDIA's multilingual text embedding model for
+    retrieval, semantic search, and RAG. This compact Q4_K_M GGUF produces
+    2,048-dimensional normalized embeddings and supports 36 languages. Prefix
+    retrieval queries with `query: ` and documents with `passage: `.
+  tags:
+    - embeddings
+    - multilingual
+    - retrieval
+    - rag
+    - gguf
+    - cpu
+    - gpu
+  overrides:
+    backend: llama-cpp
+    embeddings: true
+    known_usecases:
+      - embeddings
+    parameters:
+      model: llama-cpp/models/nemotron-3-embed-1b-q4_k_m.gguf
+  files:
+    - filename: llama-cpp/models/nemotron-3-embed-1b-q4_k_m.gguf
+      uri: huggingface://zenmagnets/Nemotron-3-Embed-1B-Q4_K_M-GGUF/nemotron-3-embed-1b-q4_k_m.gguf
+      sha256: 9a74166f51dbc280073748fa199bea49283bd21f7f9280f2dec2b4d975ddfd1d
+- !!merge <<: *nemotron-3-embed-1b
+  name: "nemotron-3-embed-8b-q4"
+  variants: []
+  urls:
+    - https://huggingface.co/nvidia/Nemotron-3-Embed-8B-BF16
+    - https://huggingface.co/Abiray/Nemotron-3-Embed-8B-GGUF
+  description: |
+    Nemotron-3-Embed-8B is NVIDIA's larger multilingual text embedding model
+    for retrieval, semantic search, and RAG. This Q4_K_M GGUF balances retrieval
+    quality with local resource use and supports 36 languages. Prefix retrieval
+    queries with `query: ` and documents with `passage: `.
+  overrides:
+    backend: llama-cpp
+    embeddings: true
+    known_usecases:
+      - embeddings
+    parameters:
+      model: llama-cpp/models/Nemotron-3-Embed-8B-Q4_K_M.gguf
+  files:
+    - filename: llama-cpp/models/Nemotron-3-Embed-8B-Q4_K_M.gguf
+      uri: huggingface://Abiray/Nemotron-3-Embed-8B-GGUF/Nemotron-3-Embed-8B-Q4_K_M.gguf
+      sha256: a2aa29c618da6eed10d9474e72e33188c61e5fd700aed2fe9a1d98abdc90c6fc
+- &grug-27b
+  name: "grug-27b"
+  variants:
+    - model: grug-27b-q8
+    - model: grug-27b-mtp
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/ProCreations/grug-27b
+    - https://huggingface.co/ProCreations/grug-27b-qat-q4-gguf
+  description: |
+    Grug 27B is a multimodal Qwen3.5-derived model for chat, reasoning, vision,
+    and tool use. This entry uses the QAT Q4_K_M GGUF build.
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+    - vision
+    - multimodal
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    mmproj: llama-cpp/mmproj/grug-27b/mmproj-grug-27b-f16.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/grug-27b/grug-27b-qat-Q4_K_M.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/grug-27b/grug-27b-qat-Q4_K_M.gguf
+      uri: huggingface://ProCreations/grug-27b-qat-q4-gguf/grug-27b-qat-Q4_K_M.gguf
+      sha256: 777df9862d6e884ce006a5b13f77f99b56a4dd7c79bf1386af8a826875d7223e
+    - filename: llama-cpp/mmproj/grug-27b/mmproj-grug-27b-f16.gguf
+      uri: huggingface://ProCreations/grug-27b-gguf/mmproj-grug-27b-f16.gguf
+      sha256: abec0c68ae222300197d247bc9bb2e72f0e7b285d38eb49265a2fc28c952550d
+- !!merge <<: *grug-27b
+  name: "grug-27b-q8"
+  variants: []
+  urls:
+    - https://huggingface.co/ProCreations/grug-27b
+    - https://huggingface.co/ProCreations/grug-27b-gguf
+  description: |
+    Grug 27B Q8 is the higher-precision Q8_0 GGUF build for multimodal chat,
+    reasoning, vision, and tool use.
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    mmproj: llama-cpp/mmproj/grug-27b-q8/mmproj-grug-27b-f16.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/grug-27b-q8/grug-27b-Q8_0.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/grug-27b-q8/grug-27b-Q8_0.gguf
+      uri: huggingface://ProCreations/grug-27b-gguf/grug-27b-Q8_0.gguf
+      sha256: fe2714d8770ef1b5fe4cd960d07e781fabf6f4bd028c3d202cb512565202187f
+    - filename: llama-cpp/mmproj/grug-27b-q8/mmproj-grug-27b-f16.gguf
+      uri: huggingface://ProCreations/grug-27b-gguf/mmproj-grug-27b-f16.gguf
+      sha256: abec0c68ae222300197d247bc9bb2e72f0e7b285d38eb49265a2fc28c952550d
+- !!merge <<: *grug-27b
+  name: "grug-27b-mtp"
+  variants: []
+  urls:
+    - https://huggingface.co/ProCreations/grug-27b
+    - https://huggingface.co/ProCreations/grug-27b-mtp-gguf
+  description: |
+    Grug 27B MTP is the Q4_K_M GGUF build with multi-token prediction enabled
+    for speculative decoding, plus the shared vision projector.
+  tags:
+    - llm
+    - gguf
+    - vision
+    - multimodal
+    - mtp
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    mmproj: llama-cpp/mmproj/grug-27b-mtp/mmproj-grug-27b-f16.gguf
+    options:
+      - use_jinja:true
+      - spec_type:draft-mtp
+    parameters:
+      model: llama-cpp/models/grug-27b-mtp/grug-27b-mtp-Q4_K_M.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/grug-27b-mtp/grug-27b-mtp-Q4_K_M.gguf
+      uri: huggingface://ProCreations/grug-27b-mtp-gguf/grug-27b-mtp-Q4_K_M.gguf
+      sha256: 9442fabb262a54e4a3441ce00e764b6dd334c7ee57548ef86b274eeedb30b0b4
+    - filename: llama-cpp/mmproj/grug-27b-mtp/mmproj-grug-27b-f16.gguf
+      uri: huggingface://ProCreations/grug-27b-gguf/mmproj-grug-27b-f16.gguf
+      sha256: abec0c68ae222300197d247bc9bb2e72f0e7b285d38eb49265a2fc28c952550d
 - name: "deepseek-v4-flash-0731"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
-    - https://huggingface.co/unsloth/DeepSeek-V4-Flash-0731-GGUF
+    - https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0731
+    - https://huggingface.co/ggml-org/DeepSeek-V4-Flash-0731-GGUF
   description: "# DeepSeek-V4-Flash-0731\n\nTechnical Report\U0001F441️\n\n## Introduction\n\n**DeepSeek-V4-Flash-0731** is the official release of **DeepSeek-V4-Flash**, superseding the preview version, with substantially enhanced agentic capabilities. It has the same model structure as DeepSeek-V4-Flash-DSpark, i.e. it comes with a speculative decoding module attached.\n\nDeepSeek-V4-Flash-0731 outperforms DeepSeek-V4-Pro (Preview) on benchmarks listed below despite its far smaller activated parameter count, and is broadly competitive with the strongest proprietary models available.\n\nNotes:\n\n1. For the Code Agent tasks among the public benchmarks above, DeepSeek-V4-Flash-0731 is evaluated with the minimal mode of DeepSeek Harness (to be released) as the agent framework, using the `max` reasoning effort level with `temperature = 1.0, top_p = 0.95`.\n2. † DSBench-FullStack is an internal full-stack development test set; DSBench-Hard is an internal test set of difficult coding-agent problems.\n\n## Chat Template\n\n...\n"
   license: "mit"
   tags:
@@ -11,20 +176,104 @@
     - deepseek
   icon: https://github.com/deepseek-ai/DeepSeek-V2/blob/main/figures/logo.svg
   overrides:
-    backend: ds4
+    backend: llama-cpp
     function:
       grammar:
         disable: true
     known_usecases:
       - chat
     parameters:
-      model: ds4flash.gguf
+      model: DeepSeek-V4-Flash-0731-MXFP4.gguf
     template:
       use_tokenizer_template: true
   files:
-    - filename: ds4flash.gguf
-      uri: https://huggingface.co/unsloth/DeepSeek-V4-Flash-0731-GGUF
-      sha256: ef1940d5a91c294393c60b4083b497a05f6df1174e9a12225843945b228c5d20
+    - filename: DeepSeek-V4-Flash-0731-MXFP4.gguf
+      uri: huggingface://ggml-org/DeepSeek-V4-Flash-0731-GGUF/DeepSeek-V4-Flash-0731-MXFP4.gguf
+      sha256: 65f73494afaf27d3add0751a5b716dd2d3e012c66ae0dbbcc1bf8477f92b3ab7
+- name: instella-moe-16b-a3b-think
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://huggingface.co/amd/Instella-MoE-16B-A3B-Think
+    - https://huggingface.co/DevQuasar/amd.Instella-MoE-16B-A3B-Think-GGUF
+  description: |
+    AMD Instella-MoE-16B-A3B-Think is a reasoning and instruction-following
+    mixture-of-experts model with 16 billion total parameters and 3 billion
+    active parameters. It supports long-form reasoning, chat, coding, and tool
+    use. This entry uses the Q4_K_M GGUF quantization.
+  license: other
+  tags:
+    - llm
+    - gguf
+    - deepseek-v3
+    - moe
+    - reasoning
+    - thinking
+    - coding
+    - tool-use
+    - cpu
+    - gpu
+  last_checked: "2026-08-03"
+  variants:
+    - model: instella-moe-16b-a3b-think-q8
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      model: amd.Instella-MoE-16B-A3B-Think.f16.gguf.Q4_K_M.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: amd.Instella-MoE-16B-A3B-Think.f16.gguf.Q4_K_M.gguf
+      sha256: f776ddfee5dc6c808265c3f0a9c1b384c98058bfa551fe5df656fe712eb4c7f3
+      uri: huggingface://DevQuasar/amd.Instella-MoE-16B-A3B-Think-GGUF/Q4_K_M/amd.Instella-MoE-16B-A3B-Think.f16.gguf.Q4_K_M.gguf
+- name: instella-moe-16b-a3b-think-q8
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://huggingface.co/amd/Instella-MoE-16B-A3B-Think
+    - https://huggingface.co/DevQuasar/amd.Instella-MoE-16B-A3B-Think-GGUF
+  description: |
+    AMD Instella-MoE-16B-A3B-Think is a reasoning and instruction-following
+    mixture-of-experts model with 16 billion total parameters and 3 billion
+    active parameters. It supports long-form reasoning, chat, coding, and tool
+    use. This entry uses the near-lossless Q8_0 GGUF quantization.
+  license: other
+  tags:
+    - llm
+    - gguf
+    - deepseek-v3
+    - moe
+    - reasoning
+    - thinking
+    - coding
+    - tool-use
+    - cpu
+    - gpu
+  last_checked: "2026-08-03"
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      model: amd.Instella-MoE-16B-A3B-Think.f16.gguf.Q8_0.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: amd.Instella-MoE-16B-A3B-Think.f16.gguf.Q8_0.gguf
+      sha256: 6bff0a99d06be8ecf7d9c7f65584bfc2b24526ab0bab32dbfe7dde4237cd7c33
+      uri: huggingface://DevQuasar/amd.Instella-MoE-16B-A3B-Think-GGUF/Q8_0/amd.Instella-MoE-16B-A3B-Think.f16.gguf.Q8_0.gguf
 - name: "parable-granite-4.1-3b-claude-fable-5"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -62,7 +311,7 @@
   files:
     - filename: llama-cpp/models/Parable-Granite-4.1-3B-Claude-Fable-5-Q4_K_M/Parable-Granite-4.1-3B-Claude-Fable-5-GGUF-Q4_K_M.gguf
       uri: https://huggingface.co/AnkitAI/Parable-Granite-4.1-3B-Claude-Fable-5-GGUF/resolve/main/Parable-Granite-4.1-3B-Claude-Fable-5-GGUF-Q4_K_M.gguf
-      sha256: 67dc7695d92939c713165761f115c9d892fdff74fcbd987c8bb453b9b8ab645d
+      sha256: dbf202638af23e72508d8316577655d24ba2037fda51ce802b8996977e290bce
 - name: "parable-qwen3-4b-claude-fable-5"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -96,7 +345,7 @@
   files:
     - filename: llama-cpp/models/Parable-Qwen3-4B-Claude-Fable-5-Q4_K_M/Parable-Qwen3-4B-Claude-Fable-5-GGUF-Q4_K_M.gguf
       uri: https://huggingface.co/AnkitAI/Parable-Qwen3-4B-Claude-Fable-5-GGUF/resolve/main/Parable-Qwen3-4B-Claude-Fable-5-GGUF-Q4_K_M.gguf
-      sha256: c94b06a912aa901f3da5689754577ad534415efafc50dcee3f389594a153bf38
+      sha256: 65cc4824fb78ecaf55afdfcdb6dd2e27e1aa805d289db89eae94d32d450403f0
 - name: "parable-granite-4.1-8b-claude-fable-5"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -132,7 +381,7 @@
   files:
     - filename: llama-cpp/models/Parable-Granite-4.1-8B-Claude-Fable-5-Q4_K_M/Parable-Granite-4.1-8B-Claude-Fable-5-GGUF-Q4_K_M.gguf
       uri: https://huggingface.co/AnkitAI/Parable-Granite-4.1-8B-Claude-Fable-5-GGUF/resolve/main/Parable-Granite-4.1-8B-Claude-Fable-5-GGUF-Q4_K_M.gguf
-      sha256: 61a8133c344a0d0a00188395afe33c803e3b973cb4bbfd5ef1fa7110e80bc1c3
+      sha256: 57e464ae3d35253d4351639757dc35e71bab8324d12d49a5870695ce73dc19cf
 - name: "parable-qwen3-8b-claude-fable-5"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -166,7 +415,7 @@
   files:
     - filename: llama-cpp/models/Parable-Qwen3-8B-Claude-Fable-5-Q4_K_M/Parable-Qwen3-8B-Claude-Fable-5-GGUF-Q4_K_M.gguf
       uri: https://huggingface.co/AnkitAI/Parable-Qwen3-8B-Claude-Fable-5-GGUF/resolve/main/Parable-Qwen3-8B-Claude-Fable-5-GGUF-Q4_K_M.gguf
-      sha256: 956070afc8023b8665fe450842f7be76b505b53d142460fd9b588222f4e16112
+      sha256: 4532d2379d38a37279866a030e51d419561f9d4d22fee00d2a33647d66f05065
 - &pocket-35b
   name: "pocket-35b"
   variants:
@@ -1138,6 +1387,85 @@
     - filename: llama-cpp/mmproj/Qwythos-9B-v2-MTP-Q4_K_M/mmproj-Qwythos-9B-v2-BF16.gguf
       sha256: 0d1687cb33124c78acab788b342d4a2eaf85b3035e87c3abe4ee9d0b84ddb4f5
       uri: https://huggingface.co/empero-ai/Qwythos-9B-v2-GGUF/resolve/main/mmproj-Qwythos-9B-v2-BF16.gguf
+- &qwen3-6-14b-a3b-fablevibes
+  name: "qwen3.6-14b-a3b-fablevibes"
+  variants:
+    - model: qwen3.6-14b-a3b-fablevibes-q8
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/tvall43/Qwen3.6-14B-A3B-FableVibes
+    - https://huggingface.co/tvall43/Qwen3.6-14B-A3B-FableVibes-GGUF
+  description: |
+    Qwen3.6-14B-A3B-FableVibes is an Apache-2.0 mixture-of-experts reasoning
+    model distilled from Fable 5 and Claude Opus traces, with additional tool
+    calling and coding data. It retains Qwen 3.6 vision support while pruning
+    the 35B-A3B base to a 14B consumer-oriented footprint. This default entry
+    uses the recommended Q4_K_M GGUF quantization and its Q8_0 multimodal
+    projector.
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - moe
+    - reasoning
+    - thinking
+    - vision
+    - multimodal
+  last_checked: "2026-08-03"
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    mmproj: llama-cpp/mmproj/Qwen3.6-14B-A3B-FableVibes/Qwen3.6-14B-A3B-FableVibes-mmproj-Q8_0.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/Qwen3.6-14B-A3B-FableVibes/Qwen3.6-14B-A3B-FableVibes-Q4_K_M.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Qwen3.6-14B-A3B-FableVibes/Qwen3.6-14B-A3B-FableVibes-Q4_K_M.gguf
+      sha256: 21aa4b0b28090469e8a319c889451df2f1ea6aad27ac3818c8c8a86f86d5bc9e
+      uri: huggingface://tvall43/Qwen3.6-14B-A3B-FableVibes-GGUF/Qwen3.6-14B-A3B-FableVibes-Q4_K_M.gguf
+    - filename: llama-cpp/mmproj/Qwen3.6-14B-A3B-FableVibes/Qwen3.6-14B-A3B-FableVibes-mmproj-Q8_0.gguf
+      sha256: ca27dbf0c65a7232e9458bfdda8bc45efc09ab60e4cc6f58ea0c7b7cc2253257
+      uri: huggingface://tvall43/Qwen3.6-14B-A3B-FableVibes-GGUF/Qwen3.6-14B-A3B-FableVibes-mmproj-Q8_0.gguf
+- !!merge <<: *qwen3-6-14b-a3b-fablevibes
+  name: "qwen3.6-14b-a3b-fablevibes-q8"
+  variants: []
+  description: |
+    Qwen3.6-14B-A3B-FableVibes is an Apache-2.0 mixture-of-experts reasoning
+    model distilled from Fable 5 and Claude Opus traces, with additional tool
+    calling and coding data. This entry uses the near-lossless Q8_0 GGUF
+    quantization and its matching Q8_0 multimodal projector.
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    mmproj: llama-cpp/mmproj/Qwen3.6-14B-A3B-FableVibes-Q8_0/Qwen3.6-14B-A3B-FableVibes-mmproj-Q8_0.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/Qwen3.6-14B-A3B-FableVibes-Q8_0/Qwen3.6-14B-A3B-FableVibes-Q8_0.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Qwen3.6-14B-A3B-FableVibes-Q8_0/Qwen3.6-14B-A3B-FableVibes-Q8_0.gguf
+      sha256: ddea86093b863215fa75969d81df494fafdb0e6c4a65af557ed3a710e2238e58
+      uri: huggingface://tvall43/Qwen3.6-14B-A3B-FableVibes-GGUF/Qwen3.6-14B-A3B-FableVibes-Q8_0.gguf
+    - filename: llama-cpp/mmproj/Qwen3.6-14B-A3B-FableVibes-Q8_0/Qwen3.6-14B-A3B-FableVibes-mmproj-Q8_0.gguf
+      sha256: ca27dbf0c65a7232e9458bfdda8bc45efc09ab60e4cc6f58ea0c7b7cc2253257
+      uri: huggingface://tvall43/Qwen3.6-14B-A3B-FableVibes-GGUF/Qwen3.6-14B-A3B-FableVibes-mmproj-Q8_0.gguf
 - name: "qwen3.6-27b-fable-fusion-711-uncensored-heretic-nm-dau-neo-max-mtp"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -1681,7 +2009,7 @@
   files:
     - filename: ds4flash.gguf
       uri: https://huggingface.co/unsloth/DeepSeek-V4-Flash-GGUF
-      sha256: 856c407993ccffa9ad52e23fbef8bb7b458c792a52278f4ca7931741b0c20ce2
+      sha256: 1bfdafd1c288eb1b2bcb629ee9e1b7567dcf0abbe4d20995905a3c3465e9bd1e
 - name: "qwopus3.6-35b-a3b-coder-mtp"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -8766,6 +9094,34 @@
     - filename: llama-cpp/models/deepseek-ai.DeepSeek-V3.2.Q4_K_M-00029-of-00029.gguf
       sha256: 013af4e9d2f84e484f77c7bae2a02652607f0f0179bd2815ffdf401c3ada5184
       uri: https://huggingface.co/DevQuasar/deepseek-ai.DeepSeek-V3.2-GGUF/resolve/main/deepseek-ai.DeepSeek-V3.2.Q4_K_M-00029-of-00029.gguf
+- name: stable-diffusion-x4-upscaler
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://huggingface.co/stabilityai/stable-diffusion-x4-upscaler
+  description: |
+    Stable Diffusion x4 Upscaler is Stability AI's diffusion-based super-resolution model. It enlarges low-resolution images by four times while reconstructing image detail.
+  license: openrail++
+  tags:
+    - image-upscaling
+    - super-resolution
+    - image-to-image
+    - diffusers
+  last_checked: "2026-07-30"
+  overrides:
+    backend: diffusers
+    f16: true
+    diffusers:
+      pipeline_type: StableDiffusionUpscalePipeline
+    known_usecases:
+      - image
+    parameters:
+      model: stabilityai/stable-diffusion-x4-upscaler
+    artifacts:
+      - name: model
+        target: model
+        source:
+          type: huggingface
+          repo: stabilityai/stable-diffusion-x4-upscaler
 - name: z-image-diffusers
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
@@ -32807,6 +33163,8 @@
       sha256: ""
       uri: https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/clip_vision/clip_vision_h.safetensors
 - name: trellis2-4b
+  variants:
+    - model: trellis2-4b-geometry
   url: github:mudler/LocalAI/gallery/trellis2cpp.yaml@master
   icon: https://cdn-avatars.huggingface.co/v1/production/uploads/1583646260758-5e64858c87403103f9f1055d.png
   urls:
