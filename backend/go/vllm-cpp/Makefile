@@ -96,6 +96,12 @@ endif
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
 	LIB=libvllm.dylib
+	# Apple Clang diagnoses a pair of constant-folded array bounds in the Metal
+	# build as a GNU extension. Disable that diagnostic for both Objective-C and
+	# C++ because vllm.cpp appends target-local -Werror after these global flags.
+	CMAKE_ARGS+=-DCMAKE_CXX_FLAGS=-Wno-gnu-folding-constant
+	CMAKE_ARGS+=-DCMAKE_OBJC_FLAGS=-Wno-gnu-folding-constant
+	CMAKE_ARGS+=-DCMAKE_OBJCXX_FLAGS=-Wno-gnu-folding-constant
 else
 	LIB=libvllm.so
 endif
@@ -133,7 +139,26 @@ MLX_STAMP=
 MLX_CMAKE_ARGS=
 endif
 
+# govllmcpp.go mirrors vllm.h by hand, and the only guard against the two
+# drifting apart is the vllm_abi_version check inside registerLib - which fires
+# at runtime, on the user's machine, taking down every model load (issue
+# #11379). Compare the two here instead, so moving VLLM_CPP_VERSION past the
+# mirrors turns the build red while the header is still around to diff.
+abi-check: sources/vllm.cpp
+	@engine=$$(sed -n 's/^#define VLLM_ABI_VERSION \([0-9][0-9]*\).*/\1/p' sources/vllm.cpp/include/vllm.h); \
+	backend=$$(sed -n 's/^const abiVersion = \([0-9][0-9]*\).*/\1/p' govllmcpp.go); \
+	if [ -z "$$engine" ] || [ -z "$$backend" ]; then \
+		echo "vllm-cpp: cannot read the ABI version (engine='$$engine' backend='$$backend')" >&2; exit 1; \
+	fi; \
+	if [ "$$engine" != "$$backend" ]; then \
+		echo "vllm-cpp: ABI mismatch: vllm.cpp $(VLLM_CPP_VERSION) is v$$engine, govllmcpp.go mirrors v$$backend." >&2; \
+		echo "  Update the struct mirrors and abiVersion in govllmcpp.go (and the offsets in vllmcpp_test.go) to v$$engine." >&2; \
+		exit 1; \
+	fi; \
+	echo "vllm-cpp: ABI v$$engine matches the pinned engine"
+
 $(LIB): sources/vllm.cpp $(MLX_STAMP)
+	$(MAKE) abi-check
 	mkdir -p build && \
 	cd build && \
 	cmake ../sources/vllm.cpp $(CMAKE_ARGS) $(MLX_CMAKE_ARGS) && \
@@ -153,6 +178,8 @@ clean: purge
 
 purge:
 	rm -rf build
+
+.PHONY: abi-check
 
 .NOTPARALLEL:
 
