@@ -9,9 +9,11 @@ import (
 	"github.com/mudler/LocalAI/core/http/endpoints/openai"
 	"github.com/mudler/LocalAI/core/http/middleware"
 	"github.com/mudler/LocalAI/core/schema"
+	compressionservice "github.com/mudler/LocalAI/core/services/compression"
 	"github.com/mudler/LocalAI/core/services/routing/pii"
 	"github.com/mudler/LocalAI/core/services/routing/piiadapter"
 	"github.com/mudler/LocalAI/core/services/routing/router"
+	"github.com/mudler/LocalAI/pkg/tokens"
 )
 
 func RegisterOpenAIRoutes(app *echo.Echo,
@@ -43,7 +45,11 @@ func RegisterOpenAIRoutes(app *echo.Echo,
 	}
 
 	// chat
-	chatHandler := openai.ChatEndpoint(application.ModelConfigLoader(), application.ModelLoader(), application.TemplatesEvaluator(), application.ApplicationConfig(), natsClient, application.LocalAIAssistant())
+	chatCompressor := compressionservice.New(
+		compressionservice.CounterFunc(tokens.CountMessages),
+		compressionservice.NewInferenceSummarizer(application.ModelConfigLoader(), application.ModelLoader(), application.ApplicationConfig()),
+	)
+	chatHandler := openai.ChatEndpoint(application.ModelConfigLoader(), application.ModelLoader(), application.TemplatesEvaluator(), application.ApplicationConfig(), natsClient, application.LocalAIAssistant(), chatCompressor)
 	chatMiddleware := []echo.MiddlewareFunc{
 		nodeHeaderMiddleware,
 		usageMiddleware,
@@ -78,18 +84,12 @@ func RegisterOpenAIRoutes(app *echo.Echo,
 		// saturated downstream gets rejected even when the requested
 		// router-model has slack.
 		middleware.AdmissionControl(application.AdmissionLimiter(), application.PIIEvents()),
-		// PII redaction runs before compression, so the summariser
-		// model never sees raw PII either. It honours the RouteModel-
-		// resolved target via the NER + policy resolvers, so per-model
-		// PII configs apply to the routed model (e.g. a router fanout
-		// to claude-strict uses that model's pii block, not the
-		// router model's).
+		// PII redaction runs after RouteModel has resolved the actual served
+		// model and before compression. This makes per-model PII
+		// configs honour the routed target (e.g., a router fans out to
+		// claude-strict; that model's pii block applies, not the router
+		// model's), and prevents the compressor from seeing unredacted input.
 		pii.RequestMiddleware(application.PIIRedactor(), application.PIIEvents(), piiadapter.OpenAI(), application.FallbackUser(), pii.WithNERResolver(application.PIINERResolver()), pii.WithPolicyResolver(application.PIIPolicyResolver())),
-		// CompressionMiddleware runs INNERMOST: it operates on the
-		// PII-redacted request and uses the served model's
-		// CompressionConfig, so routed candidates can opt-in to
-		// summarisation without the router model needing it.
-		middleware.CompressionMiddleware(application),
 	}
 	app.POST("/v1/chat/completions", chatHandler, chatMiddleware...)
 	app.POST("/chat/completions", chatHandler, chatMiddleware...)

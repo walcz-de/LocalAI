@@ -1,4 +1,4 @@
-package tokens_test
+package tokens
 
 import (
 	"testing"
@@ -9,5 +9,5 @@ import (
 
 func TestTokens(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Tokens Suite")
+	RunSpecs(t, "Token counting test suite")
 }

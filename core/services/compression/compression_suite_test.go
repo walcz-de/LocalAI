@@ -1,4 +1,4 @@
-package compress_test
+package compression
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestCompress(t *testing.T) {
+func TestCompression(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Compress Suite")
+	RunSpecs(t, "Context compression test suite")
 }

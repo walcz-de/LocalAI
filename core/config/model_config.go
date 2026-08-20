@@ -84,6 +84,7 @@ type ModelConfig struct {
 
 	FunctionsConfig functions.FunctionsConfig `yaml:"function,omitempty" json:"function,omitempty"`
 	ReasoningConfig reasoning.Config          `yaml:"reasoning,omitempty" json:"reasoning,omitempty"`
+	Compression     CompressionConfig         `yaml:"compression,omitempty" json:"compression,omitempty"`
 
 	// ReasoningEffort is the default reasoning effort (none|minimal|low|medium|high)
 	// for this model. A per-request reasoning_effort overrides it. It is forwarded
@@ -140,7 +141,6 @@ type ModelConfig struct {
 
 	MCP         MCPConfig         `yaml:"mcp,omitempty" json:"mcp,omitempty"`
 	Agent       AgentConfig       `yaml:"agent,omitempty" json:"agent,omitempty"`
-	Compression CompressionConfig `yaml:"compression,omitempty" json:"compression,omitempty"`
 	PII         PIIConfig         `yaml:"pii,omitempty" json:"pii,omitempty"`
 	// PIIDetection is the detection policy when THIS model is used as a
 	// PII detector (a token_classify model named in another model's
@@ -153,39 +153,16 @@ type ModelConfig struct {
 	Limits       LimitsConfig       `yaml:"limits,omitempty" json:"limits,omitempty"`
 }
 
-// @Description Compression configuration controls optional server-side
-// context-compression for chat completions. When enabled, requests that
-// approach the model's context size are partitioned into a "compress" head
-// and a "keep" tail; the head is summarised by a small compressor model and
-// replaced with a single system message before the request is forwarded.
-//
-// Defaults are off — absence of this block means no behavior change.
+// CompressionConfig controls opt-in compression of chat history before inference.
+// The request middleware consumes this configuration; keeping it on ModelConfig
+// lets operators select a policy per context window and model workload.
 type CompressionConfig struct {
-	// Enabled gates the entire feature. When false (default) the middleware
-	// is a passthrough and no compression is attempted.
-	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
-
-	// TriggerAtRatio is the fraction of context_size at which compression
-	// fires (e.g. 0.75 = compress when request reaches 75% of context).
-	// Values outside (0, 1] disable the trigger. Default 0.75 when Enabled.
-	TriggerAtRatio float64 `yaml:"trigger_at_ratio,omitempty" json:"trigger_at_ratio,omitempty"`
-
-	// KeepTailTokens is the number of trailing tokens of the conversation
-	// that are never compressed. Token-based (not role-based) so tool-call
-	// chains with many short messages are handled correctly. Default 8000.
-	KeepTailTokens int `yaml:"keep_tail_tokens,omitempty" json:"keep_tail_tokens,omitempty"`
-
-	// MaxSummaryTokens caps the size of the generated summary. Default 2048.
-	MaxSummaryTokens int `yaml:"max_summary_tokens,omitempty" json:"max_summary_tokens,omitempty"`
-
-	// CompressorModel is the model used to produce the summary. When empty,
-	// the primary model compresses itself.
-	CompressorModel string `yaml:"compressor_model,omitempty" json:"compressor_model,omitempty"`
-
-	// OnPostCompressionOverflow controls behaviour when the compressed
-	// request still exceeds context_size. Allowed: "drop_oldest_summary"
-	// (default) or "error".
-	OnPostCompressionOverflow string `yaml:"on_post_compression_overflow,omitempty" json:"on_post_compression_overflow,omitempty"`
+	Enabled                   bool    `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	TriggerAtRatio            float64 `yaml:"trigger_at_ratio,omitempty" json:"trigger_at_ratio,omitempty"`
+	KeepTailTokens            int     `yaml:"keep_tail_tokens,omitempty" json:"keep_tail_tokens,omitempty"`
+	MaxSummaryTokens          int     `yaml:"max_summary_tokens,omitempty" json:"max_summary_tokens,omitempty"`
+	CompressorModel           string  `yaml:"compressor_model,omitempty" json:"compressor_model,omitempty"`
+	OnPostCompressionOverflow string  `yaml:"on_post_compression_overflow,omitempty" json:"on_post_compression_overflow,omitempty"`
 }
 
 // @Description Admission-control limits applied per request. The
@@ -1583,6 +1560,22 @@ func (cfg *ModelConfig) SetDefaults(opts ...ConfigLoaderOption) {
 }
 
 func (c *ModelConfig) Validate() (bool, error) {
+	if c.Compression.Enabled {
+		if c.IsCloudProxyBackendPassthrough() {
+			return false, fmt.Errorf("compression: cloud-proxy passthrough is unsupported; configure proxy mode translate")
+		}
+		if c.Compression.TriggerAtRatio < 0 || c.Compression.TriggerAtRatio > 1 {
+			return false, fmt.Errorf("compression: trigger_at_ratio must be between 0 and 1")
+		}
+		if c.Compression.KeepTailTokens < 0 || c.Compression.MaxSummaryTokens < 0 {
+			return false, fmt.Errorf("compression: token limits cannot be negative")
+		}
+		switch c.Compression.OnPostCompressionOverflow {
+		case "", "error", "drop_oldest_summary":
+		default:
+			return false, fmt.Errorf("compression: unknown on_post_compression_overflow %q", c.Compression.OnPostCompressionOverflow)
+		}
+	}
 	if c.IsAlias() && len(c.Artifacts) > 0 {
 		return false, fmt.Errorf("alias model %q cannot declare artifacts", c.Name)
 	}
