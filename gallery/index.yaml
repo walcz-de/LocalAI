@@ -23,6 +23,7 @@
     - llm
     - gguf
     - qwen3
+    - mtp
   icon: https://qianwen-res.oss-accelerate.aliyuncs.com/Qwen3.5/demo/CI_Demo/mathv-1327.jpg
   overrides:
     backend: llama-cpp
@@ -1940,7 +1941,7 @@
   files:
     - filename: llama-cpp/models/Parable-Granite-4.1-3B-Claude-Fable-5-Q4_K_M/Parable-Granite-4.1-3B-Claude-Fable-5-GGUF-Q4_K_M.gguf
       uri: https://huggingface.co/AnkitAI/Parable-Granite-4.1-3B-Claude-Fable-5-GGUF/resolve/main/Parable-Granite-4.1-3B-Claude-Fable-5-GGUF-Q4_K_M.gguf
-      sha256: dbf202638af23e72508d8316577655d24ba2037fda51ce802b8996977e290bce
+      sha256: 97fcaf5f36c4724c700e411e0a2f13883a1620e87df0831e237230482fbb382c
 - name: "parable-qwen3-4b-claude-fable-5"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -2044,7 +2045,7 @@
   files:
     - filename: llama-cpp/models/Parable-Qwen3-8B-Claude-Fable-5-Q4_K_M/Parable-Qwen3-8B-Claude-Fable-5-GGUF-Q4_K_M.gguf
       uri: https://huggingface.co/AnkitAI/Parable-Qwen3-8B-Claude-Fable-5-GGUF/resolve/main/Parable-Qwen3-8B-Claude-Fable-5-GGUF-Q4_K_M.gguf
-      sha256: 4532d2379d38a37279866a030e51d419561f9d4d22fee00d2a33647d66f05065
+      sha256: d25c4c1f4f009fe4c155ae841d6b63df4f6f3dd4502fc3263f2fcf5194855ebf
 - &north-mini-code-1-0
   name: "north-mini-code-1.0"
   variants:
@@ -3296,6 +3297,90 @@
     - filename: llama-cpp/mmproj/Qwythos-9B-v2-MTP-Q4_K_M/mmproj-Qwythos-9B-v2-BF16.gguf
       sha256: 0d1687cb33124c78acab788b342d4a2eaf85b3035e87c3abe4ee9d0b84ddb4f5
       uri: https://huggingface.co/empero-ai/Qwythos-9B-v2-GGUF/resolve/main/mmproj-Qwythos-9B-v2-BF16.gguf
+- &qwopus3-6-27b-fusion
+  name: "qwopus3.6-27b-fusion"
+  variants:
+    - model: qwopus3.6-27b-fusion-q8
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/Qwen/Qwen3.6-27B
+    - https://huggingface.co/KyleHessling1/Qwopus3.6-27B-Fusion-GGUF
+  description: |
+    Qwopus3.6-27B Fusion is an experimental Qwen3.6-27B merge that combines
+    reasoning and code-execution fine-tunes. It targets agentic coding,
+    mathematics, tool use, and long-context work while retaining image input.
+    This default entry uses the Q4_K_M GGUF quantization and the shared Q8_0
+    vision projector.
+  license: qwen
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - qwen
+    - reasoning
+    - thinking
+    - code
+    - agent
+    - tools
+    - long-context
+    - vision
+    - multimodal
+    - experimental
+  last_checked: "2026-08-21"
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/qwopus3.6-27b-fusion/Qwopus3.6-27B-Fusion-mmproj-Q8_0.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/qwopus3.6-27b-fusion/Qwopus3.6-27B-Fusion-Q4_K_M.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/qwopus3.6-27b-fusion/Qwopus3.6-27B-Fusion-Q4_K_M.gguf
+      sha256: 6d4e6e9ffba84ffe5166969303d4918f3a31682d75862416827412cee8f20d5d
+      uri: huggingface://KyleHessling1/Qwopus3.6-27B-Fusion-GGUF/Qwopus3.6-27B-Fusion-Q4_K_M.gguf
+    - filename: llama-cpp/mmproj/qwopus3.6-27b-fusion/Qwopus3.6-27B-Fusion-mmproj-Q8_0.gguf
+      sha256: eb561d41a7bbeb0fcf04883c8af11078ef6cae0a66862a0b68443cfca495269d
+      uri: huggingface://KyleHessling1/Qwopus3.6-27B-Fusion-GGUF/Qwopus3.6-27B-Fusion-mmproj-Q8_0.gguf
+- !!merge <<: *qwopus3-6-27b-fusion
+  name: "qwopus3.6-27b-fusion-q8"
+  variants: []
+  description: |
+    Qwopus3.6-27B Fusion is an experimental Qwen3.6-27B reasoning and coding
+    merge. This entry uses the near-lossless Q8_0 GGUF quantization and the
+    shared Q8_0 vision projector.
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/qwopus3.6-27b-fusion-q8/Qwopus3.6-27B-Fusion-mmproj-Q8_0.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/qwopus3.6-27b-fusion-q8/Qwopus3.6-27B-Fusion-Q8_0.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/qwopus3.6-27b-fusion-q8/Qwopus3.6-27B-Fusion-Q8_0.gguf
+      sha256: 5594e1776b75beedf4a54b933bba386dc83a0883417e3bcd9ef53fdfd120d5b6
+      uri: huggingface://KyleHessling1/Qwopus3.6-27B-Fusion-GGUF/Qwopus3.6-27B-Fusion-Q8_0.gguf
+    - filename: llama-cpp/mmproj/qwopus3.6-27b-fusion-q8/Qwopus3.6-27B-Fusion-mmproj-Q8_0.gguf
+      sha256: eb561d41a7bbeb0fcf04883c8af11078ef6cae0a66862a0b68443cfca495269d
+      uri: huggingface://KyleHessling1/Qwopus3.6-27B-Fusion-GGUF/Qwopus3.6-27B-Fusion-mmproj-Q8_0.gguf
 - &tess-4-27b
   name: "tess-4-27b"
   variants:
@@ -3539,6 +3624,7 @@
     - gguf
     - reasoning
     - thinking
+    - mtp
   icon: https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3.6/Figures/qwen3.6_27b_score.png
   overrides:
     backend: llama-cpp
@@ -5863,7 +5949,11 @@
     - filename: llama-cpp/mmproj/kai-os_Grug-12B-Q8_0/mmproj-kai-os_Grug-12B-f16.gguf
       sha256: 0d59c7571a593b8d11c8104ed90250656efec0abbed9b4a737e7247eae149378
       uri: huggingface://bartowski/kai-os_Grug-12B-GGUF/mmproj-kai-os_Grug-12B-f16.gguf
-- name: "gemma-4-12b-agentic-fable5-composer2.5-v2-3.5x-tau2"
+- &gemma-4-12b-agentic-tau2
+  name: "gemma-4-12b-agentic-fable5-composer2.5-v2-3.5x-tau2"
+  variants:
+    - model: gemma-4-12b-agentic-fable5-composer2.5-v2-3.5x-tau2-mtp
+    - model: gemma-4-12b-agentic-fable5-composer2.5-v2-3.5x-tau2-q8
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
     - https://huggingface.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF
@@ -5911,6 +6001,79 @@
     - filename: llama-cpp/models/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF/gemma4-v2-Q4_K_M.gguf
       sha256: 0b9506cab36f7f818e34f9c0f5a3d6568d0b37100f3a3e1092e2eec3c4c96791
       uri: https://huggingface.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF/resolve/main/gemma4-v2-Q4_K_M.gguf
+- !!merge <<: *gemma-4-12b-agentic-tau2
+  name: "gemma-4-12b-agentic-fable5-composer2.5-v2-3.5x-tau2-mtp"
+  variants: []
+  description: |
+    Gemma 4 12B Agentic v2 is an Apache-2.0 fine-tune for coding, terminal
+    work, multi-step tool use, and reasoning. This variant pairs the Q4_K_M
+    target with the upstream Q8_0 Gemma 4 MTP drafter for faster lossless
+    generation through llama.cpp speculative decoding.
+  tags:
+    - llm
+    - gguf
+    - reasoning
+    - thinking
+    - mtp
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+      - spec_type:draft-mtp
+      - spec_n_max:4
+    draft_model: llama-cpp/models/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF/gemma-4-12B-it-MTP-Q8_0.gguf
+    parameters:
+      min_p: 0
+      model: llama-cpp/models/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF/gemma4-v2-Q4_K_M.gguf
+      repeat_penalty: 1
+      temperature: 1
+      top_k: 64
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF/gemma4-v2-Q4_K_M.gguf
+      sha256: 0b9506cab36f7f818e34f9c0f5a3d6568d0b37100f3a3e1092e2eec3c4c96791
+      uri: huggingface://yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF/gemma4-v2-Q4_K_M.gguf
+    - filename: llama-cpp/models/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF/gemma-4-12B-it-MTP-Q8_0.gguf
+      sha256: 145db9094bc0f85f1701e255a2ed216dcc9800fc8bc8631ad00905b456bd451b
+      uri: huggingface://yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF/MTP/gemma-4-12B-it-MTP-Q8_0.gguf
+- !!merge <<: *gemma-4-12b-agentic-tau2
+  name: "gemma-4-12b-agentic-fable5-composer2.5-v2-3.5x-tau2-q8"
+  variants: []
+  description: |
+    Gemma 4 12B Agentic v2 is an Apache-2.0 fine-tune for coding, terminal
+    work, multi-step tool use, and reasoning. This variant uses the
+    near-lossless Q8_0 GGUF quantization for higher output fidelity.
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      min_p: 0
+      model: llama-cpp/models/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF/gemma4-v2-Q8_0.gguf
+      repeat_penalty: 1
+      temperature: 1
+      top_k: 64
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF/gemma4-v2-Q8_0.gguf
+      sha256: 2c20a496baf3e9a3ead59d37c7afe228a863662d58155f360d44eb8b2465cb7f
+      uri: huggingface://yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF/gemma4-v2-Q8_0.gguf
 - name: "qwen3.6-27b-mtp-pi-tune"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -53262,3 +53425,61 @@
     - filename: audio-cpp/vevo2-q8_0.gguf
       sha256: f80a70facaaecfcf1aa417ef16ef091318c5e789b24c16a741233c64a72fcee8
       uri: huggingface://audio-cpp/audio.cpp-gguf/Vevo2-GGUF/vevo2-q8_0.gguf
+- name: "openresearcher-30b-a3b-q4"
+  variants:
+    - model: openresearcher-30b-a3b-q8
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/OpenResearcher/OpenResearcher-30B-A3B
+    - https://huggingface.co/OpenResearcher/OpenResearcher-30B-A3B-GGUF
+  description: |
+    OpenResearcher-30B-A3B is an agentic deep-research model with 30B total
+    parameters and 3B active parameters. This entry uses the Q4_K_M GGUF.
+  license: mit
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - research
+    - agent
+    - tools
+  last_checked: "2026-08-21"
+  overrides:
+    backend: llama-cpp
+    parameters:
+      model: OpenResearcher-30B-A3B-Q4_K_M.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: OpenResearcher-30B-A3B-Q4_K_M.gguf
+      uri: huggingface://OpenResearcher/OpenResearcher-30B-A3B-GGUF/OpenResearcher-30B-A3B-Q4_K_M.gguf
+      sha256: 2ac3981624ca76c1e3eca569b649cf041e91ad8c95ac6b2cc41897881d773c08
+- name: "openresearcher-30b-a3b-q8"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/OpenResearcher/OpenResearcher-30B-A3B
+    - https://huggingface.co/OpenResearcher/OpenResearcher-30B-A3B-GGUF
+  description: |
+    OpenResearcher-30B-A3B is an agentic deep-research model with 30B total
+    parameters and 3B active parameters. This entry uses the Q8_0 GGUF.
+  license: mit
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - research
+    - agent
+    - tools
+  last_checked: "2026-08-21"
+  overrides:
+    backend: llama-cpp
+    parameters:
+      model: OpenResearcher-30B-A3B-Q8_0.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: OpenResearcher-30B-A3B-Q8_0.gguf
+      uri: huggingface://OpenResearcher/OpenResearcher-30B-A3B-GGUF/OpenResearcher-30B-A3B-Q8_0.gguf
+      sha256: c216d75002a580f939ceaf944965b0d4fd7d7b5b29a0914a001d836e49866970
