@@ -1150,6 +1150,7 @@ func (o *ApplicationConfig) ToConfigLoaderOptions() []ConfigLoaderOption {
 		LoadOptionF16(o.F16),
 		LoadOptionThreads(o.Threads),
 		ModelPath(o.SystemState.Model.ModelsPath),
+		LoadOptionGalleryFiles(o.Galleries...),
 	}
 }
 
