@@ -373,6 +373,16 @@ func New(opts ...config.AppOption) (*Application, error) {
 			cfgLoaderOpts := options.ToConfigLoaderOptions()
 			modelRevisionLifecycle := modeladmin.NewDistributedModelRevisionLifecycle(distSvc.Registry, distSvc.ModelCleanup)
 			gs.SetModelRevisionLifecycle(modelRevisionLifecycle)
+			// Bring the controller's stored revisions back in line with the
+			// configuration on disk. An inference request may only establish a
+			// revision, never replace one, so a model whose stored value had
+			// drifted stayed unroutable until someone deleted the row.
+			if err := modeladmin.ResyncModelConfigRevisions(options.Context,
+				application.ModelConfigLoader(),
+				modeladmin.NewRevisionStore(distSvc.Registry, modelRevisionLifecycle),
+			); err != nil {
+				xlog.Warn("Failed to resync model config revisions", "error", err)
+			}
 			gs.OnModelsChanged = func(evt messaging.CacheInvalidateEvent) {
 				// ApplyRemoteChange honors the op: a "delete" prunes the element
 				// (a reload-from-path is additive and cannot drop it), anything
@@ -446,13 +456,20 @@ func New(opts ...config.AppOption) (*Application, error) {
 	// Wire gallery generation counter into VRAM caches so they invalidate
 	// when gallery data refreshes instead of using a fixed TTL.
 	vram.SetGalleryGenerationFunc(gallery.GalleryGeneration)
+	if options.AutoloadGalleries {
+		if options.VRAMPersistentCache {
+			// Remote GGUF probes can transfer substantial metadata. Keep successful
+			// results across restarts so the startup warmer does not repeat that work.
+			vram.ConfigurePersistentCache(filepath.Join(options.SystemState.Model.ModelsPath, "..", "cache", "vram"), 24*time.Hour)
+		}
 
-	// Fill those caches ahead of the first visitor. An estimate for an entry
-	// nobody has asked about yet costs a remote probe of its weight files, and
-	// the model gallery asks for one per row, so without this the first page
-	// spends seconds filling in its own sizes while somebody watches it.
-	// Non-blocking, and bounded: see DefaultEstimateWarmConfig.
-	gallery.WarmEstimateCache(options.Context, options.Galleries, options.SystemState, gallery.EstimateWarmConfigFromEnv())
+		// Fill those caches ahead of the first visitor. An estimate for an entry
+		// nobody has asked about yet costs a remote probe of its weight files, and
+		// the model gallery asks for one per row, so without this the first page
+		// spends seconds filling in its own sizes while somebody watches it.
+		// Non-blocking, and bounded: see DefaultEstimateWarmConfig.
+		gallery.WarmEstimateCache(options.Context, options.Galleries, options.SystemState, gallery.EstimateWarmConfigFromEnv())
+	}
 
 	if options.ConfigFile != "" {
 		if err := application.ModelConfigLoader().LoadMultipleModelConfigsSingleFile(options.ConfigFile, configLoaderOpts...); err != nil {

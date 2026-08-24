@@ -50,8 +50,8 @@
       use_tokenizer_template: true
   files:
     - filename: llama-cpp/models/Huihui-Qwen3.8-27B-abliterated-bf16/Huihui-Qwen3.8-27B-abliterated-bf16.gguf
-      sha256: a64a5e5464d7d0ea7ffcbc937cf28f8a7bc9b0a6e87be6034e6b854418d5abd5
       uri: https://huggingface.co/huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF/resolve/main/Huihui-Qwen3.8-27B-abliterated-bf16.gguf
+      sha256: b880f2042df16a9a493800c83f1ee16b7cd46e8ca695f193655940a1949e9097
     - filename: llama-cpp/mmproj/Huihui-Qwen3.8-27B-abliterated-bf16/mmproj-model-bf16.gguf
       sha256: c9a09064683620bea3d3bfed5d4462e1a97a7d2fff7e5045d6862a0a85eeb5b5
       uri: https://huggingface.co/huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF/resolve/main/mmproj-model-bf16.gguf
@@ -1180,7 +1180,7 @@
   files:
     - filename: llama-cpp/models/nemotron-3.5-lightning-30b-a3b/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-Q8_0.gguf
       uri: huggingface://ggml-org/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-GGUF/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-Q8_0.gguf
-      sha256: d4cc4c9fffaa356db8b49cfaba9233609cfb29b4dd89d827665210dc1cc8dbbb
+      sha256: b0e25ce2d301930e706d549a59d18c5969dcec664fdf7466435287b03fefda36
 - &muse-glimmer-30b
   name: "muse-glimmer-30b"
   variants:
@@ -1386,6 +1386,47 @@
     - filename: llama-cpp/models/muse-glimmer-30b/dflash-kquant.gguf
       uri: huggingface://meta-models/Muse-Glimmer-30B-GGUF/dflash-kquant.gguf
       sha256: 27d9a805fa29b943cfb6ad4843367cd4eaaaf06bd452d8cc3e00a2cd18a677bc
+- name: "homura-30b-q4"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/hyrelabs/Homura-30B-GGUF
+    - https://huggingface.co/darkc0de/Muse-Glimmer-30B-heretic
+  description: |
+    Homura 30B is an English, agent-focused fine-tune of Muse Glimmer 30B.
+    It targets autonomous tool use and direct instruction following. This
+    entry uses the publisher's 16.9 GB Q4_K_M GGUF and supports a 131K-token
+    context window.
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - agent
+    - tools
+    - long-context
+    - uncensored
+  last_checked: "2026-08-23"
+  overrides:
+    backend: llama-cpp
+    context_size: 131072
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/homura-30b/Homura-30B-Q4_K_M.gguf
+      temperature: 0.2
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/homura-30b/Homura-30B-Q4_K_M.gguf
+      uri: huggingface://hyrelabs/Homura-30B-GGUF/Homura-30B-Q4_K_M.gguf
+      sha256: fd4dc394b193ac1cc0f4bb9fb44bff3d6eebd34df62246fc753104c0cc98cc51
 - &qwen3-5-9b-defiant-fable
   name: "qwen3.5-9b-defiant-fable-mtp"
   variants:
@@ -1483,6 +1524,164 @@
     - filename: llama-cpp/mmproj/qwen3.5-9b-defiant-fable/mmproj-BF16.gguf
       uri: huggingface://DavidAU/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-GGUF/mmproj-BF16.gguf
       sha256: 853698ce7aa6c7ba732478bad280240969ddf7b0fcbf93900046f63903a83383
+- &qwen3-8-2b-distill
+  name: "qwen3.8-2b-distill-q4"
+  variants:
+    - model: qwen3.8-2b-distill-q8
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/empero-ai/Qwen3.8-2B-Distill
+    - https://huggingface.co/empero-ai/Qwen3.8-2B-Distill-GGUF
+  description: |
+    Qwen3.8 2B Distill is an Apache-2.0, text-only Qwen3.5 2B fine-tune
+    distilled from Qwen3.8 2.4T A95B reasoning traces. It targets compact
+    reasoning, coding, instruction following, and function calling with a 262K
+    native context window. This entry uses the balanced Q4_K_M GGUF
+    quantization; the Q8_0 variant offers higher fidelity.
+  license: apache-2.0
+  icon: https://qianwen-res.oss-cn-beijing.aliyuncs.com/logo_qwen.jpg
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - qwen3.5
+    - reasoning
+    - coding
+    - tool-use
+  last_checked: "2026-08-23"
+  overrides:
+    backend: llama-cpp
+    context_size: 32768
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+      - reasoning_format:deepseek
+    parameters:
+      model: llama-cpp/models/qwen3.8-2b-distill/Qwen3.8-2B-Q4_K_M.gguf
+      temperature: 0.6
+      top_k: 20
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/qwen3.8-2b-distill/Qwen3.8-2B-Q4_K_M.gguf
+      uri: huggingface://empero-ai/Qwen3.8-2B-Distill-GGUF/Qwen3.8-2B-Q4_K_M.gguf
+      sha256: 4aa0fb13c431514262f259d420ecc95a8714df58ac2a2384514e20b93983f0ff
+- !!merge <<: *qwen3-8-2b-distill
+  name: "qwen3.8-2b-distill-q8"
+  variants: []
+  description: |
+    Qwen3.8 2B Distill in the higher-fidelity Q8_0 GGUF format. This text-only
+    Qwen3.5 2B fine-tune targets reasoning, coding, instruction following, and
+    function calling with a 262K native context window.
+  overrides:
+    backend: llama-cpp
+    context_size: 32768
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+      - reasoning_format:deepseek
+    parameters:
+      model: llama-cpp/models/qwen3.8-2b-distill/Qwen3.8-2B-Q8_0.gguf
+      temperature: 0.6
+      top_k: 20
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/qwen3.8-2b-distill/Qwen3.8-2B-Q8_0.gguf
+      uri: huggingface://empero-ai/Qwen3.8-2B-Distill-GGUF/Qwen3.8-2B-Q8_0.gguf
+      sha256: 866773b0d68f09a1db9733555e92daff85b617f9a2e601773dff494c5ca2bbf2
+- &qwen3-8-4b-distill
+  name: "qwen3.8-4b-distill-q4"
+  variants:
+    - model: qwen3.8-4b-distill-q8
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/empero-ai/Qwen3.8-4B-Distill
+    - https://huggingface.co/empero-ai/Qwen3.8-4B-Distill-GGUF
+  description: |
+    Qwen3.8 4B Distill is an Apache-2.0, text-only Qwen3.5 4B fine-tune
+    distilled from Qwen3.8 2.4T A95B reasoning traces. It targets reasoning,
+    coding, instruction following, and function calling with a 262K native
+    context window. This entry uses the balanced Q4_K_M GGUF quantization; the
+    Q8_0 variant offers higher fidelity.
+  license: apache-2.0
+  icon: https://qianwen-res.oss-cn-beijing.aliyuncs.com/logo_qwen.jpg
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - qwen3.5
+    - reasoning
+    - coding
+    - tool-use
+  last_checked: "2026-08-23"
+  overrides:
+    backend: llama-cpp
+    context_size: 32768
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+      - reasoning_format:deepseek
+    parameters:
+      model: llama-cpp/models/qwen3.8-4b-distill/Qwen3.8-4B-Q4_K_M.gguf
+      temperature: 0.6
+      top_k: 20
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/qwen3.8-4b-distill/Qwen3.8-4B-Q4_K_M.gguf
+      uri: huggingface://empero-ai/Qwen3.8-4B-Distill-GGUF/Qwen3.8-4B-Q4_K_M.gguf
+      sha256: dec96e8cf2e11b613bb46513dec485377f9ca5a351e71712ee0e244f287c6790
+- !!merge <<: *qwen3-8-4b-distill
+  name: "qwen3.8-4b-distill-q8"
+  variants: []
+  description: |
+    Qwen3.8 4B Distill in the higher-fidelity Q8_0 GGUF format. This text-only
+    Qwen3.5 4B fine-tune targets reasoning, coding, instruction following, and
+    function calling with a 262K native context window.
+  overrides:
+    backend: llama-cpp
+    context_size: 32768
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+      - reasoning_format:deepseek
+    parameters:
+      model: llama-cpp/models/qwen3.8-4b-distill/Qwen3.8-4B-Q8_0.gguf
+      temperature: 0.6
+      top_k: 20
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/qwen3.8-4b-distill/Qwen3.8-4B-Q8_0.gguf
+      uri: huggingface://empero-ai/Qwen3.8-4B-Distill-GGUF/Qwen3.8-4B-Q8_0.gguf
+      sha256: 770b780d6754a4954d1caf395c9239eaeb394f15c7a7ea34039883377c93c9c3
 - name: "btl-4-compact"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -4865,7 +5064,9 @@
     - gpu
   icon: https://cdn-uploads.huggingface.co/production/uploads/61b8e2ba285851687028d395/2b08LKpev0DNEk6DlnWkY.png
   variants:
+    - model: lfm2.5-2.6b-dspark
     - model: lfm2.5-2.6b-q8
+    - model: lfm2.5-2.6b-q8-dspark
   overrides:
     backend: llama-cpp
     context_size: 131072
@@ -4921,6 +5122,105 @@
     - filename: llama-cpp/models/LFM2.5-2.6B-GGUF/LFM2.5-2.6B-Q8_0.gguf
       uri: https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF/resolve/main/LFM2.5-2.6B-Q8_0.gguf
       sha256: 1e22128dfa128bdfb684da167e74e072d0a056baa7d06d9f280291e2839b0fc9
+- !!merge <<: *lfm2-5-2-6b
+  name: "lfm2.5-2.6b-dspark"
+  description: |
+    LFM2.5-2.6B with LiquidAI's DSpark speculative drafter. This build pairs
+    the Q4_K_M target with the compact Q4_K_M draft sidecar for lower-memory
+    hosts. DSpark proposes blocks of tokens that the target model verifies,
+    which preserves the target model's output while accelerating generation.
+  tags:
+    - llm
+    - gguf
+    - reasoning
+    - cpu
+    - gpu
+    - dspark
+  variants: null
+  urls:
+    - https://huggingface.co/LiquidAI/LFM2.5-2.6B
+    - https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF
+    - https://huggingface.co/LiquidAI/LFM2.5-2.6B-DSpark-GGUF
+  overrides:
+    backend: llama-cpp
+    context_size: 131072
+    draft_model: llama-cpp/models/LFM2.5-2.6B-DSpark-GGUF/LFM2.5-2.6B-DSpark-Q4_K_M.gguf
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - completion
+    options:
+      - use_jinja:true
+      - spec_type:draft-dspark
+      - spec_n_max:10
+      - spec_n_min:0
+    parameters:
+      model: llama-cpp/models/LFM2.5-2.6B-GGUF/LFM2.5-2.6B-Q4_K_M.gguf
+      repeat_penalty: 1.1
+      temperature: 0.1
+      top_k: 50
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/LFM2.5-2.6B-GGUF/LFM2.5-2.6B-Q4_K_M.gguf
+      uri: https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF/resolve/main/LFM2.5-2.6B-Q4_K_M.gguf
+      sha256: 02a8b7e17487d326e46d68ce0ba24211e1b80a14c4cd0597fa73c1cd697f52ed
+    - filename: llama-cpp/models/LFM2.5-2.6B-DSpark-GGUF/LFM2.5-2.6B-DSpark-Q4_K_M.gguf
+      uri: https://huggingface.co/LiquidAI/LFM2.5-2.6B-DSpark-GGUF/resolve/main/LFM2.5-2.6B-DSpark-Q4_K_M.gguf
+      sha256: 63786b768e43562591a934625a66539eab39beb09e6e3d38e17509e34b79a3cd
+- !!merge <<: *lfm2-5-2-6b
+  name: "lfm2.5-2.6b-q8-dspark"
+  description: |
+    LFM2.5-2.6B with LiquidAI's DSpark speculative drafter. This build pairs
+    the higher-quality Q8_0 target with the recommended F16 draft sidecar for
+    the best acceptance length. DSpark proposes blocks of tokens that the
+    target model verifies, which preserves the target model's output while
+    accelerating generation.
+  tags:
+    - llm
+    - gguf
+    - reasoning
+    - cpu
+    - gpu
+    - dspark
+  variants: null
+  urls:
+    - https://huggingface.co/LiquidAI/LFM2.5-2.6B
+    - https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF
+    - https://huggingface.co/LiquidAI/LFM2.5-2.6B-DSpark-GGUF
+  overrides:
+    backend: llama-cpp
+    context_size: 131072
+    draft_model: llama-cpp/models/LFM2.5-2.6B-DSpark-GGUF/LFM2.5-2.6B-DSpark-F16.gguf
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - completion
+    options:
+      - use_jinja:true
+      - spec_type:draft-dspark
+      - spec_n_max:10
+      - spec_n_min:0
+    parameters:
+      model: llama-cpp/models/LFM2.5-2.6B-GGUF/LFM2.5-2.6B-Q8_0.gguf
+      repeat_penalty: 1.1
+      temperature: 0.1
+      top_k: 50
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/LFM2.5-2.6B-GGUF/LFM2.5-2.6B-Q8_0.gguf
+      uri: https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF/resolve/main/LFM2.5-2.6B-Q8_0.gguf
+      sha256: 1e22128dfa128bdfb684da167e74e072d0a056baa7d06d9f280291e2839b0fc9
+    - filename: llama-cpp/models/LFM2.5-2.6B-DSpark-GGUF/LFM2.5-2.6B-DSpark-F16.gguf
+      uri: https://huggingface.co/LiquidAI/LFM2.5-2.6B-DSpark-GGUF/resolve/main/LFM2.5-2.6B-DSpark-F16.gguf
+      sha256: e198962c08903f3ba29f0ce6bf8e17f5e60bf85ec2f8673e1e2aab03508937e5
 - &bigbang-v1
   name: "bigbang-v1-q4-k-m"
   variants:
@@ -8807,6 +9107,94 @@
     - filename: llama-cpp/mmproj/tencent_UI-Mate-9B-GGUF/mmproj-tencent_UI-Mate-9B-f16.gguf
       sha256: 5a8380c4637dddceed9dbc28fffcdfa8601909c0ece9fe218fbd6888ec5d2c16
       uri: huggingface://bartowski/tencent_UI-Mate-9B-GGUF/mmproj-tencent_UI-Mate-9B-f16.gguf
+- &ui-mate-27b
+  name: ui-mate-27b
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  variants:
+    - model: ui-mate-27b-q8
+  urls:
+    - https://huggingface.co/tencent/UI-Mate-27B
+    - https://huggingface.co/bartowski/tencent_UI-Mate-27B-GGUF
+  description: |
+    UI-Mate-27B is Tencent's 27B-parameter multimodal computer-use agent,
+    fine-tuned from Qwen3.6-27B. It accepts task instructions, screenshots,
+    and interaction history, then emits reasoning and structured mouse and
+    keyboard actions for long-running desktop tasks. The model requires an
+    external runtime to execute its actions and should run with human
+    confirmation for sensitive operations. This entry uses the recommended
+    Q4_K_M GGUF quantization.
+  license: apache-2.0
+  tags:
+    - ui-mate
+    - qwen
+    - qwen3.6
+    - 27b
+    - llm
+    - gguf
+    - quantized
+    - chat
+    - vision
+    - multimodal
+    - agent
+    - computer-use
+    - gpu
+    - cpu
+  last_checked: "2026-08-22"
+  overrides:
+    backend: llama-cpp
+    function:
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/tencent_UI-Mate-27B-GGUF/mmproj-tencent_UI-Mate-27B-f16.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/tencent_UI-Mate-27B-GGUF/tencent_UI-Mate-27B-Q4_K_M.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/tencent_UI-Mate-27B-GGUF/tencent_UI-Mate-27B-Q4_K_M.gguf
+      sha256: 05ee4cca09f10de19e828e51497cc8b4c9eabffe2a177a54d1188ff869669f20
+      uri: huggingface://bartowski/tencent_UI-Mate-27B-GGUF/tencent_UI-Mate-27B-Q4_K_M.gguf
+    - filename: llama-cpp/mmproj/tencent_UI-Mate-27B-GGUF/mmproj-tencent_UI-Mate-27B-f16.gguf
+      sha256: 991376d8e954dda92b454358306fb2b4bbd51d522b12977cdfeb3eebbb904fbb
+      uri: huggingface://bartowski/tencent_UI-Mate-27B-GGUF/mmproj-tencent_UI-Mate-27B-f16.gguf
+- !!merge <<: *ui-mate-27b
+  name: ui-mate-27b-q8
+  variants: []
+  description: |
+    UI-Mate-27B is Tencent's 27B-parameter multimodal computer-use agent,
+    fine-tuned from Qwen3.6-27B. It accepts task instructions, screenshots,
+    and interaction history, then emits reasoning and structured mouse and
+    keyboard actions for long-running desktop tasks. The model requires an
+    external runtime to execute its actions and should run with human
+    confirmation for sensitive operations. This entry uses the higher-quality
+    Q8_0 GGUF quantization.
+  overrides:
+    backend: llama-cpp
+    function:
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/tencent_UI-Mate-27B-GGUF/mmproj-tencent_UI-Mate-27B-f16.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/tencent_UI-Mate-27B-GGUF/tencent_UI-Mate-27B-Q8_0.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/tencent_UI-Mate-27B-GGUF/tencent_UI-Mate-27B-Q8_0.gguf
+      sha256: 3626d336fb902e91f2e7d241d95c9410c74094d5f1739c76ef896140878bcd68
+      uri: huggingface://bartowski/tencent_UI-Mate-27B-GGUF/tencent_UI-Mate-27B-Q8_0.gguf
+    - filename: llama-cpp/mmproj/tencent_UI-Mate-27B-GGUF/mmproj-tencent_UI-Mate-27B-f16.gguf
+      sha256: 991376d8e954dda92b454358306fb2b4bbd51d522b12977cdfeb3eebbb904fbb
+      uri: huggingface://bartowski/tencent_UI-Mate-27B-GGUF/mmproj-tencent_UI-Mate-27B-f16.gguf
 - &fara1-5-4b
   name: fara1.5-4b
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
@@ -18275,11 +18663,11 @@
       model: SmolVLM2-256M-Video-Instruct-Q8_0.gguf
   files:
     - filename: SmolVLM2-256M-Video-Instruct-Q8_0.gguf
-      sha256: af7ce9951a2f46c4f6e5def253e5b896ca5e417010e7a9949fdc9e5175c27767
       uri: huggingface://ggml-org/SmolVLM2-256M-Video-Instruct-GGUF/SmolVLM2-256M-Video-Instruct-Q8_0.gguf
+      sha256: 1202d1c54493bddff5b0ecbc36fcb7520ff720b9fa3d7224aeb293581f90529a
     - filename: mmproj-SmolVLM2-256M-Video-Instruct-Q8_0.gguf
-      sha256: d34913a588464ff7215f086193e0426a4f045eaba74456ee5e2667d8ed6798b1
       uri: huggingface://ggml-org/SmolVLM2-256M-Video-Instruct-GGUF/mmproj-SmolVLM2-256M-Video-Instruct-Q8_0.gguf
+      sha256: 05d5751132244a6ebd64cba9b34898c0d874b2cb78159d758e1d4da3aad91581
 - name: qwen3-30b-a3b
   url: github:mudler/LocalAI/gallery/qwen3.yaml@master
   urls:
