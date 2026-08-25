@@ -65,16 +65,31 @@ func NewRevisionStore(reader RevisionReader, lifecycle ModelRevisionLifecycle) R
 // A model with no stored revision is left alone. It has never been served, and
 // inventing controller state for it here would quarantine nothing and describe
 // a model that may never be requested.
-func ResyncModelConfigRevisions(ctx context.Context, loader *config.ModelConfigLoader, store RevisionStore) error {
-	if loader == nil || store == nil {
+func ResyncModelConfigRevisions(ctx context.Context, loader *config.ModelConfigLoader, appConfig *config.ApplicationConfig, store RevisionStore) error {
+	if loader == nil || store == nil || appConfig == nil {
+		return nil
+	}
+
+	configs := loader.GetAllModelsConfigs()
+	if len(configs) == 0 {
+		// Reconciling nothing is indistinguishable from reconciling correctly,
+		// which is how a caller that ran this before the configs were loaded
+		// went unnoticed. Say so rather than report success.
+		xlog.Warn("Skipping model config revision resync: no model configurations are loaded")
 		return nil
 	}
 
 	var transitions []ModelRevisionTransition
-	for _, cfg := range loader.GetAllModelsConfigs() {
-		want, err := config.ModelConfigRevision(&cfg)
+	for _, cfg := range configs {
+		// Resolve the revision the way an inference request does, through the
+		// loader, rather than hashing the stored config directly. SetDefaults
+		// is applied again on that path and is not idempotent for every model
+		// (it re-runs the GGUF guess and hardware defaults), so hashing the
+		// stored config yields a value no request will ever carry, and
+		// publishing it would wedge the model this resync exists to unwedge.
+		want, err := loader.RevisionFor(cfg.Name, appConfig)
 		if err != nil {
-			return fmt.Errorf("compute config revision for %q: %w", cfg.Name, err)
+			return err
 		}
 
 		stored, err := store.GetModelConfigRevision(ctx, cfg.Name)

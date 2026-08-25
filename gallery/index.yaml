@@ -1,4 +1,52 @@
 ---
+- name: "qwen3.8-27b-dflash2"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/z-lab/Qwen3.8-27B-DFlash2-GGUF
+  description: |
+    # Qwen3.8-27B
+
+    > [!Note]
+    > This repository contains model weights and configuration files for the post-trained model in the Hugging Face Transformers format.
+    >
+    > These artifacts are compatible with Hugging Face Transformers, vLLM, SGLang, TokenSpeed, etc.
+
+    > [!Tip]
+    > For users seeking managed, scalable inference without infrastructure maintenance, the official Qwen API service is provided by Qwen Cloud.
+    > In particular, **Qwen3.8-27B** will be available as a hosted version with more production features, e.g., 1M context length by default, official built-in tools. For more information, please refer to the Qwen3.8-27B Overview. The service is coming soon. Stay tuned for updates.
+
+    Following the widespread community adoption of the Qwen3.5 and Qwen3.6 series, we are pleased to introduce Qwen3.8, the most capable generation in the Qwen open-model family to date.
+
+    ...
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+  icon: https://qianwen-res.oss-accelerate.aliyuncs.com/Qwen3.5/demo/CI_Demo/mathv-1327.jpg
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      min_p: 0
+      model: llama-cpp/models/Qwen3.8-27B-DFlash2-Q4_K_M/Qwen3.8-27B-DFlash2-Q4_K_M.gguf
+      presence_penalty: 1.5
+      repeat_penalty: 1
+      temperature: 0.7
+      top_k: 20
+      top_p: 0.8
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Qwen3.8-27B-DFlash2-Q4_K_M/Qwen3.8-27B-DFlash2-Q4_K_M.gguf
+      sha256: 18a380efc9b7ed8d88677fc895f5c11ae170653434ee378f7348f715c14d0594
+      uri: https://huggingface.co/z-lab/Qwen3.8-27B-DFlash2-GGUF/resolve/main/Qwen3.8-27B-DFlash2-Q4_K_M.gguf
 - name: "huihui-qwen3.8-27b-abliterated"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -510,10 +558,10 @@
   files:
     - filename: llama-cpp/models/ornith-1.5-9b/Ornith-1.5-9B-Q4_K_M.gguf
       uri: huggingface://ornith-ai/Ornith-1.5-9B-GGUF/Ornith-1.5-9B-Q4_K_M.gguf
-      sha256: 7d791afcb31812acc88cd5aafc675391df28c6fc3d8eae002bb4e6cc3d8cfd8d
+      sha256: 70c112196e0b7023803c9762752e46d29e612a92c83f995bc3ba1ceb07e8fab6
     - filename: llama-cpp/mmproj/ornith-1.5-9b/mmproj-BF16.gguf
       uri: huggingface://ornith-ai/Ornith-1.5-9B-GGUF/mmproj-Ornith-1.5-9B-BF16.gguf
-      sha256: d65001a94c4b6852bc7a0e7c5cc92fe8506755bb270e54483fd5feec7ae39a19
+      sha256: 626f9f90627402a6bf4a999111d0fbd69b5fcca7aa8ba089d69e5f10e8858e1d
 - !!merge <<: *ornith-1-5-9b
   name: "ornith-1.5-9b-q8"
   variants: []
@@ -545,10 +593,104 @@
   files:
     - filename: llama-cpp/models/ornith-1.5-9b/Ornith-1.5-9B-Q8_0.gguf
       uri: huggingface://ornith-ai/Ornith-1.5-9B-GGUF/Ornith-1.5-9B-Q8_0.gguf
-      sha256: 6874eeb25c71081dc8f0bbe88f3ebb786312447132745371cd980bce95d259b9
+      sha256: 22086870b009dbe9815ee752c48a82de930118a7c5ce5599590892ae03b8b010
     - filename: llama-cpp/mmproj/ornith-1.5-9b/mmproj-BF16.gguf
       uri: huggingface://ornith-ai/Ornith-1.5-9B-GGUF/mmproj-Ornith-1.5-9B-BF16.gguf
-      sha256: d65001a94c4b6852bc7a0e7c5cc92fe8506755bb270e54483fd5feec7ae39a19
+      sha256: 626f9f90627402a6bf4a999111d0fbd69b5fcca7aa8ba089d69e5f10e8858e1d
+- &qwen3-8-27b-obliterated
+  name: "qwen3.8-27b-obliterated-q4"
+  variants:
+    - model: qwen3.8-27b-obliterated-q8
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/Qwen/Qwen3.8-27B
+    - https://huggingface.co/OBLITERATUS/Qwen3.8-27B-OBLITERATED
+  description: |
+    Qwen3.8-27B OBLITERATED is an Apache-2.0 Qwen3.8 vision-language model
+    modified for refusal-removal and red-team research. It retains reasoning,
+    coding, tool use, image, and video capabilities, but its safety guardrails
+    have been removed.
+
+    This default entry uses the Q4_K_M GGUF and BF16 vision projector. The
+    linked variant uses the higher-quality Q8_0 model. The publisher recommends
+    greedy decoding with a 1.15 repetition penalty.
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - qwen
+    - reasoning
+    - thinking
+    - coding
+    - agent
+    - tools
+    - vision
+    - multimodal
+    - long-context
+    - uncensored
+  icon: https://qianwen-res.oss-cn-beijing.aliyuncs.com/logo_qwen.jpg
+  last_checked: "2026-08-24"
+  overrides:
+    backend: llama-cpp
+    context_size: 262144
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/qwen3.8-27b-obliterated/mmproj-model-bf16.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/qwen3.8-27b-obliterated/Qwen3.8-27B-OBLITERATED-Q4_K_M.gguf
+      repeat_penalty: 1.15
+      temperature: 0
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/qwen3.8-27b-obliterated/Qwen3.8-27B-OBLITERATED-Q4_K_M.gguf
+      uri: huggingface://OBLITERATUS/Qwen3.8-27B-OBLITERATED/Qwen3.8-27B-OBLITERATED-Q4_K_M.gguf
+      sha256: 1f74330b211a8253c96f1bf586cba6eb56d37117c97ed9e6eec18c198a4e7fe5
+    - filename: llama-cpp/mmproj/qwen3.8-27b-obliterated/mmproj-model-bf16.gguf
+      uri: huggingface://OBLITERATUS/Qwen3.8-27B-OBLITERATED/mmproj-model-bf16.gguf
+      sha256: e484e3b7e907ed0e0644c0de56c3f5929c7ad5c9c6cc84d35a9d8dc08d461545
+- !!merge <<: *qwen3-8-27b-obliterated
+  name: "qwen3.8-27b-obliterated-q8"
+  variants: []
+  description: |
+    Qwen3.8-27B OBLITERATED in the higher-quality Q8_0 GGUF format. This model
+    is modified for refusal-removal and red-team research, and its safety
+    guardrails have been removed.
+  overrides:
+    backend: llama-cpp
+    context_size: 262144
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/qwen3.8-27b-obliterated/mmproj-model-bf16.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/qwen3.8-27b-obliterated/Qwen3.8-27B-OBLITERATED-Q8_0.gguf
+      repeat_penalty: 1.15
+      temperature: 0
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/qwen3.8-27b-obliterated/Qwen3.8-27B-OBLITERATED-Q8_0.gguf
+      uri: huggingface://OBLITERATUS/Qwen3.8-27B-OBLITERATED/Qwen3.8-27B-OBLITERATED-Q8_0.gguf
+      sha256: afa839b2fa5bc890e5735031dda2c6239d3b6bba3b6ffa29477cbc14a2e1f221
+    - filename: llama-cpp/mmproj/qwen3.8-27b-obliterated/mmproj-model-bf16.gguf
+      uri: huggingface://OBLITERATUS/Qwen3.8-27B-OBLITERATED/mmproj-model-bf16.gguf
+      sha256: e484e3b7e907ed0e0644c0de56c3f5929c7ad5c9c6cc84d35a9d8dc08d461545
 - &qwen3-8-27b
   name: "qwen3.8-27b-q4"
   variants:
