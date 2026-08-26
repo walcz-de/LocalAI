@@ -1,4 +1,215 @@
 ---
+- &granite-4-2-3b
+  name: "granite-4.2-3b-q4"
+  variants:
+    - model: granite-4.2-3b-q8
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/ibm-granite/granite-4.2-3b
+    - https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF
+  description: |
+    IBM Granite 4.2 3B is a compact multilingual reasoning model for chat,
+    coding, long-context tasks, and tool use. This entry uses the Q4_K_M
+    GGUF; a higher-fidelity Q8_0 build is available as a variant.
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - granite
+    - multilingual
+    - reasoning
+    - thinking
+    - coding
+    - tools
+    - long-context
+  last_checked: "2026-08-25"
+  overrides:
+    backend: llama-cpp
+    context_size: 131072
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/granite-4.2-3b/granite-4.2-3b-Q4_K_M.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/granite-4.2-3b/granite-4.2-3b-Q4_K_M.gguf
+      uri: huggingface://ibm-granite/granite-4.2-3b-GGUF/granite-4.2-3b-Q4_K_M.gguf
+      sha256: 20e436143017578687f7f848225cc6c6038126c84149192229c7dff6e4e0f427
+- !!merge <<: *granite-4-2-3b
+  name: "granite-4.2-3b-q8"
+  variants: []
+  description: |
+    IBM Granite 4.2 3B in the higher-fidelity Q8_0 GGUF format. It is a
+    compact multilingual reasoning model for chat, coding, and tool use.
+  overrides:
+    backend: llama-cpp
+    context_size: 131072
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/granite-4.2-3b/granite-4.2-3b-Q8_0.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/granite-4.2-3b/granite-4.2-3b-Q8_0.gguf
+      uri: huggingface://ibm-granite/granite-4.2-3b-GGUF/granite-4.2-3b-Q8_0.gguf
+      sha256: 9e97320b131445ab8d9098cafb48001e9925d879e71486a8af4db4c803c55394
+- &granite-4-2-8b
+  name: "granite-4.2-8b-q4"
+  variants:
+    - model: granite-4.2-8b-q8
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/ibm-granite/granite-4.2-8b
+    - https://huggingface.co/ibm-granite/granite-4.2-8b-GGUF
+  description: |
+    IBM Granite 4.2 8B is a multilingual reasoning model for chat, coding,
+    long-context tasks, and tool use. This entry uses the Q4_K_M GGUF; a
+    higher-fidelity Q8_0 build is available as a variant.
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - granite
+    - multilingual
+    - reasoning
+    - thinking
+    - coding
+    - tools
+    - long-context
+  last_checked: "2026-08-25"
+  overrides:
+    backend: llama-cpp
+    context_size: 131072
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/granite-4.2-8b/granite-4.2-8b-Q4_K_M.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/granite-4.2-8b/granite-4.2-8b-Q4_K_M.gguf
+      uri: huggingface://ibm-granite/granite-4.2-8b-GGUF/granite-4.2-8b-Q4_K_M.gguf
+      sha256: 16a9369d0805f80b7377d25d87f937a90c05dc04ad79173a52001e42c9aab311
+- !!merge <<: *granite-4-2-8b
+  name: "granite-4.2-8b-q8"
+  variants: []
+  description: |
+    IBM Granite 4.2 8B in the higher-fidelity Q8_0 GGUF format. It is a
+    multilingual reasoning model for chat, coding, and tool use.
+  overrides:
+    backend: llama-cpp
+    context_size: 131072
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/granite-4.2-8b/granite-4.2-8b-Q8_0.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/granite-4.2-8b/granite-4.2-8b-Q8_0.gguf
+      uri: huggingface://ibm-granite/granite-4.2-8b-GGUF/granite-4.2-8b-Q8_0.gguf
+      sha256: fb66ad5750680c77c76b9dc095961375f14fc88ba15fd5fc084ef6e6701bad77
+- &granite-4-2-30b
+  name: "granite-4.2-30b-q4"
+  variants:
+    - model: granite-4.2-30b-q8
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/ibm-granite/granite-4.2-30b
+    - https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF
+  description: |
+    IBM Granite 4.2 30B is the family's flagship multilingual reasoning model
+    for chat, coding, long-context tasks, and tool use. This entry uses the
+    Q4_K_M GGUF; a higher-fidelity Q8_0 build is available as a variant.
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - granite
+    - multilingual
+    - reasoning
+    - thinking
+    - coding
+    - tools
+    - long-context
+  last_checked: "2026-08-25"
+  overrides:
+    backend: llama-cpp
+    context_size: 131072
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/granite-4.2-30b/granite-4.2-30b-Q4_K_M.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/granite-4.2-30b/granite-4.2-30b-Q4_K_M.gguf
+      uri: huggingface://ibm-granite/granite-4.2-30b-GGUF/granite-4.2-30b-Q4_K_M.gguf
+      sha256: f299dace85d77ee0e24ca0b6720bd211b1f4cd1f65b9c0a2111e79692e29c9be
+- !!merge <<: *granite-4-2-30b
+  name: "granite-4.2-30b-q8"
+  variants: []
+  description: |
+    IBM Granite 4.2 30B in the higher-fidelity Q8_0 GGUF format. It is the
+    family's flagship multilingual reasoning model for chat, coding, and tool
+    use.
+  overrides:
+    backend: llama-cpp
+    context_size: 131072
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/granite-4.2-30b/granite-4.2-30b-Q8_0.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/granite-4.2-30b/granite-4.2-30b-Q8_0.gguf
+      uri: huggingface://ibm-granite/granite-4.2-30b-GGUF/granite-4.2-30b-Q8_0.gguf
+      sha256: 005b0933353e9ba219b26e2667705bdb8dbc74eb50e4a4e6cb70fca108710f81
 - name: "qwen3.8-27b-dflash2"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -45,8 +256,8 @@
       use_tokenizer_template: true
   files:
     - filename: llama-cpp/models/Qwen3.8-27B-DFlash2-Q4_K_M/Qwen3.8-27B-DFlash2-Q4_K_M.gguf
-      sha256: 18a380efc9b7ed8d88677fc895f5c11ae170653434ee378f7348f715c14d0594
       uri: https://huggingface.co/z-lab/Qwen3.8-27B-DFlash2-GGUF/resolve/main/Qwen3.8-27B-DFlash2-Q4_K_M.gguf
+      sha256: 1a25c56858e1ebe93f2718ac1d49d1151f9323325c1bbfd6209370f4db131ebd
 - name: "huihui-qwen3.8-27b-abliterated"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -694,6 +905,140 @@
     - filename: llama-cpp/mmproj/ornith-1.5-35b-a3b/mmproj-BF16.gguf
       uri: huggingface://ornith-ai/Ornith-1.5-35B-A3B-GGUF/mmproj-Ornith-1.5-35B-BF16.gguf
       sha256: 1921a36a85aee56cd2abd27f46701802c9d85a33474792e600df6c3b282a135d
+- &tiel-coder-35b-a3b
+  name: "tiel-coder-35b-a3b-q4"
+  variants:
+    - model: tiel-coder-35b-a3b-q4-mtp
+    - model: tiel-coder-35b-a3b-q8
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/ornith-ai/Ornith-1.5-35B-A3B
+    - https://huggingface.co/peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF
+  description: |
+    Tiel-Coder-35B-A3B is a 35B-parameter mixture-of-experts model for coding,
+    reasoning, tool use, and vision tasks. This default entry uses the
+    Q4_K_XL GGUF and BF16 vision projector.
+  license: "mit"
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - qwen
+    - moe
+    - reasoning
+    - thinking
+    - coding
+    - agent
+    - tools
+    - vision
+    - multimodal
+    - long-context
+  last_checked: "2026-08-25"
+  overrides:
+    backend: llama-cpp
+    context_size: 262144
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/tiel-coder-35b-a3b/mmproj-BF16.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/tiel-coder-35b-a3b/Tiel-Coder-35B-A3B-UD-Q4_K_XL.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/tiel-coder-35b-a3b/Tiel-Coder-35B-A3B-UD-Q4_K_XL.gguf
+      uri: huggingface://peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF/Tiel-Coder-35B-A3B-UD-Q4_K_XL.gguf
+      sha256: 9286a94c453c6a40ad51982c3dc88df4bba32fee9efad06e4588c83c059cf17c
+    - filename: llama-cpp/mmproj/tiel-coder-35b-a3b/mmproj-BF16.gguf
+      uri: huggingface://peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF/mmproj-BF16.gguf
+      sha256: d9ce31026d1cb1f3f8d5152e2e2a014d9d2b302b6c93a7dc07bb0a0487f52837
+- !!merge <<: *tiel-coder-35b-a3b
+  name: "tiel-coder-35b-a3b-q4-mtp"
+  variants: []
+  urls:
+    - https://huggingface.co/ornith-ai/Ornith-1.5-35B-A3B
+    - https://huggingface.co/peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP
+  description: |
+    Tiel-Coder-35B-A3B in Q4_K_XL format with MTP speculative decoding and a
+    BF16 vision projector.
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - qwen
+    - moe
+    - reasoning
+    - thinking
+    - coding
+    - agent
+    - tools
+    - vision
+    - multimodal
+    - long-context
+    - mtp
+  overrides:
+    backend: llama-cpp
+    context_size: 262144
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/tiel-coder-35b-a3b-mtp/mmproj-BF16.gguf
+    options:
+      - use_jinja:true
+      - spec_type:draft-mtp
+    parameters:
+      model: llama-cpp/models/tiel-coder-35b-a3b-mtp/Tiel-Coder-35B-A3B-MTP-UD-Q4_K_XL.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/tiel-coder-35b-a3b-mtp/Tiel-Coder-35B-A3B-MTP-UD-Q4_K_XL.gguf
+      uri: huggingface://peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP/Tiel-Coder-35B-A3B-MTP-UD-Q4_K_XL.gguf
+      sha256: 10960d1d6477b08ed36a0e542e571b473022023c25b8315b0cf8c33c57e98ccd
+    - filename: llama-cpp/mmproj/tiel-coder-35b-a3b-mtp/mmproj-BF16.gguf
+      uri: huggingface://peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP/mmproj-BF16.gguf
+      sha256: d9ce31026d1cb1f3f8d5152e2e2a014d9d2b302b6c93a7dc07bb0a0487f52837
+- !!merge <<: *tiel-coder-35b-a3b
+  name: "tiel-coder-35b-a3b-q8"
+  variants: []
+  description: |
+    Tiel-Coder-35B-A3B in the higher-quality Q8_K_XL GGUF format, with the
+    BF16 vision projector for multimodal prompts.
+  overrides:
+    backend: llama-cpp
+    context_size: 262144
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/tiel-coder-35b-a3b/mmproj-BF16.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/tiel-coder-35b-a3b/Tiel-Coder-35B-A3B-UD-Q8_K_XL.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/tiel-coder-35b-a3b/Tiel-Coder-35B-A3B-UD-Q8_K_XL.gguf
+      uri: huggingface://peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF/Tiel-Coder-35B-A3B-UD-Q8_K_XL.gguf
+      sha256: 883faacea54421f80f5d2713b344c69fbd2c76093a8cc4e2694dbb6958c4d699
+    - filename: llama-cpp/mmproj/tiel-coder-35b-a3b/mmproj-BF16.gguf
+      uri: huggingface://peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF/mmproj-BF16.gguf
+      sha256: d9ce31026d1cb1f3f8d5152e2e2a014d9d2b302b6c93a7dc07bb0a0487f52837
 - &ornith-1-5-397b
   name: "ornith-1.5-397b-q4"
   variants:
