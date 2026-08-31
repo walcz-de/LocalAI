@@ -1,10 +1,11 @@
 #!/bin/bash
-# Apply the bonsai patch series to a cloned PrismML llama.cpp (prism branch) checkout.
+# Apply the rocmfp4 patch series to a cloned walcz-de/llama.cpp-ROCmFP4 checkout.
 #
-# The prism fork branched from upstream llama.cpp before a number of API changes that the
-# shared backend/cpp/llama-cpp/grpc-server.cpp depends on. We carry those upstream commits
-# as patch files under backend/cpp/bonsai/patches/ and apply them here so the reused
-# grpc-server source compiles against the fork unmodified.
+# The wrapper Makefile deletes the vendored backend/cpp/llama-cpp/patches/ before building,
+# so anything the shared grpc-server needs on top of the fork checkout is carried under
+# backend/cpp/rocmfp4/patches/ and applied here. See that directory's README for what
+# belongs there — chiefly reverts we also carry for llama-cpp, so both backends behave
+# the same on gfx1151.
 #
 # Drop the corresponding patch from patches/ whenever the fork catches up with upstream —
 # the build will fail fast if a patch stops applying, which is the signal to retire it.
@@ -45,4 +46,4 @@ for patch in "${patches[@]}"; do
     git apply --verbose "$patch"
 done
 
-echo "all bonsai patches applied successfully"
+echo "all rocmfp4 patches applied successfully"

@@ -1,6 +1,6 @@
 # Pinned to the HEAD of the `rocmfp4` branch on https://github.com/walcz-de/llama.cpp-ROCmFP4.
 # Auto-bumped nightly by .github/workflows/bump_deps.yaml.
-ROCMFP4_VERSION?=0b6afd26bfa64f51c14794b4dfbe3da8946076d3
+ROCMFP4_VERSION?=689cdb3683b7ced03c3e46ea0a76adf4286c89af
 LLAMA_REPO?=https://github.com/walcz-de/llama.cpp-ROCmFP4
 
 CMAKE_ARGS?=
@@ -32,8 +32,9 @@ PATCHES_DIR := $(CURRENT_MAKEFILE_DIR)/patches
 define rocmfp4-build
 	rm -rf $(CURRENT_MAKEFILE_DIR)/../rocmfp4-$(1)-build
 	cp -rf $(LLAMA_CPP_DIR) $(CURRENT_MAKEFILE_DIR)/../rocmfp4-$(1)-build
-	# Drop patches vendored for upstream llama.cpp: this fork carries them already
-	# (it is based on the same pin), so re-applying them would reject.
+	# Drop patches vendored for upstream llama.cpp. The two server-task patches are
+	# replaced by the disable-*-task.sh calls below; anything else we still want on
+	# this fork lives in ./patches and is applied by apply-patches.sh after the fetch.
 	rm -rf $(CURRENT_MAKEFILE_DIR)/../rocmfp4-$(1)-build/patches
 	$(MAKE) -C $(CURRENT_MAKEFILE_DIR)/../rocmfp4-$(1)-build purge
 	bash $(LLAMA_CPP_DIR)/disable-score-task.sh $(CURRENT_MAKEFILE_DIR)/../rocmfp4-$(1)-build/grpc-server.cpp
