@@ -1,9 +1,10 @@
 # NEW 2026-08-31: this file did not exist. A BUILD_TYPE=hipblas build therefore fell
 # back to requirements.txt alone (grpcio/protobuf/grpcio-tools) and produced a backend
 # with no torch and no whisperx at all -- it started, served gRPC, and could never
-# transcribe anything.
+# transcribe anything. That is what this file fixes.
 #
-# torch is installed separately, per GPU arch, in install.sh (AMD ROCm 10 index
-# stable.repo.amd.com/rocm/whl-next with the torch[device-gfx<arch>] extra). It must
-# NOT be pinned here: a requirements file cannot express the per-arch selection.
+# torch is NOT pinned here and NOT installed from AMD's ROCm index in install.sh --
+# see the comment there. whisperX pins torch~=2.8.0, AMD's ROCm 10 index starts at
+# 2.11, so torch resolves to the CPU/CUDA build from PyPI and runs on CPU. whisperX's
+# transcription path (faster-whisper/ctranslate2) has no ROCm backend either.
 whisperx @ git+https://github.com/m-bain/whisperX.git
