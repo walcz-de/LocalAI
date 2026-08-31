@@ -32,7 +32,13 @@ fi
 if [ "x${BUILD_PROFILE}" == "xhipblas" ]; then
     _gpu_arch="${AMDGPU_TARGETS:-gfx1151}"; _gpu_arch="${_gpu_arch%%;*}"; _gpu_arch="${_gpu_arch%% *}"
     ensureVenv
+    # PyPI must stay reachable: torch pulls numpy, and whl-next carries numpy only
+    # as cp312/cp313/cp314 wheels. This backend runs on portable CPython 3.10, so a
+    # bare --index-url (which REPLACES PyPI) fails with "no wheels with a matching
+    # Python implementation tag". The +rocm10.0.0 local versions exist only on
+    # whl-next, so PyPI cannot shadow the ROCm packages.
     uv pip install --index-url https://stable.repo.amd.com/rocm/whl-next \
+        --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match \
         "torch[device-${_gpu_arch}]==2.11.0+rocm10.0.0"
 fi
 

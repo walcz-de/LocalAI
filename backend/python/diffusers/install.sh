@@ -51,7 +51,15 @@ if [ "x${BUILD_PROFILE}" == "xhipblas" ]; then
     # could validate on real hardware. The torch[device-...] extra takes one arch.
     _gpu_arch="${AMDGPU_TARGETS:-gfx1151}"; _gpu_arch="${_gpu_arch%%;*}"; _gpu_arch="${_gpu_arch%% *}"
     ensureVenv
+    # PyPI must stay reachable here: torchvision 0.26+rocm10 declares a numpy
+    # dependency, and whl-next carries numpy only as cp312/cp313/cp314 wheels. This
+    # backend runs on portable CPython 3.10, so a bare --index-url (which REPLACES
+    # PyPI) resolves to "no wheels with a matching Python implementation tag" and the
+    # whole install fails. --extra-index-url + unsafe-best-match lets numpy come from
+    # PyPI while the +rocm10.0.0 local versions still only exist on whl-next, so the
+    # ROCm packages cannot be shadowed.
     uv pip install --index-url https://stable.repo.amd.com/rocm/whl-next \
+        --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match \
         "torch[device-${_gpu_arch}]==2.11.0+rocm10.0.0" \
         "torchvision==0.26.0+rocm10.0.0"
 fi

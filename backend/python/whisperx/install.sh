@@ -43,7 +43,10 @@ fi
 if [ "x${BUILD_PROFILE}" == "xhipblas" ]; then
     _gpu_arch="${AMDGPU_TARGETS:-gfx1151}"; _gpu_arch="${_gpu_arch%%;*}"; _gpu_arch="${_gpu_arch%% *}"
     ensureVenv
+    # PyPI must stay reachable (see diffusers): torchvision pulls numpy, and
+    # whl-next carries numpy only as cp312+ wheels; this backend runs on CPython 3.10.
     uv pip install --index-url https://stable.repo.amd.com/rocm/whl-next \
+        --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match \
         "torch[device-${_gpu_arch}]==2.11.0+rocm10.0.0" \
         "torchvision==0.26.0+rocm10.0.0"
 fi
