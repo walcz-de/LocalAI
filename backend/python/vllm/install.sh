@@ -246,15 +246,28 @@ elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
     _gpu_arch="${_gpu_targets%%;*}"; _gpu_arch="${_gpu_arch%% *}"
 
     ensureVenv
-    # Self-contained ROCm 7.14 build -- reproduces AMD's own rocm/vllm rdna recipe.
-    # From AMD's multi-arch index: the per-GPU torch (torch[device-gfx<arch>]) AND
-    # the full devel SDK (rocm-sdk-devel: hipcc + the HIP CMake packages that the
-    # runtime _rocm_sdk_core lacks). Everything lives in the venv, so the build
-    # needs NO system ROCm at /opt/rocm and reproduces on any base image with pip.
-    uv pip install --index-url https://repo.amd.com/rocm/whl-multi-arch/ \
-        "torch[device-${_gpu_arch}]==2.11.0+rocm7.14.0" \
-        "torchvision==0.26.0+rocm7.14.0" \
-        "rocm-sdk-devel==7.14.0"
+    # Self-contained ROCm 10 build. From AMD's index: the per-GPU torch
+    # (torch[device-gfx<arch>]) AND the full devel SDK (rocm-sdk-devel: hipcc + the
+    # HIP CMake packages that the runtime _rocm_sdk_core lacks). Everything lives in
+    # the venv, so the build needs NO system ROCm at /opt/rocm and reproduces on any
+    # base image with pip. THAT is why this backend's ROCm version is decided here
+    # and not by the base image -- it was the last one still on 7.14 after the ROCm
+    # 10 migration, purely because of these three pins.
+    #
+    # ROCm 10 (2026-08-31): index moved to stable.repo.amd.com/rocm/whl-next. The old
+    # repo.amd.com/rocm/whl-multi-arch/ stops at rocm7.14.0 and has no rocm-sdk-devel
+    # beyond 7.14.0 either. whl-next is what AMD's own ROCm 10 container carries as
+    # PIP_EXTRA_INDEX_URL; it serves torch 2.11/2.12/2.13+rocm10.0.0, the matching
+    # amd-torch-device-gfx* for gfx1103/gfx1151, and rocm-sdk-devel 10.0.0.
+    #
+    # torch stays on 2.11: vllm is built from source against it (VLLM_REF below),
+    # and holding the torch minor keeps the ROCm generation the only variable that
+    # changes. AMD's own ROCm 10 image pairs torch 2.12 with vllm 0.27 -- that is the
+    # next step to evaluate, but it moves two things at once, so not in this change.
+    uv pip install --index-url https://stable.repo.amd.com/rocm/whl-next \
+        "torch[device-${_gpu_arch}]==2.11.0+rocm10.0.0" \
+        "torchvision==0.26.0+rocm10.0.0" \
+        "rocm-sdk-devel==10.0.0"
     installRequirements
 
     # Expand the devel tree and link the installed rocm-sdk-device-* wheels into

@@ -1,0 +1,9 @@
+# NEW 2026-08-31: this file did not exist. A BUILD_TYPE=hipblas build therefore fell
+# back to requirements.txt alone (grpcio/protobuf/grpcio-tools) and produced a backend
+# with no torch and no whisperx at all -- it started, served gRPC, and could never
+# transcribe anything.
+#
+# torch is installed separately, per GPU arch, in install.sh (AMD ROCm 10 index
+# stable.repo.amd.com/rocm/whl-next with the torch[device-gfx<arch>] extra). It must
+# NOT be pinned here: a requirements file cannot express the per-arch selection.
+whisperx @ git+https://github.com/m-bain/whisperX.git

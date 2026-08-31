@@ -17,4 +17,23 @@ if [ "x${BUILD_PROFILE}" == "xintel" ]; then
     EXTRA_PIP_INSTALL_FLAGS+=" --upgrade --index-strategy=unsafe-first-match"
 fi
 
+# ROCm: install torch separately, per GPU arch, BEFORE installRequirements -- the
+# same pattern the diffusers backend uses, and for the same reason.
+#
+# What was wrong before (2026-08-31): requirements-hipblas.txt pinned
+# `torch==2.10.0+rocm7.0` from download.pytorch.org/whl/rocm7.0. That community
+# wheel does not enumerate Strix Halo -- torch.cuda.device_count() returns 0 on
+# gfx1151, so the backend silently falls back to CPU. A requirements file cannot
+# express the per-arch selection this needs (it has no access to AMDGPU_TARGETS),
+# which is why the torch pin has to move here.
+#
+# Index: stable.repo.amd.com/rocm/whl-next (ROCm 10; what AMD's own ROCm 10
+# container carries as PIP_EXTRA_INDEX_URL). torchvision tracks torch: 2.11->0.26.
+if [ "x${BUILD_PROFILE}" == "xhipblas" ]; then
+    _gpu_arch="${AMDGPU_TARGETS:-gfx1151}"; _gpu_arch="${_gpu_arch%%;*}"; _gpu_arch="${_gpu_arch%% *}"
+    ensureVenv
+    uv pip install --index-url https://stable.repo.amd.com/rocm/whl-next \
+        "torch[device-${_gpu_arch}]==2.11.0+rocm10.0.0"
+fi
+
 installRequirements

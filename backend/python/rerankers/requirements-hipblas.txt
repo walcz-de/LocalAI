@@ -1,5 +1,9 @@
---extra-index-url https://download.pytorch.org/whl/rocm7.0
+# torch is installed separately, per GPU arch, in install.sh -- from AMD's
+# ROCm 10 index (stable.repo.amd.com/rocm/whl-next) with the torch[device-gfx<arch>]
+# extra. It must NOT be pinned here: a requirements file cannot express the per-arch
+# selection, and the community whl/rocm7.0 wheel that used to be pinned here does not
+# enumerate Strix Halo (device_count == 0 on gfx1151 -> silent CPU fallback).
+# Everything below resolves from PyPI.
 transformers
 accelerate
-torch==2.10.0+rocm7.0
 rerankers[transformers]
