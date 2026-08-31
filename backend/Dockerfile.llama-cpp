@@ -72,9 +72,26 @@ WORKDIR /build
 # Install everything via the shared script — the same one that
 # backend/Dockerfile.base-grpc-builder runs, so the prebuilt CI base and
 # this from-source path are bit-equivalent.
+# GH_TOKEN (optional, via BuildKit-Secret): install-base-deps klont gRPC mit
+# --recurse-submodules --jobs 4. Dessen Submodul-Baum umfasst ~30 Repositories, und
+# GitHub drosselt anonyme Klone zuverlaessig nach etwa 25-30 Stueck in Folge:
+#   fatal: could not read Username for 'https://github.com': No such device or address
+# Der Fehler sieht nach fehlenden Zugangsdaten aus, ist aber ein Rate-Limit — und er
+# trifft je nach Tageszeit mal frueher, mal spaeter, weshalb Wiederholen ihn nur
+# verschleppt. Mit Token laeuft der Klon authentifiziert und faellt nicht mehr unter
+# das anonyme Limit.
+# Das Secret wird nur waehrend dieses RUN eingehaengt und landet in KEINER Schicht.
+# Ohne Secret verhaelt sich der Build unveraendert (anonym) — CI bleibt unberuehrt.
 RUN --mount=type=bind,source=.docker/install-base-deps.sh,target=/usr/local/sbin/install-base-deps \
     --mount=type=bind,source=.docker/apt-mirror.sh,target=/usr/local/sbin/apt-mirror \
-    bash /usr/local/sbin/install-base-deps
+    --mount=type=secret,id=gh_token \
+    if [ -s /run/secrets/gh_token ]; then \
+        git config --global url."https://$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \
+    fi; \
+    bash /usr/local/sbin/install-base-deps; \
+    rc=$?; \
+    git config --global --remove-section url."https://$(cat /run/secrets/gh_token 2>/dev/null)@github.com/" 2>/dev/null || true; \
+    exit $rc
 
 # Mirror builder-prebuilt: copy gRPC from /opt/grpc to /usr/local so
 # CMake's find_package finds it at the canonical prefix the Makefile expects.
