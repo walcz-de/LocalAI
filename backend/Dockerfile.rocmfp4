@@ -85,9 +85,23 @@ WORKDIR /build
 # Install everything via the shared script — the same one that
 # backend/Dockerfile.base-grpc-builder runs, so the prebuilt CI base and
 # this from-source path are bit-equivalent.
+# GH_TOKEN (optional, via BuildKit-Secret) — identisch zu Dockerfile.llama-cpp
+# (Commit 97940d6f6). install-base-deps klont gRPC mit ~30 Submodulen; anonym
+# drosselt GitHub das zuverlaessig mittendrin und meldet es als
+#   fatal: could not read Username for 'https://github.com'
+# Real am 2026-09-02: rocmfp4 fiel genau hier aus, waehrend llama-cpp mit dieser
+# Behandlung durchlief — bei vollem 5000er-Kontingent des hinterlegten Tokens.
+# Das Secret wird nur fuer diesen RUN eingehaengt und landet in KEINER Schicht.
 RUN --mount=type=bind,source=.docker/install-base-deps.sh,target=/usr/local/sbin/install-base-deps \
     --mount=type=bind,source=.docker/apt-mirror.sh,target=/usr/local/sbin/apt-mirror \
-    bash /usr/local/sbin/install-base-deps
+    --mount=type=secret,id=gh_token \
+    if [ -s /run/secrets/gh_token ]; then \
+        git config --global url."https://$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \
+    fi; \
+    bash /usr/local/sbin/install-base-deps; \
+    rc=$?; \
+    git config --global --remove-section url."https://$(cat /run/secrets/gh_token 2>/dev/null)@github.com/" 2>/dev/null || true; \
+    exit $rc
 
 # Mirror builder-prebuilt: copy gRPC from /opt/grpc to /usr/local so
 # CMake's find_package finds it at the canonical prefix the Makefile expects.

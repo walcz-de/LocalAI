@@ -227,7 +227,24 @@ ENV FROM_SOURCE=${FROM_SOURCE}
 # and picks up newer wheels from PyPI / nightly indexes.
 ARG DEPS_REFRESH=initial
 
-RUN cd /${BACKEND} && PORTABLE_PYTHON=true make
+# GH_TOKEN (optional, via BuildKit-Secret) — dieselbe Behandlung wie in
+# Dockerfile.llama-cpp (Commit 97940d6f6). Mehrere Python-Backends klonen im
+# `make` Quellen von GitHub (vllm holt vllm selbst, whisperx holt whisperX ueber
+# uv). Anonym drosselt GitHub das zuverlaessig und meldet es als
+#   fatal: could not read Username for 'https://github.com'
+# was nach fehlenden Zugangsdaten aussieht, aber ein Rate-Limit ist. Real am
+# 2026-09-02: whisperx, vllm und rocmfp4 fielen in EINEM Lauf genau daran aus,
+# waehrend llama-cpp (mit dieser Behandlung) durchlief — bei vollem 5000er-Kontingent
+# des hinterlegten Tokens. Das Secret wird nur fuer diesen RUN eingehaengt und landet
+# in KEINER Schicht; ohne Secret verhaelt sich der Build unveraendert (anonym).
+RUN --mount=type=secret,id=gh_token \
+    if [ -s /run/secrets/gh_token ]; then \
+        git config --global url."https://$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \
+    fi; \
+    cd /${BACKEND} && PORTABLE_PYTHON=true make; \
+    rc=$?; \
+    git config --global --remove-section url."https://$(cat /run/secrets/gh_token 2>/dev/null)@github.com/" 2>/dev/null || true; \
+    exit $rc
 
 # Package GPU libraries into the backend's lib directory.
 #
