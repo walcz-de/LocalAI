@@ -1,4 +1,59 @@
 ---
+- name: "qwopus3.8-27b-flash"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/Jackrong/Qwopus3.8-27B-Flash-GGUF
+  description: |
+    # Qwen3.8-27B
+
+    > [!Note]
+    > This repository contains model weights and configuration files for the post-trained model in the Hugging Face Transformers format.
+    >
+    > These artifacts are compatible with Hugging Face Transformers, vLLM, SGLang, TokenSpeed, etc.
+
+    > [!Tip]
+    > For users seeking managed, scalable inference without infrastructure maintenance, the official Qwen API service is provided by Qwen Cloud.
+    > In particular, **Qwen3.8-27B** will be available as a hosted version with more production features, e.g., 1M context length by default, official built-in tools. For more information, please refer to the Qwen3.8-27B Overview. The service is coming soon. Stay tuned for updates.
+
+    Following the widespread community adoption of the Qwen3.5 and Qwen3.6 series, we are pleased to introduce Qwen3.8, the most capable generation in the Qwen open-model family to date.
+
+    ...
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+    - qwen
+    - qwen3
+    - vision
+    - multimodal
+    - instruction-tuned
+    - reasoning
+  icon: https://qianwen-res.oss-accelerate.aliyuncs.com/Qwen3.5/demo/CI_Demo/mathv-1327.jpg
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    mmproj: llama-cpp/mmproj/Qwopus3.8-27B-Flash-MTP-Q4_K_M/mmproj-F32.gguf
+    options:
+      - use_jinja:true
+      - spec_type:draft-mtp
+      - spec_n_max:6
+      - spec_p_min:0.75
+    parameters:
+      model: llama-cpp/models/Qwopus3.8-27B-Flash-MTP-Q4_K_M/Qwopus3.8-27B-Flash-MTP-Q4_K_M.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Qwopus3.8-27B-Flash-MTP-Q4_K_M/Qwopus3.8-27B-Flash-MTP-Q4_K_M.gguf
+      sha256: 2b9a335bd33bb977d3127062061c12cc94f37ceef1850d372317fbf4ee89d9c5
+      uri: https://huggingface.co/Jackrong/Qwopus3.8-27B-Flash-GGUF/resolve/main/Qwopus3.8-27B-Flash-MTP-Q4_K_M.gguf
+    - filename: llama-cpp/mmproj/Qwopus3.8-27B-Flash-MTP-Q4_K_M/mmproj-F32.gguf
+      sha256: be3f444ecaedf084fd19399ba18cefcbbe3789bb81f4ad5ed67c91a1a3f48a67
+      uri: https://huggingface.co/Jackrong/Qwopus3.8-27B-Flash-GGUF/resolve/main/mmproj-F32.gguf
 - name: "glm-5.3"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -104,6 +159,110 @@
     - filename: llama-cpp/models/GLM-5.3-UD-Q6_K_XL/GLM-5.3-UD-Q6_K_XL-00016-of-00016.gguf
       sha256: 79af2211278ac07dfe4c789751d7de7d7caf0a4516486f8a9b6eedb1f3fb6e9b
       uri: https://huggingface.co/unsloth/GLM-5.3-GGUF/resolve/main/UD-Q6_K_XL/GLM-5.3-UD-Q6_K_XL-00016-of-00016.gguf
+- name: "supra2-100m-instruct"
+  url: "github:mudler/LocalAI/gallery/qwen3.yaml@master"
+  urls:
+    - https://huggingface.co/SupraLabs/Supra2-100M-Instruct
+  description: |
+    Supra2-100M-Instruct is a compact English chat model trained from scratch by
+    SupraLabs on the Qwen3 architecture. It has 100 million parameters, a
+    2,048-token context window, and is intended for lightweight experiments and
+    constrained edge deployments. This entry uses the publisher's official F16
+    GGUF build.
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - chat
+    - qwen3
+    - edge
+    - english
+  last_checked: "2026-08-11"
+  overrides:
+    parameters:
+      context_size: 2048
+      model: Supra2-100M-SFT-F16.gguf
+  files:
+    - filename: Supra2-100M-SFT-F16.gguf
+      uri: huggingface://SupraLabs/Supra2-100M-Instruct/Supra2-100M-SFT-F16.gguf
+      sha256: f88228c3dcc13b5ee2333cbb6fc2416de908e5b8adabd39bf9ee4378f28451eb
+- &llm-jp-4-33b-thinking
+  name: "llm-jp-4-33b-thinking-q4"
+  variants:
+    - model: llm-jp-4-33b-thinking-bf16
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/llm-jp/llm-jp-4-33b-thinking
+    - https://huggingface.co/llm-jp/llm-jp-4-33b-thinking-gguf
+  description: |
+    LLM-jp-4-33B-thinking is an Apache-2.0 Japanese and English reasoning
+    model from Japan's National Institute of Informatics. Its dense Llama
+    architecture has 33 billion parameters and a 65K-token context window.
+    The model was aligned with supervised fine-tuning and DPO for multi-turn
+    conversation and instruction following.
+
+    This default entry uses the 20.2 GB Q4_K_M GGUF. The official 66.4 GB
+    BF16 weights are available as a higher-fidelity variant.
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - multilingual
+    - japanese
+    - reasoning
+    - thinking
+    - tools
+    - long-context
+  last_checked: "2026-08-23"
+  overrides:
+    backend: llama-cpp
+    context_size: 65536
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/llm-jp-4-33b-thinking/llm-jp-4-33b-thinking-Q4_K_M.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/llm-jp-4-33b-thinking/llm-jp-4-33b-thinking-Q4_K_M.gguf
+      uri: huggingface://llm-jp/llm-jp-4-33b-thinking-gguf/llm-jp-4-33b-thinking-Q4_K_M.gguf
+      sha256: 9e48892c0d5ec256d05fc3258c9e50738852c39636fbb9fe1f4b1cde2f5e7520
+- !!merge <<: *llm-jp-4-33b-thinking
+  name: "llm-jp-4-33b-thinking-bf16"
+  variants: []
+  description: |
+    LLM-jp-4-33B-thinking in the official 66.4 GB BF16 GGUF format. This
+    variant preserves the original model precision for hosts with enough
+    memory.
+  overrides:
+    backend: llama-cpp
+    context_size: 65536
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/llm-jp-4-33b-thinking/llm-jp-4-33b-thinking-BF16.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/llm-jp-4-33b-thinking/llm-jp-4-33b-thinking-BF16.gguf
+      uri: huggingface://llm-jp/llm-jp-4-33b-thinking-gguf/llm-jp-4-33b-thinking-BF16.gguf
+      sha256: 7bb8465702b5c4a5d94e03e62921d5917181a2eda56da31edfdcd47fab2e9964
 - &qwen3-8-flash-next
   name: "qwen3.8-flash-next-q4"
   variants:
@@ -309,6 +468,35 @@
       - embeddings
     parameters:
       model: tencent/WeMM-Embedding-9B
+- name: "dfm-mimir:vllm"
+  url: github:mudler/LocalAI/gallery/vllm.yaml@master
+  urls:
+    - https://huggingface.co/danish-foundation-models/DFM-Mimir
+  description: |
+    DFM Mimir is an Apache-2.0, instruction-tuned HRM-Text model from Danish
+    Foundation Models. It has about 1 billion parameters and a 4,096-token
+    context window. The model focuses on Danish and English chat, reasoning,
+    mathematics, and code generation, and uses only permissible post-training
+    data. This entry serves the official BF16 safetensors checkpoint with vLLM.
+  license: apache-2.0
+  tags:
+    - llm
+    - chat
+    - reasoning
+    - coding
+    - instruction-tuned
+    - danish
+    - english
+    - hrm-text
+    - safetensors
+    - vllm
+    - gpu
+  last_checked: "2026-08-25"
+  overrides:
+    context_size: 4096
+    parameters:
+      max_tokens: 4096
+      model: danish-foundation-models/DFM-Mimir
 - &granite-4-2-3b
   name: "granite-4.2-3b-q4"
   variants:
@@ -520,6 +708,109 @@
     - filename: llama-cpp/models/granite-4.2-30b/granite-4.2-30b-Q8_0.gguf
       uri: huggingface://ibm-granite/granite-4.2-30b-GGUF/granite-4.2-30b-Q8_0.gguf
       sha256: 005b0933353e9ba219b26e2667705bdb8dbc74eb50e4a4e6cb70fca108710f81
+- &dirk-qwen3-8-27b
+  name: "dirk-qwen3.8-27b-q4"
+  variants:
+    - model: dirk-qwen3.8-27b-q8
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/Qwen/Qwen3.8-27B
+    - https://huggingface.co/peculiar-ragdoll/Dirk-Qwen3.8-27B-GGUF
+  description: |
+    Dirk is a Qwen3.8 27B vision-language model with a concise chat template
+    for agentic coding, reasoning, tool use, and general knowledge tasks. It
+    preserves the model's MTP head for speculative decoding and supports a
+    262K-token context window.
+
+    This default entry uses the Q4_K_XL GGUF and F16 vision projector. A
+    higher-quality Q8_K_XL build is available as a variant.
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - qwen
+    - reasoning
+    - thinking
+    - coding
+    - agent
+    - tools
+    - vision
+    - multimodal
+    - long-context
+    - mtp
+  last_checked: "2026-08-31"
+  overrides:
+    backend: llama-cpp
+    context_size: 262144
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/dirk-qwen3.8-27b/mmproj-F16.gguf
+    options:
+      - use_jinja:true
+      - spec_type:draft-mtp
+      - spec_n_max:6
+      - spec_p_min:0.75
+    parameters:
+      min_p: 0
+      model: llama-cpp/models/dirk-qwen3.8-27b/Dirk-Qwen3.8-27B-UD-Q4_K_XL.gguf
+      repeat_penalty: 1
+      temperature: 0.6
+      top_k: 20
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/dirk-qwen3.8-27b/Dirk-Qwen3.8-27B-UD-Q4_K_XL.gguf
+      uri: huggingface://peculiar-ragdoll/Dirk-Qwen3.8-27B-GGUF/Dirk-Qwen3.8-27B-UD-Q4_K_XL.gguf
+      sha256: d1ad2472a147caa1111bae5ec710331dc50692d62ebbdb3fbc54d421c4e209bc
+    - filename: llama-cpp/mmproj/dirk-qwen3.8-27b/mmproj-F16.gguf
+      uri: huggingface://peculiar-ragdoll/Dirk-Qwen3.8-27B-GGUF/mmproj-F16.gguf
+      sha256: cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e
+- !!merge <<: *dirk-qwen3-8-27b
+  name: "dirk-qwen3.8-27b-q8"
+  variants: []
+  description: |
+    Dirk in the higher-quality Q8_K_XL GGUF format, with MTP speculative
+    decoding and the shared F16 vision projector for multimodal prompts.
+  overrides:
+    backend: llama-cpp
+    context_size: 262144
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/dirk-qwen3.8-27b/mmproj-F16.gguf
+    options:
+      - use_jinja:true
+      - spec_type:draft-mtp
+      - spec_n_max:6
+      - spec_p_min:0.75
+    parameters:
+      min_p: 0
+      model: llama-cpp/models/dirk-qwen3.8-27b/Dirk-Qwen3.8-27B-UD-Q8_K_XL.gguf
+      repeat_penalty: 1
+      temperature: 0.6
+      top_k: 20
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/dirk-qwen3.8-27b/Dirk-Qwen3.8-27B-UD-Q8_K_XL.gguf
+      uri: huggingface://peculiar-ragdoll/Dirk-Qwen3.8-27B-GGUF/Dirk-Qwen3.8-27B-UD-Q8_K_XL.gguf
+      sha256: be2f08a260021fb471f91f2c5a52aa4afe143688e8b412beb5a36cad2d47c4cd
+    - filename: llama-cpp/mmproj/dirk-qwen3.8-27b/mmproj-F16.gguf
+      uri: huggingface://peculiar-ragdoll/Dirk-Qwen3.8-27B-GGUF/mmproj-F16.gguf
+      sha256: cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e
 - name: "qwen3.8-27b-dflash2"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -1718,6 +2009,7 @@
   name: "qwen3.8-27b-q4"
   variants:
     - model: qwen3.8-27b-q4-mtp
+    - model: qwen3.8-27b-nvfp4-mtp
     - model: qwen3.8-27b-ridge
     - model: qwen3.8-27b-gsq-rco-iq2-xs
     - model: qwen3.8-27b-gsq-rco-iq2-s
@@ -1815,7 +2107,7 @@
     known_usecases:
       - chat
       - vision
-    mmproj: llama-cpp/mmproj/qwen3.8-27b/mmproj-Qwen3.8-27B-Q8_0.gguf
+    mmproj: llama-cpp/mmproj/qwen3.8-27b/mmproj-Qwen3.8-27B-BF16.gguf
     options:
       - use_jinja:true
       - spec_type:draft-mtp
@@ -1841,6 +2133,68 @@
     - filename: llama-cpp/mmproj/qwen3.8-27b/mmproj-Qwen3.8-27B-Q8_0.gguf
       uri: huggingface://ggml-org/Qwen3.8-27B-GGUF/mmproj-Qwen3.8-27B-Q8_0.gguf
       sha256: 2e968a6af97ce35d8971890b257b9b7edabf20ad91450501fa53162a19ee33eb
+- !!merge <<: *qwen3-8-27b
+  name: "qwen3.8-27b-nvfp4-mtp"
+  variants: []
+  urls:
+    - https://huggingface.co/Qwen/Qwen3.8-27B
+    - https://huggingface.co/esatapedico/Qwen3.8-27B-NVFP4-MTP-GGUF
+  description: |
+    Qwen3.8-27B in a compact NVFP4 GGUF format with its MTP draft head
+    embedded in the model file. This entry uses the medium tier, which keeps
+    the NVFP4 backbone while using higher-precision output and embedding
+    tensors. MTP speculative decoding proposes multiple tokens for the target
+    model to verify.
+  tags:
+    - llm
+    - gguf
+    - gpu
+    - qwen
+    - reasoning
+    - thinking
+    - coding
+    - agent
+    - tools
+    - vision
+    - multimodal
+    - long-context
+    - nvfp4
+    - mtp
+    - speculative
+  last_checked: "2026-08-19"
+  overrides:
+    backend: llama-cpp
+    context_size: 262144
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/qwen3.8-27b/mmproj-Qwen3.8-27B-Q8_0.gguf
+    options:
+      - use_jinja:true
+      - spec_type:draft-mtp
+      - spec_n_max:6
+      - spec_p_min:0.75
+    parameters:
+      min_p: 0
+      model: llama-cpp/models/qwen3.8-27b/Qwen3.8-27B-NVFP4-MTP-MEDIUM.gguf
+      presence_penalty: 0
+      repeat_penalty: 1
+      temperature: 1
+      top_k: 20
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/qwen3.8-27b/Qwen3.8-27B-NVFP4-MTP-MEDIUM.gguf
+      uri: huggingface://esatapedico/Qwen3.8-27B-NVFP4-MTP-GGUF/Qwen3.8-27B-NVFP4-MTP-MEDIUM.gguf
+      sha256: f0b4c538c75037f026bde3b650f0ca639d382c128a4572769dce1183db86253a
+    - filename: llama-cpp/mmproj/qwen3.8-27b/mmproj-Qwen3.8-27B-BF16.gguf
+      uri: huggingface://esatapedico/Qwen3.8-27B-NVFP4-MTP-GGUF/mmproj-BF16.gguf
+      sha256: 83ee4f4f205fa514161778c41df1ea14144faa0f713510893b63c2395f5c2d53
 - !!merge <<: *qwen3-8-27b
   name: "qwen3.8-27b-q8"
   variants: []
@@ -3070,6 +3424,85 @@
     - filename: llama-cpp/models/qwen3.8-4b-distill/Qwen3.8-4B-Q8_0.gguf
       uri: huggingface://empero-ai/Qwen3.8-4B-Distill-GGUF/Qwen3.8-4B-Q8_0.gguf
       sha256: 770b780d6754a4954d1caf395c9239eaeb394f15c7a7ea34039883377c93c9c3
+- &qwen3-8-9b-distill
+  name: "qwen3.8-9b-distill-q4"
+  variants:
+    - model: qwen3.8-9b-distill-q8
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/empero-ai/Qwen3.8-9B-Distill
+    - https://huggingface.co/empero-ai/Qwen3.8-9B-Distill-GGUF
+  description: |
+    Qwen3.8 9B Distill is an Apache-2.0, text-only Qwen3.5 9B fine-tune
+    distilled from Qwen3.8 2.4T A95B reasoning traces. It targets mathematics,
+    coding, instruction following, and function calling with a 262K native
+    context window. This entry uses the balanced Q4_K_M GGUF quantization; the
+    Q8_0 variant offers higher fidelity.
+  license: apache-2.0
+  icon: https://qianwen-res.oss-cn-beijing.aliyuncs.com/logo_qwen.jpg
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - qwen3.5
+    - reasoning
+    - coding
+    - tool-use
+  last_checked: "2026-08-20"
+  overrides:
+    backend: llama-cpp
+    context_size: 32768
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+      - reasoning_format:deepseek
+    parameters:
+      model: llama-cpp/models/qwen3.8-9b-distill/Qwen3.8-9B-Q4_K_M.gguf
+      temperature: 0.6
+      top_k: 20
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/qwen3.8-9b-distill/Qwen3.8-9B-Q4_K_M.gguf
+      uri: huggingface://empero-ai/Qwen3.8-9B-Distill-GGUF/Qwen3.8-9B-Q4_K_M.gguf
+      sha256: df13d66021cef676f82be74053220fd75af6bf2a6a7fb77f5222ab9e50744a7a
+- !!merge <<: *qwen3-8-9b-distill
+  name: "qwen3.8-9b-distill-q8"
+  variants: []
+  description: |
+    Qwen3.8 9B Distill in the higher-fidelity Q8_0 GGUF format. This text-only
+    Qwen3.5 9B fine-tune targets reasoning, coding, instruction following, and
+    function calling with a 262K native context window.
+  overrides:
+    backend: llama-cpp
+    context_size: 32768
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+      - reasoning_format:deepseek
+    parameters:
+      model: llama-cpp/models/qwen3.8-9b-distill/Qwen3.8-9B-Q8_0.gguf
+      temperature: 0.6
+      top_k: 20
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/qwen3.8-9b-distill/Qwen3.8-9B-Q8_0.gguf
+      uri: huggingface://empero-ai/Qwen3.8-9B-Distill-GGUF/Qwen3.8-9B-Q8_0.gguf
+      sha256: 79ca5d342a07922f2bbf38c8d892a79a3c8620c65feaf4b1c66b7830ae724db8
 - name: "btl-4-compact"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -3119,6 +3552,80 @@
     - filename: llama-cpp/models/BTL-4-Compact/BTL-4-IQ2_XXS.gguf
       uri: huggingface://badtheorylabs/BTL-4-Compact/BTL-4-IQ2_XXS.gguf
       sha256: 6b7c298cf909fc04428ecf360a29dcc578188b1c90aa6ed435159f5a0d351496
+- &mxbai-embed-large-v1
+  name: "mxbai-embed-large-v1-q4"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  variants:
+    - model: mxbai-embed-large-v1-q8
+    - model: mxbai-embed-large-v1-f16
+  license: apache-2.0
+  urls:
+    - https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1
+    - https://huggingface.co/ChristianAzinn/mxbai-embed-large-v1-gguf
+  description: |
+    Mixedbread's mxbai-embed-large-v1 is a 335M-parameter English BERT
+    embedding model for retrieval, semantic search, and RAG. It produces
+    1,024-dimensional embeddings and supports sequences up to 512 tokens.
+    Prefix retrieval queries with `Represent this sentence for searching
+    relevant passages: `. This entry uses the balanced Q4_K_M GGUF.
+  tags:
+    - embeddings
+    - retrieval
+    - rag
+    - gguf
+    - cpu
+    - gpu
+    - english
+  last_checked: "2026-08-27"
+  overrides:
+    backend: llama-cpp
+    embeddings: true
+    known_usecases:
+      - embeddings
+    parameters:
+      model: llama-cpp/models/mxbai-embed-large-v1/mxbai-embed-large-v1.Q4_K_M.gguf
+  files:
+    - filename: llama-cpp/models/mxbai-embed-large-v1/mxbai-embed-large-v1.Q4_K_M.gguf
+      uri: huggingface://ChristianAzinn/mxbai-embed-large-v1-gguf/mxbai-embed-large-v1.Q4_K_M.gguf
+      sha256: 3869d462819e3f6cd2c1b0f8d6817e95cc1ed31fc09388432669209d1c6f1b65
+- !!merge <<: *mxbai-embed-large-v1
+  name: "mxbai-embed-large-v1-q8"
+  variants: []
+  description: |
+    Mixedbread's mxbai-embed-large-v1 in the higher-fidelity Q8_0 GGUF
+    format. This 335M-parameter English BERT model produces
+    1,024-dimensional embeddings for retrieval, semantic search, and RAG.
+  overrides:
+    backend: llama-cpp
+    embeddings: true
+    known_usecases:
+      - embeddings
+    parameters:
+      model: llama-cpp/models/mxbai-embed-large-v1/mxbai-embed-large-v1.Q8_0.gguf
+  files:
+    - filename: llama-cpp/models/mxbai-embed-large-v1/mxbai-embed-large-v1.Q8_0.gguf
+      uri: huggingface://ChristianAzinn/mxbai-embed-large-v1-gguf/mxbai-embed-large-v1.Q8_0.gguf
+      sha256: bcdebca12aa16c0e51d166d97e4776efd46f905952b0c9acb968976eba2619f3
+- !!merge <<: *mxbai-embed-large-v1
+  name: "mxbai-embed-large-v1-f16"
+  variants: []
+  urls:
+    - https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1
+  description: |
+    Mixedbread's mxbai-embed-large-v1 in the official full-precision F16
+    GGUF format. This 335M-parameter English BERT model produces
+    1,024-dimensional embeddings for retrieval, semantic search, and RAG.
+  overrides:
+    backend: llama-cpp
+    embeddings: true
+    known_usecases:
+      - embeddings
+    parameters:
+      model: llama-cpp/models/mxbai-embed-large-v1/mxbai-embed-large-v1-f16.gguf
+  files:
+    - filename: llama-cpp/models/mxbai-embed-large-v1/mxbai-embed-large-v1-f16.gguf
+      uri: huggingface://mixedbread-ai/mxbai-embed-large-v1/gguf/mxbai-embed-large-v1-f16.gguf
+      sha256: 819c2adf5ce6df2b6bd2ae4ca90d2a69f060afeb438d0c171db57daa02e39c3d
 - &nemotron-3-embed-1b
   name: "nemotron-3-embed-1b-q4"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
@@ -6257,6 +6764,8 @@
   variants:
     - model: laguna-s-2.1-q8
     - model: laguna-s-2.1-dflash
+    - model: laguna-s-2.1-apex-i-quality
+    - model: laguna-s-2.1-apex-i-compact
   description: |
     Laguna S 2.1 is Poolside's 118B-parameter, 8B-active Mixture-of-Experts model for agentic software engineering. It supports tool use and a native one-million-token context window; the official GGUF recommends 256K context for best output quality. This default entry uses the current 96 GB Q4_K_M artifact, with imatrix-quantized routed experts and a Q8_0 signal path.
 
@@ -6280,6 +6789,70 @@
     - filename: llama-cpp/models/Laguna-S-2.1-GGUF/laguna-s-2.1-Q4_K_M.gguf
       sha256: a8b55c75714ea73fd90ec85de5defdc0b8d88ca0ad2108343cdd8fc22f7583e4
       uri: https://huggingface.co/poolside/Laguna-S-2.1-GGUF/resolve/main/laguna-s-2.1-Q4_K_M.gguf
+- !!merge <<: *laguna-s-2-1-q8
+  name: "laguna-s-2.1-apex-i-quality"
+  variants: []
+  urls:
+    - https://huggingface.co/poolside/Laguna-S-2.1
+    - https://huggingface.co/Myric/Laguna-S-2.1-APEX-GGUF
+  description: |
+    Laguna S 2.1 in the 73.9 GB APEX-I Quality format. This community build
+    uses an importance matrix and mixed precision to preserve the always-active
+    signal path while reducing the memory required by the routed experts.
+
+    License: OpenMDW 1.1.
+  last_checked: "2026-08-26"
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - completion
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/Laguna-S-2.1-APEX-GGUF/Laguna-S-2.1-APEX-i-quality-v2.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Laguna-S-2.1-APEX-GGUF/Laguna-S-2.1-APEX-i-quality-v2.gguf
+      sha256: 772886614b2f11ba62ea2c2ebb5d02804e1ab829329b50f644e83e174decfaf2
+      uri: huggingface://Myric/Laguna-S-2.1-APEX-GGUF/Laguna-S-2.1-APEX-i-quality-v2.gguf
+- !!merge <<: *laguna-s-2-1-q8
+  name: "laguna-s-2.1-apex-i-compact"
+  variants: []
+  urls:
+    - https://huggingface.co/poolside/Laguna-S-2.1
+    - https://huggingface.co/Myric/Laguna-S-2.1-APEX-GGUF
+  description: |
+    Laguna S 2.1 in the smaller 54.4 GB APEX-I Compact format. This community
+    build uses an importance matrix and mixed precision to reduce memory use
+    while retaining higher precision for the always-active signal path.
+
+    License: OpenMDW 1.1.
+  last_checked: "2026-08-26"
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - completion
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/Laguna-S-2.1-APEX-GGUF/Laguna-S-2.1-APEX-i-compact-v2.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/Laguna-S-2.1-APEX-GGUF/Laguna-S-2.1-APEX-i-compact-v2.gguf
+      sha256: b5964de8c5de37c9d4fcbd6894a68a95a81a2c404b12897d9581fc0d934134de
+      uri: huggingface://Myric/Laguna-S-2.1-APEX-GGUF/Laguna-S-2.1-APEX-i-compact-v2.gguf
 - !!merge <<: *laguna-s-2-1-q8
   name: "laguna-s-2.1-dflash"
   description: |
@@ -8182,6 +8755,51 @@
     - filename: llama-cpp/mmproj/gemma-4-12B-it-qat-q4_0-gguf/mmproj-gemma-4-12b-it-qat-q4_0.gguf
       uri: https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf/resolve/main/mmproj-gemma-4-12b-it-qat-q4_0.gguf
       sha256: cb018338a7538a9814d994bfe54644c71eb7ed54e31eae2f721e45fd3c260da7
+- name: "security-slm-gemma-4-e2b-it-q4"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/entrick/Security-SLM-Gemma-4-E2B-it-GGUF
+    - https://huggingface.co/unsloth/gemma-4-E2B-it-unsloth-bnb-4bit
+  description: |
+    Security-SLM is a compact Gemma 4 E2B fine-tune for authorized red-team,
+    blue-team, security operations, and AI security work. It is designed for
+    private and air-gapped deployments where prompts can contain sensitive
+    incident data, policies, or source code.
+
+    This entry uses the text-only 3.43 GB Q4_K_M GGUF release.
+  license: "apache-2.0"
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - gemma
+    - cybersecurity
+    - tools
+  last_checked: "2026-08-31"
+  overrides:
+    backend: llama-cpp
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+    options:
+      - use_jinja:true
+    parameters:
+      min_p: 0
+      model: llama-cpp/models/security-slm-gemma-4-e2b-it/security-gemma-4-e2b-it.Q4_K_M.gguf
+      repeat_penalty: 1
+      temperature: 1
+      top_k: 64
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/security-slm-gemma-4-e2b-it/security-gemma-4-e2b-it.Q4_K_M.gguf
+      uri: huggingface://entrick/Security-SLM-Gemma-4-E2B-it-GGUF/security-gemma-4-e2b-it.Q4_K_M.gguf
+      sha256: 9046894db49c38390088d151dd73397ce1a948480862b3fb8fcbb1b9e977ee5e
 - name: "gemma-4-e2b-it-qat-q4_0"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -12865,6 +13483,36 @@
         source:
           type: huggingface
           repo: openbmb/VoxCPM1.5
+- name: voxcpm2
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://huggingface.co/openbmb/VoxCPM2
+  description: |
+    VoxCPM2 is a 2B-parameter text-to-speech model supporting 30 languages and 48 kHz output, with voice design and controllable voice cloning.
+  license: apache-2.0
+  icon: https://cdn-avatars.huggingface.co/v1/production/uploads/1670387859384-633fe7784b362488336bbfad.png
+  tags:
+    - tts
+    - text-to-speech
+    - voice-cloning
+    - voice-design
+    - cpu
+    - gpu
+  last_checked: "2026-08-22"
+  overrides:
+    backend: voxcpm
+    known_usecases:
+      - tts
+    tts:
+      voice_cloning: true
+    parameters:
+      model: openbmb/VoxCPM2
+    artifacts:
+      - name: model
+        target: model
+        source:
+          type: huggingface
+          repo: openbmb/VoxCPM2
 - name: neutts-air
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
@@ -16456,6 +17104,76 @@
     - filename: mmproj-Qwen3-Omni-30B-A3B-Thinking-Q8_0.gguf
       sha256: 2bd5459571f8230a0c251d3d0dd36267753f0800ed145449a34f220a31f93898
       uri: huggingface://ggml-org/Qwen3-Omni-30B-A3B-Thinking-GGUF/mmproj-Qwen3-Omni-30B-A3B-Thinking-Q8_0.gguf
+- &lightonocr-2-1b
+  name: "lightonocr-2-1b"
+  variants:
+    - model: lightonocr-2-1b-f16
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://huggingface.co/lightonai/LightOnOCR-2-1B
+    - https://huggingface.co/ggml-org/LightOnOCR-2-1B-GGUF
+  description: |
+    LightOnOCR-2-1B is a compact Apache-2.0 vision-language model for optical
+    character recognition and document understanding. It extracts text,
+    tables, forms, and structured content from images and PDFs in multiple
+    languages. This default entry uses the Q8_0 model and vision projector.
+  license: apache-2.0
+  icon: https://huggingface.co/lightonai.png
+  tags:
+    - llm
+    - gguf
+    - gpu
+    - image-to-text
+    - ocr
+    - multimodal
+    - cpu
+    - mistral
+  last_checked: "2026-08-13"
+  overrides:
+    backend: llama-cpp
+    known_usecases:
+      - chat
+      - vision
+    mmproj: mmproj-LightOnOCR-2-1B-Q8_0.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: LightOnOCR-2-1B-Q8_0.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: LightOnOCR-2-1B-Q8_0.gguf
+      sha256: f4cfc0ea9765a4cac22a235191c48aefa94df223419f5ab658b6201f36206d58
+      uri: huggingface://ggml-org/LightOnOCR-2-1B-GGUF/LightOnOCR-2-1B-Q8_0.gguf
+    - filename: mmproj-LightOnOCR-2-1B-Q8_0.gguf
+      sha256: e9b45eb85b0f0afb3cc138236eec7adb75879420130e5e2049ee9af3f24e337f
+      uri: huggingface://ggml-org/LightOnOCR-2-1B-GGUF/mmproj-LightOnOCR-2-1B-Q8_0.gguf
+- !!merge <<: *lightonocr-2-1b
+  name: "lightonocr-2-1b-f16"
+  variants: []
+  description: |
+    LightOnOCR-2-1B F16 is the full-precision GGUF build for optical character
+    recognition and multilingual document understanding. It pairs the F16
+    language model with the matching F16 vision projector.
+  overrides:
+    backend: llama-cpp
+    known_usecases:
+      - chat
+      - vision
+    mmproj: mmproj-LightOnOCR-2-1B-f16.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: LightOnOCR-2-1B-f16.gguf
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: LightOnOCR-2-1B-f16.gguf
+      sha256: 83f5b7a24410de69390119dd18e7866ecd0687564423846fc344ed3a46647a0b
+      uri: huggingface://ggml-org/LightOnOCR-2-1B-GGUF/LightOnOCR-2-1B-f16.gguf
+    - filename: mmproj-LightOnOCR-2-1B-f16.gguf
+      sha256: 1c4a3a27f7c5aa90b455ed5ec6dc79c9b9746739a8d840022790414376738130
+      uri: huggingface://ggml-org/LightOnOCR-2-1B-GGUF/mmproj-LightOnOCR-2-1B-f16.gguf
 - name: glm-ocr
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
@@ -54879,6 +55597,47 @@
     - model: gemma-4-26b-a4b-it-heretic-apex-i-balanced
     - model: gemma-4-26b-a4b-it-heretic-apex-i-compact
     - model: gemma-4-26b-a4b-it-heretic-apex-i-mini
+- name: audio-cpp-indextts-2.5
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://huggingface.co/IndexTeam/IndexTTS-2.5
+    - https://huggingface.co/Richasy/IndexTTS-2.5-GGUF
+    - https://github.com/0xShug0/audio.cpp
+  description: |
+    IndexTTS 2.5 is a multilingual text-to-speech model with zero-shot voice
+    cloning and emotion control, served by the audio-cpp backend. Supply a
+    server-local WAV path in the OpenAI `voice` field as the speaker reference.
+
+    This entry uses the published original-dtype GGUF. The package preserves
+    the source tensors without another quantization step, and audio.cpp records
+    the original-dtype IndexTTS2 path as passing its validation suite.
+
+    The bilibili Model Use License governs the model. Review its use,
+    redistribution, and large-scale commercial deployment terms before
+    installation.
+  license: other
+  tags:
+    - audio-cpp
+    - indextts
+    - multilingual
+    - tts
+    - text-to-speech
+    - voice-cloning
+    - emotion-control
+    - gguf
+    - ggml
+  last_checked: "2026-08-15"
+  overrides:
+    backend: audio-cpp
+    known_usecases:
+      - tts
+    name: audio-cpp-indextts-2.5
+    parameters:
+      model: audio-cpp/index-tts2_5-orig.gguf
+  files:
+    - filename: audio-cpp/index-tts2_5-orig.gguf
+      sha256: 07e9bfe77bd42b6e67b8e5a39b365635f7198951281990cb49f322ef546cb9b4
+      uri: huggingface://Richasy/IndexTTS-2.5-GGUF/IndexTTS2.5-GGUF/index-tts2_5-orig.gguf
 - name: audio-cpp-supertonic
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
