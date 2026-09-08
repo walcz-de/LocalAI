@@ -1441,6 +1441,8 @@ github.com/walcz-de/LocalAGI v0.0.0-20260701070850-d11d1fa3f221 h1:RfVtCTMhod701
 github.com/walcz-de/LocalAGI v0.0.0-20260701070850-d11d1fa3f221/go.mod h1:U+g6u8mF2wQxhkdBl3dr8G4db1cv3n7KTKmraoJ7D0c=
 github.com/walcz-de/LocalAGI v0.0.0-20260703133518-ad5ef2e455ba h1:YdlgbbS+d101tXWzpTVynBrnDVSA5uT3Bty6TdI1TC0=
 github.com/walcz-de/LocalAGI v0.0.0-20260703133518-ad5ef2e455ba/go.mod h1:U+g6u8mF2wQxhkdBl3dr8G4db1cv3n7KTKmraoJ7D0c=
+github.com/walcz-de/LocalAGI v0.0.0-20260908204659-c88becfc3e50 h1:Alo4pzxODjaqYmh+Tw8vTnc7pMQwicXP1PD3qzVX4kg=
+github.com/walcz-de/LocalAGI v0.0.0-20260908204659-c88becfc3e50/go.mod h1:U+g6u8mF2wQxhkdBl3dr8G4db1cv3n7KTKmraoJ7D0c=
 github.com/walcz-de/cogito v0.11.1-0.20260712155709-85b99c144b9f h1:jPS4XgPPNVYQjXEfeGd21ejdV9stt0Ec7piSq78HmGI=
 github.com/walcz-de/cogito v0.11.1-0.20260712155709-85b99c144b9f/go.mod h1:6sfja3lcu2nWRzEc0wwqGNu/eCG3EWgij+8s7xyUeQ4=
 github.com/walcz-de/cogito v0.11.1-0.20260802101821-3bfd5629ea05 h1:zRoABbSOXvkugZgiPGCscYZTkEU8E5rKtXg+LwYV3uM=

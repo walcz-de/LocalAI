@@ -527,7 +527,7 @@ require (
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
 	golang.org/x/mod v0.36.0 // indirect
 	golang.org/x/sync v0.20.0
-	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/sys v0.45.0
 	golang.org/x/term v0.43.0
 	golang.org/x/text v0.37.0
 	golang.org/x/tools v0.45.0 // indirect
@@ -542,7 +542,7 @@ require (
 	lukechampine.com/blake3 v1.4.1 // indirect
 )
 
-replace github.com/mudler/LocalAGI => github.com/walcz-de/LocalAGI v0.0.0-20260703133518-ad5ef2e455ba
+replace github.com/mudler/LocalAGI => github.com/walcz-de/LocalAGI v0.0.0-20260908204659-c88becfc3e50
 
 replace github.com/mudler/skillserver => github.com/walcz-de/skillserver v0.0.7-0.20260711083112-62ca2188b2a7
 
