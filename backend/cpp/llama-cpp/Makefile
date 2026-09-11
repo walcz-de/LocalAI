@@ -1,4 +1,11 @@
 
+# UNSER PIN BLEIBT (Merge-Konflikt 2026-09-11 bewusst zu HEAD aufgeloest).
+# 465e49b9 ist ein gemessener Rueckschritt gegen 67672dc5: slot/cache-reuse nach einem
+# Parallel-Burst auf gfx1151, Nonce-Probe rot in 3 von 5 Laeufen; der Revert-Patch
+# c7d87229 allein reichte nicht mehr. Upstream-Bericht offen.
+# Upstream steht auf df03399b. Ob dieser Stand den Defekt behebt, ist NICHT gemessen —
+# solange das nicht gemessen ist, waere ein Uebernehmen ein ungeprueftes Risiko auf der
+# Inferenz. Naechster Schritt ist die Messung, nicht das Warten.
 LLAMA_VERSION?=465e49b9cea78a68b9c244ffb48d0ee24a82873d
 LLAMA_REPO?=https://github.com/ggerganov/llama.cpp
 

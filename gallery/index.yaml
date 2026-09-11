@@ -49,11 +49,11 @@
       use_tokenizer_template: true
   files:
     - filename: llama-cpp/models/Qwopus3.8-27B-Flash-MTP-Q4_K_M/Qwopus3.8-27B-Flash-MTP-Q4_K_M.gguf
-      sha256: 2b9a335bd33bb977d3127062061c12cc94f37ceef1850d372317fbf4ee89d9c5
       uri: https://huggingface.co/Jackrong/Qwopus3.8-27B-Flash-GGUF/resolve/main/Qwopus3.8-27B-Flash-MTP-Q4_K_M.gguf
+      sha256: 1b76ad1596d6afc0b6e38a2b45b404462920739bd3087960b7a18a74ca938a74
     - filename: llama-cpp/mmproj/Qwopus3.8-27B-Flash-MTP-Q4_K_M/mmproj-F32.gguf
-      sha256: be3f444ecaedf084fd19399ba18cefcbbe3789bb81f4ad5ed67c91a1a3f48a67
       uri: https://huggingface.co/Jackrong/Qwopus3.8-27B-Flash-GGUF/resolve/main/mmproj-F32.gguf
+      sha256: 52e6818e4d18eea010c50e5245eaa10a8cc3dcc30efea4ff60cbad8abf5669e1
 - name: "qwen3.8-27b"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
@@ -993,6 +993,64 @@
     - filename: llama-cpp/models/llm-jp-4-33b-thinking/llm-jp-4-33b-thinking-BF16.gguf
       uri: huggingface://llm-jp/llm-jp-4-33b-thinking-gguf/llm-jp-4-33b-thinking-BF16.gguf
       sha256: 7bb8465702b5c4a5d94e03e62921d5917181a2eda56da31edfdcd47fab2e9964
+- name: "huihui-qwen3.8-flash-next-abliterated-q4"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/Qwen/Qwen3.8-Flash-Next
+    - https://huggingface.co/huihui-ai/Huihui-Qwen3.8-Flash-Next-abliterated-GGUF
+  description: |
+    Huihui's abliterated Qwen3.8-Flash-Next is a vision-language
+    mixture-of-experts model modified to reduce refusals. This entry uses
+    the publisher's UD-Q4_K_XL GGUF and BF16 vision projector for text chat
+    and image input through llama.cpp. The default context is 32,768 tokens.
+    Model weights use the Qwen Community License 1.0.
+  license: other
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - qwen
+    - moe
+    - vision
+    - multimodal
+    - abliterated
+  icon: https://qianwen-res.oss-cn-beijing.aliyuncs.com/logo_qwen.jpg
+  overrides:
+    backend: llama-cpp
+    context_size: 32768
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/huihui-qwen3.8-flash-next-abliterated-q4/mmproj-model-bf16.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/huihui-qwen3.8-flash-next-abliterated-q4/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf
+      temperature: 1
+      top_k: 20
+      top_p: 0.95
+      min_p: 0
+      repeat_penalty: 1
+      presence_penalty: 0
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/huihui-qwen3.8-flash-next-abliterated-q4/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf
+      uri: huggingface://huihui-ai/Huihui-Qwen3.8-Flash-Next-abliterated-GGUF/UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf
+      sha256: 290a31ca20b74ed2c21b257d378a5678d821ad9fdd8feb1fc52c719761668903
+    - filename: llama-cpp/models/huihui-qwen3.8-flash-next-abliterated-q4/Qwen3.8-Flash-Next-UD-Q4_K_XL-00002-of-00004.gguf
+      uri: huggingface://huihui-ai/Huihui-Qwen3.8-Flash-Next-abliterated-GGUF/UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00002-of-00004.gguf
+      sha256: 0ebf70d076e0e98f74dc414a90b92c67d7267876ae524bc7799cf463e27b754b
+    - filename: llama-cpp/models/huihui-qwen3.8-flash-next-abliterated-q4/Qwen3.8-Flash-Next-UD-Q4_K_XL-00003-of-00004.gguf
+      uri: huggingface://huihui-ai/Huihui-Qwen3.8-Flash-Next-abliterated-GGUF/UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00003-of-00004.gguf
+      sha256: e9b12f44e13e60d6ef9396449f7b4356b2e2911222b8183a596830c2418db19a
+    - filename: llama-cpp/models/huihui-qwen3.8-flash-next-abliterated-q4/Qwen3.8-Flash-Next-UD-Q4_K_XL-00004-of-00004.gguf
+      uri: huggingface://huihui-ai/Huihui-Qwen3.8-Flash-Next-abliterated-GGUF/UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00004-of-00004.gguf
+      sha256: 983901b3e47686f56f5fcec87ba8c51e7e2c6996277dd77bc3fc804a1d563da3
+    - filename: llama-cpp/mmproj/huihui-qwen3.8-flash-next-abliterated-q4/mmproj-model-bf16.gguf
+      uri: huggingface://huihui-ai/Huihui-Qwen3.8-Flash-Next-abliterated-GGUF/mmproj-model-bf16.gguf
+      sha256: dbac7334a8a433abd6cd1d1db82398ba123faa2f328696da20848e605e645ca1
 - &qwen3-8-flash-next
   name: "qwen3.8-flash-next-q4"
   variants:
@@ -2104,6 +2162,217 @@
     - filename: llama-cpp/mmproj/ornith-1.5-9b/mmproj-BF16.gguf
       uri: huggingface://ornith-ai/Ornith-1.5-9B-GGUF/mmproj-Ornith-1.5-9B-BF16.gguf
       sha256: 626f9f90627402a6bf4a999111d0fbd69b5fcca7aa8ba089d69e5f10e8858e1d
+- &ornith-1-5-35b-a3b-apex
+  name: "ornith-1.5-35b-a3b-apex"
+  variants:
+    - model: ornith-1.5-35b-a3b-apex-compact
+    - model: ornith-1.5-35b-a3b-mtp-apex
+    - model: ornith-1.5-35b-a3b-mtp-apex-compact
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/ornith-ai/Ornith-1.5-35B-A3B
+    - https://huggingface.co/ornith-ai/Ornith-1.5-35B-A3B-GGUF
+    - https://huggingface.co/mudler/Ornith-1.5-35B-A3B-APEX-GGUF
+    - https://huggingface.co/mudler/Ornith-1.5-35B-A3B-APEX-MTP-GGUF
+  description: |
+    Ornith-1.5-35B-A3B is an MIT-licensed Qwen3.5 mixture-of-experts model
+    from Ornith AI for agentic coding, reasoning, repository-level software
+    tasks, and tool use. It supports text and image input with a context window
+    of 262K tokens.
+
+    This default entry uses the APEX Balanced GGUF and BF16 vision projector.
+    Compact APEX and MTP-enabled APEX builds are available as variants.
+  license: "mit"
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - qwen
+    - reasoning
+    - thinking
+    - coding
+    - agent
+    - tools
+    - vision
+    - multimodal
+    - moe
+    - long-context
+  last_checked: "2026-08-20"
+  overrides:
+    backend: llama-cpp
+    context_size: 262144
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/ornith-1.5-35b-a3b/mmproj.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      min_p: 0
+      model: llama-cpp/models/ornith-1.5-35b-a3b/Ornith-1.5-35B-A3B-APEX-Balanced.gguf
+      repeat_penalty: 1
+      temperature: 0.6
+      top_k: 20
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/ornith-1.5-35b-a3b/Ornith-1.5-35B-A3B-APEX-Balanced.gguf
+      uri: huggingface://mudler/Ornith-1.5-35B-A3B-APEX-GGUF/Ornith-1.5-35B-A3B-APEX-Balanced.gguf
+      sha256: b86ab34c9c767974f44e2624e6f7409c0bc96100fd96f3a97b4d12c1f3c9c223
+    - filename: llama-cpp/mmproj/ornith-1.5-35b-a3b/mmproj.gguf
+      uri: huggingface://mudler/Ornith-1.5-35B-A3B-APEX-GGUF/mmproj.gguf
+      sha256: e277123529451fbcff6d880ad5bd7ada999f9d5e6339ba3639d06c5cef4763b1
+- !!merge <<: *ornith-1-5-35b-a3b-apex
+  name: "ornith-1.5-35b-a3b-apex-compact"
+  variants: []
+  description: |
+    Ornith-1.5-35B-A3B in the smaller APEX Compact GGUF format, with the
+    shared BF16 vision projector for multimodal prompts.
+  overrides:
+    backend: llama-cpp
+    context_size: 262144
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/ornith-1.5-35b-a3b/mmproj.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      min_p: 0
+      model: llama-cpp/models/ornith-1.5-35b-a3b/Ornith-1.5-35B-A3B-APEX-Compact.gguf
+      repeat_penalty: 1
+      temperature: 0.6
+      top_k: 20
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/ornith-1.5-35b-a3b/Ornith-1.5-35B-A3B-APEX-Compact.gguf
+      uri: huggingface://mudler/Ornith-1.5-35B-A3B-APEX-GGUF/Ornith-1.5-35B-A3B-APEX-Compact.gguf
+      sha256: 846eb4121c1b28df0e2dff06c3f3d174084231a7400c649ba02023843ea41021
+    - filename: llama-cpp/mmproj/ornith-1.5-35b-a3b/mmproj.gguf
+      uri: huggingface://mudler/Ornith-1.5-35B-A3B-APEX-GGUF/mmproj.gguf
+      sha256: e277123529451fbcff6d880ad5bd7ada999f9d5e6339ba3639d06c5cef4763b1
+- !!merge <<: *ornith-1-5-35b-a3b-apex
+  name: "ornith-1.5-35b-a3b-mtp-apex"
+  variants: []
+  description: |
+    Ornith-1.5-35B-A3B in the APEX Balanced GGUF format with native
+    multi-token prediction enabled for speculative decoding, plus the shared
+    BF16 vision projector.
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - qwen
+    - reasoning
+    - thinking
+    - coding
+    - agent
+    - tools
+    - vision
+    - multimodal
+    - moe
+    - long-context
+    - mtp
+  overrides:
+    backend: llama-cpp
+    context_size: 262144
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/ornith-1.5-35b-a3b/mmproj.gguf
+    options:
+      - use_jinja:true
+      - spec_type:draft-mtp
+      - spec_n_max:6
+      - spec_p_min:0.75
+    parameters:
+      min_p: 0
+      model: llama-cpp/models/ornith-1.5-35b-a3b/Ornith-1.5-35B-A3B-APEX-MTP-Balanced.gguf
+      repeat_penalty: 1
+      temperature: 0.6
+      top_k: 20
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/ornith-1.5-35b-a3b/Ornith-1.5-35B-A3B-APEX-MTP-Balanced.gguf
+      uri: huggingface://mudler/Ornith-1.5-35B-A3B-APEX-MTP-GGUF/Ornith-1.5-35B-A3B-APEX-MTP-Balanced.gguf
+      sha256: 964fbf455e4ecb73499341688134abc1513882690de61e5e2f383724888e18d3
+    - filename: llama-cpp/mmproj/ornith-1.5-35b-a3b/mmproj.gguf
+      uri: huggingface://mudler/Ornith-1.5-35B-A3B-APEX-MTP-GGUF/mmproj.gguf
+      sha256: e277123529451fbcff6d880ad5bd7ada999f9d5e6339ba3639d06c5cef4763b1
+- !!merge <<: *ornith-1-5-35b-a3b-apex
+  name: "ornith-1.5-35b-a3b-mtp-apex-compact"
+  variants: []
+  description: |
+    Ornith-1.5-35B-A3B in the APEX Compact GGUF format with native multi-token
+    prediction enabled for speculative decoding, plus the shared BF16 vision
+    projector.
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - qwen
+    - reasoning
+    - thinking
+    - coding
+    - agent
+    - tools
+    - vision
+    - multimodal
+    - moe
+    - long-context
+    - mtp
+  overrides:
+    backend: llama-cpp
+    context_size: 262144
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/ornith-1.5-35b-a3b/mmproj.gguf
+    options:
+      - use_jinja:true
+      - spec_type:draft-mtp
+      - spec_n_max:6
+      - spec_p_min:0.75
+    parameters:
+      min_p: 0
+      model: llama-cpp/models/ornith-1.5-35b-a3b/Ornith-1.5-35B-A3B-APEX-MTP-Compact.gguf
+      repeat_penalty: 1
+      temperature: 0.6
+      top_k: 20
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/ornith-1.5-35b-a3b/Ornith-1.5-35B-A3B-APEX-MTP-Compact.gguf
+      uri: huggingface://mudler/Ornith-1.5-35B-A3B-APEX-MTP-GGUF/Ornith-1.5-35B-A3B-APEX-MTP-Compact.gguf
+      sha256: a7373f724cf3693e8a6a5f8209ae9a06ff8071ae2af60659bdbdf8ff6f6c10df
+    - filename: llama-cpp/mmproj/ornith-1.5-35b-a3b/mmproj.gguf
+      uri: huggingface://mudler/Ornith-1.5-35B-A3B-APEX-MTP-GGUF/mmproj.gguf
+      sha256: e277123529451fbcff6d880ad5bd7ada999f9d5e6339ba3639d06c5cef4763b1
 - !!merge <<: *ornith-1-5-9b
   name: "ornith-1.5-9b-q8"
   variants: []
@@ -2511,7 +2780,7 @@
   files:
     - filename: llama-cpp/models/tiel-coder-35b-a3b-mtp/Tiel-Coder-35B-A3B-MTP-UD-Q4_K_XL.gguf
       uri: huggingface://peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP/Tiel-Coder-35B-A3B-MTP-UD-Q4_K_XL.gguf
-      sha256: 10960d1d6477b08ed36a0e542e571b473022023c25b8315b0cf8c33c57e98ccd
+      sha256: 54f46c4ce544c225122b0f066c2336f10404be7bc53b0cc94d1dbbc5e826bdc1
     - filename: llama-cpp/mmproj/tiel-coder-35b-a3b-mtp/mmproj-BF16.gguf
       uri: huggingface://peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP/mmproj-BF16.gguf
       sha256: d9ce31026d1cb1f3f8d5152e2e2a014d9d2b302b6c93a7dc07bb0a0487f52837
@@ -9614,6 +9883,110 @@
     - filename: llama-cpp/mmproj/gemma-4-E4B-it-qat-q4_0-gguf/gemma-4-E4B-it-mmproj.gguf
       uri: https://huggingface.co/google/gemma-4-E4B-it-qat-q4_0-gguf/resolve/main/gemma-4-E4B-it-mmproj.gguf
       sha256: 7498a37cb619e55f2fcf87eb931f56e99389ed6d432e4c5c66110694c0d65578
+- name: "gemma-4-e4b-hauhaucs-aggressive-q4"
+  variants:
+    - model: gemma-4-e4b-hauhaucs-aggressive-q5
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/google/gemma-4-E4B-it
+    - https://huggingface.co/HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive
+  description: |
+    HauhauCS Aggressive is an uncensored derivative of Google's Gemma 4 E4B
+    instruction model. This Q4_K_M GGUF supports text chat and image input
+    through the publisher's bundled F16 multimodal projector.
+
+    Uses the embedded chat template and the publisher's sampling settings.
+    The default context is 8192 tokens. The publisher declares the Gemma license.
+  license: gemma
+  icon: https://ai.google.dev/gemma/images/gemma4_banner.png
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - gemma4
+    - multimodal
+    - vision
+    - uncensored
+  last_checked: "2026-09-07"
+  overrides:
+    backend: llama-cpp
+    context_size: 8192
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/gemma-4-e4b-hauhaucs-aggressive/mmproj-Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-f16.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/gemma-4-e4b-hauhaucs-aggressive/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
+      temperature: 1
+      top_k: 64
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/gemma-4-e4b-hauhaucs-aggressive/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
+      sha256: d0027dd3a9128d9323e9f282c8bf010a8526c46477584535991dc1a869b56e96
+      uri: https://huggingface.co/HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive/resolve/45b6a334b4bcd1d7f37179df58b3b1d66a184e5d/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
+    - filename: llama-cpp/mmproj/gemma-4-e4b-hauhaucs-aggressive/mmproj-Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-f16.gguf
+      sha256: debad39ab9c1152ab67695a674fb35e8375b2320c57bfd5075835d3ccb16c7db
+      uri: https://huggingface.co/HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive/resolve/45b6a334b4bcd1d7f37179df58b3b1d66a184e5d/mmproj-Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-f16.gguf
+- name: "gemma-4-e4b-hauhaucs-aggressive-q5"
+  url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
+  urls:
+    - https://huggingface.co/google/gemma-4-E4B-it
+    - https://huggingface.co/HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive
+  description: |
+    HauhauCS Aggressive is an uncensored derivative of Google's Gemma 4 E4B
+    instruction model. This Q5_K_M GGUF supports text chat and image input
+    through the publisher's bundled F16 multimodal projector.
+
+    Uses the embedded chat template and the publisher's sampling settings.
+    The default context is 8192 tokens. The publisher declares the Gemma license.
+  license: gemma
+  icon: https://ai.google.dev/gemma/images/gemma4_banner.png
+  tags:
+    - llm
+    - gguf
+    - cpu
+    - gpu
+    - gemma4
+    - multimodal
+    - vision
+    - uncensored
+  last_checked: "2026-09-07"
+  overrides:
+    backend: llama-cpp
+    context_size: 8192
+    function:
+      automatic_tool_parsing_fallback: true
+      grammar:
+        disable: true
+    known_usecases:
+      - chat
+      - vision
+    mmproj: llama-cpp/mmproj/gemma-4-e4b-hauhaucs-aggressive/mmproj-Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-f16.gguf
+    options:
+      - use_jinja:true
+    parameters:
+      model: llama-cpp/models/gemma-4-e4b-hauhaucs-aggressive/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-Q5_K_M.gguf
+      temperature: 1
+      top_k: 64
+      top_p: 0.95
+    template:
+      use_tokenizer_template: true
+  files:
+    - filename: llama-cpp/models/gemma-4-e4b-hauhaucs-aggressive/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-Q5_K_M.gguf
+      sha256: c96f1afc2af92bb27b1d5057fd91c8f6e41e9a72f9f32faa389e1601a6963ee6
+      uri: https://huggingface.co/HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive/resolve/45b6a334b4bcd1d7f37179df58b3b1d66a184e5d/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-Q5_K_M.gguf
+    - filename: llama-cpp/mmproj/gemma-4-e4b-hauhaucs-aggressive/mmproj-Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-f16.gguf
+      sha256: debad39ab9c1152ab67695a674fb35e8375b2320c57bfd5075835d3ccb16c7db
+      uri: https://huggingface.co/HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive/resolve/45b6a334b4bcd1d7f37179df58b3b1d66a184e5d/mmproj-Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-f16.gguf
 - name: "zero-gemma4-e4b-openzero-q5-k-m"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
   urls:
