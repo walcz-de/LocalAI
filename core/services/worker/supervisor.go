@@ -465,7 +465,7 @@ func (s *backendSupervisor) startBackend(backend, backendName, backendPath strin
 	bindAddr := fmt.Sprintf("0.0.0.0:%d", port)
 	clientAddr := fmt.Sprintf("127.0.0.1:%d", port)
 
-	proc, err := s.ml.StartProcess(backendPath, backend, bindAddr)
+	proc, err := s.ml.StartProcess(backendPath, backend, bindAddr, nil)
 	if err != nil {
 		s.releasePortForKey(backend, port)
 		s.mu.Unlock()
@@ -966,8 +966,10 @@ func (s *backendSupervisor) cleanupProcessRuntime(proc *process.Process) {
 	}
 }
 
-// stopAllBackends stops all running backend processes.
-func (s *backendSupervisor) stopAllBackends(force bool) {
+// stopAllBackends stops all running backend processes and returns the process
+// keys it attempted, so a caller answering a backend.stop request can report
+// what it acted on.
+func (s *backendSupervisor) stopAllBackends(force bool) []string {
 	s.mu.Lock()
 	backends := slices.Collect(maps.Keys(s.processes))
 	s.mu.Unlock()
@@ -975,6 +977,7 @@ func (s *backendSupervisor) stopAllBackends(force bool) {
 	for _, b := range backends {
 		s.stopBackend(b, force)
 	}
+	return backends
 }
 
 // isRunning returns whether at least one backend process matching the given

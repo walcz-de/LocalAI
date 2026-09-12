@@ -304,7 +304,7 @@ func initDistributed(cfg *config.ApplicationConfig, authDB *gorm.DB, configLoade
 		}
 		idx := prefixcache.NewIndex(prefixCfg)
 		prefixSync := prefixcache.NewSync(idx, natsClient)
-		pressure = prefixcache.NewPressure(prefixCfg.PressureWindow)
+		pressure = prefixcache.NewSyncedPressure(prefixCfg.PressureWindow, natsClient)
 		prefixProvider = prefixSync
 
 		// Invalidate the prefix-cache index whenever a replica row is removed.
@@ -340,6 +340,19 @@ func initDistributed(cfg *config.ApplicationConfig, authDB *gorm.DB, configLoade
 		}); err != nil {
 			return nil, fmt.Errorf("subscribing to %s: %w", messaging.SubjectPrefixCacheInvalidate, err)
 		}
+		if _, err := messaging.SubscribeJSON(natsClient, messaging.SubjectPrefixCachePressure, func(ev messaging.PrefixCachePressureEvent) {
+			pressure.ApplyPressure(ev, time.Now())
+		}); err != nil {
+			return nil, fmt.Errorf("subscribing to %s: %w", messaging.SubjectPrefixCachePressure, err)
+		}
+
+		// Keep an exact-residency index current so backend producers can report
+		// their real KV state without coupling to router internals. Routing stays
+		// on the guessed provider until a backend producer is available.
+		reportedIndex := prefixcache.NewReportedIndex()
+		if _, err := messaging.SubscribeJSON(natsClient, messaging.SubjectPrefixCacheResidency, reportedIndex.Apply); err != nil {
+			return nil, fmt.Errorf("subscribing to %s: %w", messaging.SubjectPrefixCacheResidency, err)
+		}
 
 		// Background eviction: sweep idle entries on the app context. Stopped
 		// when the app context is cancelled (mirrors the reconciler loop which
@@ -365,8 +378,10 @@ func initDistributed(cfg *config.ApplicationConfig, authDB *gorm.DB, configLoade
 
 	// All dependencies ready — build SmartRouter with all options at once
 	var conflictResolver nodes.ConcurrencyConflictResolver
+	var pinnedResolver nodes.PinnedModelResolver
 	if configLoader != nil {
 		conflictResolver = configLoader
+		pinnedResolver = configLoader
 	}
 	modelCleanup := nodes.NewModelCleanupService(registry, remoteUnloader)
 	router := nodes.NewSmartRouter(registry, nodes.SmartRouterOptions{
@@ -377,6 +392,7 @@ func initDistributed(cfg *config.ApplicationConfig, authDB *gorm.DB, configLoade
 		AuthToken:        routerAuthToken,
 		DB:               authDB,
 		ConflictResolver: conflictResolver,
+		PinnedResolver:   pinnedResolver,
 		PrefixProvider:   prefixProvider,
 		PrefixConfig:     prefixCfg,
 		Pressure:         pressure,
@@ -439,6 +455,7 @@ func initDistributed(cfg *config.ApplicationConfig, authDB *gorm.DB, configLoade
 		ProbeStaleAfter:   2 * time.Minute,
 		Pressure:          pressure,
 		PressureThreshold: prefixCfg.PressureScaleThreshold,
+		PinnedResolver:    pinnedResolver,
 	})
 
 	// Create ModelRouterAdapter to wire into ModelLoader

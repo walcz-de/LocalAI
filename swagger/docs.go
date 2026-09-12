@@ -2908,6 +2908,40 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/audio/voices": {
+            "get": {
+                "description": "List named voices and their language and gender metadata. Use the optional model query parameter to filter the response.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "audio"
+                ],
+                "summary": "List text-to-speech voices",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Installed model name",
+                        "name": "model",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/localai.TTSVoicesResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/chat/completions": {
             "post": {
                 "tags": [
@@ -4071,6 +4105,20 @@ const docTemplate = `{
                 }
             }
         },
+        "config.TTSVoice": {
+            "type": "object",
+            "properties": {
+                "gender": {
+                    "type": "string"
+                },
+                "language": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "functions.Function": {
             "type": "object",
             "properties": {
@@ -4603,6 +4651,31 @@ const docTemplate = `{
                 },
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "localai.TTSModelVoices": {
+            "type": "object",
+            "properties": {
+                "model": {
+                    "type": "string"
+                },
+                "voices": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/config.TTSVoice"
+                    }
+                }
+            }
+        },
+        "localai.TTSVoicesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/localai.TTSModelVoices"
+                    }
                 }
             }
         },
@@ -8246,6 +8319,12 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "references": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/voiceprofile.ReferenceMetadata"
+                    }
+                },
                 "transcript": {
                     "type": "string"
                 },
@@ -8253,6 +8332,17 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "voice": {
+                    "type": "string"
+                }
+            }
+        },
+        "voiceprofile.ReferenceMetadata": {
+            "type": "object",
+            "properties": {
+                "audio": {
+                    "$ref": "#/definitions/voiceprofile.AudioMetadata"
+                },
+                "transcript": {
                     "type": "string"
                 }
             }

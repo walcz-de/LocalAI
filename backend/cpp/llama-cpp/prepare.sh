@@ -45,6 +45,10 @@ done
 
 cp -r CMakeLists.txt llama.cpp/tools/grpc-server/
 cp -r grpc-server.cpp llama.cpp/tools/grpc-server/
+# Model-load diagnostics (included by grpc-server.cpp) and their standalone
+# regression test.
+cp -r model_load_error.h llama.cpp/tools/grpc-server/
+cp -r model_load_error_test.cpp llama.cpp/tools/grpc-server/
 # Shared message-reconstruction helpers (included by grpc-server.cpp) and their
 # unit test (compiled only when -DLLAMA_GRPC_BUILD_TESTS=ON).
 cp -r message_content.h llama.cpp/tools/grpc-server/
@@ -63,6 +67,10 @@ cp -r thread_params_test.cpp llama.cpp/tools/grpc-server/
 # test (run via backend/cpp/run-unit-tests.sh; also buildable under ctest).
 cp -r parent_watch.h llama.cpp/tools/grpc-server/
 cp -r parent_watch_test.cpp llama.cpp/tools/grpc-server/
+# Dead-stream tracker (included by grpc-server.cpp) and its standalone unit
+# test (run via backend/cpp/run-unit-tests.sh; also buildable under ctest).
+cp -r stream_peer.h llama.cpp/tools/grpc-server/
+cp -r stream_peer_test.cpp llama.cpp/tools/grpc-server/
 cp -rfv llama.cpp/vendor/nlohmann/json.hpp llama.cpp/tools/grpc-server/
 cp -rfv llama.cpp/vendor/cpp-httplib/httplib.h llama.cpp/tools/grpc-server/
 

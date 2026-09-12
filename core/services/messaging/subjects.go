@@ -287,11 +287,39 @@ type BackendStopRequest struct {
 	Force   bool   `json:"force,omitempty"`
 }
 
+// BackendStopReply is the worker's answer to a backend.stop request.
+//
+// backend.stop had no reply until this type existed. The controller published
+// and returned success as soon as the local publish succeeded, so a stop that
+// killed nothing, and a stop that failed outright, both looked identical to a
+// stop that worked. An operator calling the unload endpoint got HTTP 200 while
+// the backend kept running and holding its VRAM.
+type BackendStopReply struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+
+	// StoppedProcessKeys names every `modelID#replica` process the worker
+	// terminated while serving this request.
+	StoppedProcessKeys []string `json:"stopped_process_keys,omitempty"`
+
+	// ReportsStoppedProcesses distinguishes "this worker enumerates what it
+	// stopped and stopped nothing" from "this worker predates the field", the
+	// same way BackendDeleteReply does. Both send an empty list and only the
+	// first is authoritative, so a controller that cannot tell them apart would
+	// read silence as a completed stop — the exact conclusion this reply exists
+	// to prevent.
+	ReportsStoppedProcesses bool `json:"reports_stopped_processes,omitempty"`
+}
+
 // SubjectNodeBackendStop tells a worker node to stop its gRPC backend process.
 // Equivalent to the local deleteProcess(). The node will:
 // 1. Best-effort bounded Free() via gRPC (unless Force is true)
 // 2. Kill the backend process
 // 3. Can be restarted via another backend.start event.
+//
+// Request-reply, answered with a BackendStopReply. A worker that predates that
+// reply never answers, so the controller must treat a timeout as "unconfirmed"
+// rather than "failed" — see RemoteUnloaderAdapter.stopBackend.
 func SubjectNodeBackendStop(nodeID string) string {
 	return subjectNodePrefix + sanitizeSubjectToken(nodeID) + ".backend.stop"
 }
@@ -508,7 +536,28 @@ const subjectSyncStatePrefix = "state."
 const (
 	SubjectPrefixCacheObserve    = "prefixcache.observe"
 	SubjectPrefixCacheInvalidate = "prefixcache.invalidate"
+	SubjectPrefixCachePressure   = "prefixcache.pressure"
+	SubjectPrefixCacheResidency  = "prefixcache.residency"
 )
+
+// PrefixCacheOperation describes a backend-reported KV-cache residency change.
+type PrefixCacheOperation string
+
+const (
+	PrefixCacheStore  PrefixCacheOperation = "store"
+	PrefixCacheRemove PrefixCacheOperation = "remove"
+	PrefixCacheClear  PrefixCacheOperation = "clear"
+)
+
+// PrefixCacheResidencyEvent reports exact backend KV-cache residency. Chain is
+// the compatible shallow-to-deep prefix hash chain used by the router.
+type PrefixCacheResidencyEvent struct {
+	Operation PrefixCacheOperation `json:"operation"`
+	Model     string               `json:"model"`
+	NodeID    string               `json:"node_id"`
+	Replica   int                  `json:"replica"`
+	Chain     []uint64             `json:"chain,omitempty"`
+}
 
 // PrefixCacheObserveEvent announces that the replica (NodeID, Replica) served a
 // request whose prefix chain ends at the given hashes for model. Chain is the
@@ -530,4 +579,13 @@ type PrefixCacheInvalidateEvent struct {
 	Model   string `json:"model"`
 	NodeID  string `json:"node_id"`
 	Replica int    `json:"replica"`
+}
+
+// PrefixCachePressureEvent announces one forced-disturb observed by a frontend.
+// ID lets the publisher ignore its own NATS echo and all frontends ignore
+// redelivery without inflating the autoscale signal.
+type PrefixCachePressureEvent struct {
+	ID    string `json:"id"`
+	Model string `json:"model"`
+	Reset bool   `json:"reset,omitempty"`
 }

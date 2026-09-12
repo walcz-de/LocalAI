@@ -43,24 +43,26 @@ Both views use the same model selection and store the view, search, filter, and
 selection in the URL. Installing from Explore does not move you away from the
 catalog; the entry updates in place when the operation finishes.
 
-## Gemma 4 E4B HauhauCS Aggressive
+## Spark-X2.5-1.7B
 
-The gallery offers the [HauhauCS Aggressive Gemma 4 E4B model](https://huggingface.co/HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive)
-for text chat and image input through llama.cpp. Both Q4_K_M and Q5_K_M
-builds include the publisher's F16 multimodal projector. They use an 8192-token
-context and the embedded chat template.
-
-Install with automatic variant selection:
+Install Spark-X2.5-1.7B with automatic selection between its Q4_K_M and Q8_0
+GGUF builds:
 
 ```bash
-local-ai models install gemma-4-e4b-hauhaucs-aggressive-q4
+local-ai models install spark-x2.5-1.7b-q4
 ```
 
-Select Q5_K_M explicitly:
+To select the Q8_0 build explicitly:
 
 ```bash
-local-ai models install --variant gemma-4-e4b-hauhaucs-aggressive-q5 gemma-4-e4b-hauhaucs-aggressive-q4
+local-ai models install spark-x2.5-1.7b-q4 --variant spark-x2.5-1.7b-q8
 ```
+
+These text-only builds use the llama.cpp backend and the embedded Jinja chat
+template. The gallery defaults to a 32,768-token context to limit memory use.
+The [source model](https://huggingface.co/XHToken/Spark-X2.5-1.7B) supports up to
+1,048,576 tokens; larger contexts require more memory. Use a current LocalAI
+llama.cpp backend with Spark-X2.5 support.
 
 ## VRAM and download size estimates
 
@@ -70,6 +72,23 @@ When browsing the gallery or importing a model by URI, LocalAI can show **estima
 - **How they are computed**: GGUF models use file size (HTTP HEAD or local stat) and optional GGUF metadata (HTTP Range) for KV cache and overhead; other formats use Hugging Face file sizes and optional config when available. If metadata is unavailable, a size-only heuristic is used.
 - **Hardware fit indicator**: When your system reports GPU or RAM capacity, the gallery shows whether the estimated VRAM fits (green) or may not fit (red) using a 95% headroom rule.
 - Estimates are best-effort and may be missing if the server does not support HEAD/Range or the request times out.
+
+## Gemma 4 12B IT
+
+Install `gemma-4-12b-it-q4` for chat, tool use, and image prompts with
+llama.cpp. The gallery offers Unsloth Q4_K_M, Q5_K_M, Q6_K, and Q8_0
+builds, each with an F16 vision projector and the embedded chat template.
+LocalAI selects a quantization based on available memory. To choose one
+explicitly, run:
+
+```bash
+local-ai models install gemma-4-12b-it-q4 --variant gemma-4-12b-it-q8
+```
+
+These entries use a 32,768-token context and sampling defaults of
+temperature 1, top_k 64, and top_p 0.95. They are separate from the
+existing QAT builds. See the [source model](https://huggingface.co/google/gemma-4-12B-it)
+and [GGUF files](https://huggingface.co/unsloth/gemma-4-12b-it-GGUF).
 
 ## Add other galleries
 
@@ -86,6 +105,16 @@ GALLERIES=[{"name":"<GALLERY_NAME>", "url":"<GALLERY_URL"}]
 3. **Using Configuration Files**: Add galleries to `runtime_settings.json` in the `LOCALAI_CONFIG_DIR` directory.
 
 The models in the gallery will be automatically indexed and available for installation.
+
+## Dirk quantization variants
+
+Dirk Qwen3.8 27B offers Q4_K_XL, Q5_K_XL, Q6_K_XL, and Q8_K_XL GGUF builds
+with llama.cpp, MTP speculative decoding, and the shared F16 vision projector.
+Select Q6 explicitly with:
+
+```bash
+local-ai models install dirk-qwen3.8-27b-q4 --variant dirk-qwen3.8-27b-q6
+```
 
 ## Gallery mirrors
 
@@ -210,7 +239,33 @@ where:
 - `bert-embeddings` is the model name in the gallery
   (read its [config here](https://github.com/mudler/LocalAI/tree/master/gallery/blob/main/bert-embeddings.yaml)).
 
+### EfficientThink GGUF builds
+
+[Qwen3.8-27B EfficientThink](https://huggingface.co/nerkyor/Qwen3.8-27B-EfficientThink-Uncensored-K3-Opus5-Grok4.6-GPT5.6Sol-SFT-SimPO-DFlash2-GGUF)
+is available as Q6_K and Q8_0 builds for llama.cpp. Both include the matching
+Q8 vision projector and use a 32,768-token context. The DFlash variants also
+install the publisher's Q8 draft and enable speculative decoding.
+
+To select a build explicitly:
+
+```bash
+local-ai models install --variant qwen3.8-27b-efficientthink-q8-dflash qwen3.8-27b-efficientthink-q6
+```
+
+Use `qwen3.8-27b-efficientthink-q6` or `qwen3.8-27b-efficientthink-q8` as the
+variant name for ordinary decoding without a draft model.
+
 ### Model variants
+
+The `qwen3.5-9b-defiant-fable-mtp` entry offers Q4_K_M and Q8_0 builds for
+llama.cpp, with and without multi-token prediction (MTP). Each build includes
+the BF16 vision projector. To select the Q8_0 MTP build explicitly:
+
+```bash
+local-ai models install localai@qwen3.5-9b-defiant-fable-mtp --variant qwen3.5-9b-defiant-fable-q8-mtp
+```
+
+Use `--variant qwen3.5-9b-defiant-fable-q8` for Q8_0 with ordinary decoding.
 
 Some gallery entries offer several builds of the same model: different
 quantizations, or the same weights served by a different engine. Such an entry
@@ -250,6 +305,13 @@ whole page has variants.
 
 ```bash
 curl http://localhost:8080/api/models | jq '.models[] | select(.has_variants) | .name'
+```
+
+The Tiel-Coder gallery entry offers Q4, Q5, Q6, and Q8 MTP builds for
+llama.cpp, each with the BF16 vision projector. To select the Q6 MTP build:
+
+```bash
+local-ai models install tiel-coder-35b-a3b-q4 --variant tiel-coder-35b-a3b-q6-mtp
 ```
 
 ### Collapsing the listing to one row per model

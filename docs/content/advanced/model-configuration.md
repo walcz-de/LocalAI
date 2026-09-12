@@ -7,6 +7,20 @@ url = '/advanced/model-configuration'
 
 LocalAI uses YAML configuration files to define model parameters, templates, and behavior. This page provides a complete reference for all available configuration options.
 
+## Configuration scopes and precedence
+
+[CLI flags and environment variables]({{% relref "reference/cli-reference" %}})
+configure the LocalAI server process. Model YAML files configure one model,
+while supported fields in an API request can override that model's defaults
+for that request. For example, a request containing `temperature` overrides
+the model YAML `parameters.temperature` only for that request.
+
+Precedence is setting-specific rather than one universal ordering. For the
+overlapping `threads` setting, an explicit nonzero server `--threads` value is
+applied after model YAML and therefore wins over the YAML `threads` value.
+Most server flags have no model YAML equivalent, so consult the relevant
+reference for the scope of each setting.
+
 ## Overview
 
 Model configuration files allow you to:
@@ -743,6 +757,7 @@ For image generation models using the `diffusers` backend:
 | `diffusers.cuda` | bool | Force CUDA. By default the backend auto-detects and uses CUDA when a compatible GPU is present (ROCm builds included). Pin the CPU with `options: ["device:cpu"]` |
 | `diffusers.pipeline_type` | string | Pipeline type (e.g., `stable-diffusion`, `stable-diffusion-xl`) |
 | `diffusers.scheduler_type` | string | Scheduler type (e.g., `euler`, `ddpm`) |
+| `diffusers.original_config_file` | string | Local path or URL to the original configuration for loading a single-file checkpoint |
 | `diffusers.enable_parameters` | string | Comma-separated parameters to enable |
 | `diffusers.cfg_scale` | float32 | Classifier-free guidance scale |
 | `diffusers.img2img` | bool | Enable image-to-image transformation |
@@ -1058,6 +1073,24 @@ PII redaction is NER-based and runs on the **request** (input) side. It has two 
 Multiple detectors union their detections; overlapping spans resolve to the strongest action (`block` > `mask` > `allow`). A configured detector that can't be loaded fails the request closed (HTTP 503) rather than silently skipping the check. Detections are audited at `/api/pii/events` (hash-prefix only, never the raw value).
 
 > The earlier regex pattern tier (`pii.patterns`, the global pattern catalogue, `--pii-config`, and the `/api/pii/patterns` admin endpoints) has been removed, along with response/streaming-side redaction. Those keys now no-op with a startup warning; migrate to `pii.detectors` + a detector's `pii_detection` block.
+
+## Environment Variables Configuration
+
+Model configurations can specify environment variables passed to the backend process:
+
+```yaml
+name: vllm-model
+backend: vllm
+parameters:
+  model: my-vllm-model
+
+env:
+  VLLM_WORKER_MULTIPROC_METHOD: "spawn"
+  VLLM_CACHE_DIR: "/tmp/vllm_cache"
+  CUDA_VISIBLE_DEVICES: "0,1"
+```
+
+Environment variables are appended to the system environment variables and will override any conflicting system variables with the same name.
 
 ## Complete Example
 

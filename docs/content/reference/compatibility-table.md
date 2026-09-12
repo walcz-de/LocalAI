@@ -33,6 +33,7 @@ All backends listed here can be installed on demand from the [Backend Gallery]({
 | [MLX-VLM](https://github.com/Blaizzy/mlx-vlm) | Vision-Language Models on Apple Silicon | Multimodal GPT, Functions | no | yes | CPU, CUDA 12/13, Metal, Jetson L4T |
 | [MLX Distributed](https://github.com/ml-explore/mlx-lm) | Distributed LLM inference across multiple Apple Silicon Macs | GPT | no | no | CPU, CUDA 12/13, Metal, Jetson L4T |
 | [tinygrad](https://github.com/tinygrad/tinygrad) | Minimalist deep-learning framework with zero runtime dependencies | GPT, Embeddings, Multimodal | yes | yes | CPU |
+| [RKLLM](https://github.com/airockchip/rknn-llm) | Rockchip NPU runtime connected through its OpenAI-compatible server and LocalAI's [cloud-proxy]({{% relref "features/rkllm" %}}) configuration | GPT | no | yes | Rockchip NPU (RK3588, RK3576, RV1126B, RK3562) |
 
 ## Speech-to-Text
 
@@ -94,6 +95,7 @@ All backends listed here can be installed on demand from the [Backend Gallery]({
 |---------|-------------|-------------|
 | [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) | Stable Diffusion, Flux, PhotoMaker, Ideogram in C/C++ | CPU, CUDA 12/13, Intel SYCL, Vulkan, Metal, Jetson L4T |
 | [diffusers](https://github.com/huggingface/diffusers) | HuggingFace diffusion models (image and video generation) | CPU, CUDA 12/13, ROCm, Intel SYCL, Metal, Jetson L4T |
+| [mlx-video](https://github.com/Blaizzy/mlx-video) | LTX-2 and converted Wan2.1/Wan2.2 video generation | Metal (Apple Silicon) |
 | [vLLM Omni](https://github.com/vllm-project/vllm-omni) | Multimodal generation including text-to-image and text-to-video | CUDA 12/13, ROCm, Jetson L4T |
 
 ## Vision, Detection & Recognition

@@ -173,13 +173,13 @@ For getting started, see the available backends in LocalAI here: https://github.
 
 LocalAI supports various types of backends:
 
-- **LLM Backends**: For running language models (e.g., llama.cpp, vLLM, vllm.cpp, SGLang, transformers, MLX)
+- **LLM Backends**: For running language models (e.g., llama.cpp, vLLM, vllm.cpp, SGLang, transformers, MLX, and [RKLLM on Rockchip NPUs]({{% relref "features/rkllm" %}}) through the cloud-proxy backend)
 - **AMD FP4 Backend**: `rocmfp4` — a llama.cpp fork reading the ROCmFP4 / ROCmFPx 4-bit weight formats (ggml types 100-107) on AMD RDNA3.5 APUs (Strix Point / Strix Halo / Gorgon). Stock llama.cpp rejects these tensor types. The format trades memory, not arithmetic: ~22% smaller than Q4_K_M at perplexity parity, with the matmul running as int8 dot products since RDNA3.5 has no FP4 matrix instruction. `llama-cpp` remains the recommendation for everything else.
-- **Speech-to-Text Backends**: For transcription, forced alignment and speaker diarization (e.g., whisper.cpp, parakeet.cpp, moss-transcribe.cpp, [NeMo-Speech.cpp]({{%relref "features/nemo-speech-cpp" %}}), faster-whisper, NeMo, [audio.cpp]({{%relref "features/audio-cpp" %}}))
+- **Speech-to-Text Backends**: For transcription, forced alignment and speaker diarization (e.g., whisper.cpp, parakeet.cpp, moss-transcribe.cpp, [NeMo-Speech.cpp]({{%relref "features/nemo-speech-cpp" %}}), faster-whisper, [Whisper-Medusa]({{%relref "features/whisper-medusa" %}}), FunASR/SenseVoice, NeMo, [audio.cpp]({{%relref "features/audio-cpp" %}}))
 - **Text-to-Speech Backends**: For speech synthesis (e.g., piper, Kokoro, VibeVoice, Qwen3-TTS, [NeMo-Speech.cpp]({{%relref "features/nemo-speech-cpp" %}}), [audio.cpp]({{%relref "features/audio-cpp" %}}))
 - **Sound Generation Backends**: For music and audio generation (e.g., ACE-Step, [audio.cpp]({{%relref "features/audio-cpp" %}}))
 - **Sound Classification Backends**: For sound-event classification / audio tagging - identifying everyday sounds like baby cry, glass breaking, alarms (e.g., ced.cpp)
-- **Image & Video Generation Backends**: For diffusion and audio-conditioned avatar models (e.g., stable-diffusion.cpp, diffusers, vLLM-Omni, [LongCat-Video]({{%relref "features/video-generation" %}}), [vllm.cpp / MiniMax-H3]({{%relref "features/video-generation" %}}))
+- **Image & Video Generation Backends**: For diffusion and audio-conditioned avatar models (e.g., stable-diffusion.cpp, diffusers, vLLM-Omni, [MLX-Video on Apple Silicon]({{%relref "features/video-generation" %}}), [LongCat-Video]({{%relref "features/video-generation" %}}), [vllm.cpp / MiniMax-H3]({{%relref "features/video-generation" %}}))
 - **3D Generation Backends**: For image-to-3D mesh generation ([trellis2.cpp]({{%relref "features/3d-generation" %}}) — Microsoft TRELLIS.2, producing GLB assets with PBR textures)
 - **Vision & Detection Backends**: For object detection, segmentation, depth, and face/voice recognition (e.g., rf-detr.cpp, locate-anything.cpp, sam3.cpp, insightface)
 - **Audio Processing Backends**: For voice activity detection and audio enhancement (e.g., Silero VAD, LocalVQE, [audio.cpp]({{%relref "features/audio-cpp" %}}))
@@ -196,3 +196,26 @@ cannot be retracted; DS4 does not flush incomplete buffered parser state or
 persist an abandoned request to the disk KV cache. Cancellation is cooperative:
 DS4 checks it at safe prompt-prefill and decode-loop boundaries, so a GPU kernel
 already in flight may finish before the request stops.
+
+### llama.cpp request cancellation
+
+The llama.cpp backend stops a streaming generation as soon as the response can
+no longer be written to the client, not only when the RPC is formally cancelled.
+A stream never recovers once a write fails, so the backend treats the first
+failed write as final and returns, which releases the slot the generation held.
+
+This matters most for a model configured without a generation cap. With
+`max_tokens: 0` and a large `context_size`, an abandoned request that keeps
+decoding occupies its slot until it reaches the context limit — tens of minutes
+on a large model — and every other request for that model queues behind it. A
+couple of abandoned requests is enough to make a healthy node look wedged.
+
+Cancellation is cooperative and checked between decoded results, so a batch
+already in flight may finish before the request stops.
+
+{{% notice tip %}}
+A generation cap is still worth setting. Cancellation only helps once a client
+has actually gone away; a client that waits receives the full context worth of
+tokens. Set `max_tokens` on the model config, and keep `repeat_penalty` above
+`1` so a repetition loop terminates on its own.
+{{% /notice %}}

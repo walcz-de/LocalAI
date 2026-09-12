@@ -39,6 +39,17 @@ type TTSConfig struct {
 	// A pointer preserves the distinction between an explicit false and the
 	// default automatic behavior.
 	VoiceCloning *bool `yaml:"voice_cloning,omitempty" json:"voice_cloning,omitempty"`
+
+	// Voices describes named voices accepted by this model. Backends with a
+	// built-in catalog supply defaults when this list is empty.
+	Voices []TTSVoice `yaml:"voices,omitempty" json:"voices,omitempty"`
+}
+
+// TTSVoice describes one named voice accepted by a text-to-speech model.
+type TTSVoice struct {
+	Name     string `yaml:"name" json:"name"`
+	Language string `yaml:"language,omitempty" json:"language,omitempty"`
+	Gender   string `yaml:"gender,omitempty" json:"gender,omitempty"`
 }
 
 // @Description ModelConfig represents a model configuration
@@ -160,6 +171,9 @@ type ModelConfig struct {
 	Proxy        ProxyConfig        `yaml:"proxy,omitempty" json:"proxy,omitempty"`
 	MITM         MITMModelConfig    `yaml:"mitm,omitempty" json:"mitm,omitempty"`
 	Limits       LimitsConfig       `yaml:"limits,omitempty" json:"limits,omitempty"`
+
+	// Environment variables to set when starting the backend process
+	Environment map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
 }
 
 // CompressionConfig controls opt-in compression of chat history before inference.
@@ -1250,15 +1264,16 @@ type GRPC struct {
 
 // @Description Diffusers configuration
 type Diffusers struct {
-	CUDA             bool   `yaml:"cuda,omitempty" json:"cuda,omitempty"`
-	PipelineType     string `yaml:"pipeline_type,omitempty" json:"pipeline_type,omitempty"`
-	SchedulerType    string `yaml:"scheduler_type,omitempty" json:"scheduler_type,omitempty"`
-	EnableParameters string `yaml:"enable_parameters,omitempty" json:"enable_parameters,omitempty"` // A list of comma separated parameters to specify
-	IMG2IMG          bool   `yaml:"img2img,omitempty" json:"img2img,omitempty"`                     // Image to Image Diffuser
-	ClipSkip         int    `yaml:"clip_skip,omitempty" json:"clip_skip,omitempty"`                 // Skip every N frames
-	ClipModel        string `yaml:"clip_model,omitempty" json:"clip_model,omitempty"`               // Clip model to use
-	ClipSubFolder    string `yaml:"clip_subfolder,omitempty" json:"clip_subfolder,omitempty"`       // Subfolder to use for clip model
-	ControlNet       string `yaml:"control_net,omitempty" json:"control_net,omitempty"`
+	CUDA               bool   `yaml:"cuda,omitempty" json:"cuda,omitempty"`
+	PipelineType       string `yaml:"pipeline_type,omitempty" json:"pipeline_type,omitempty"`
+	SchedulerType      string `yaml:"scheduler_type,omitempty" json:"scheduler_type,omitempty"`
+	OriginalConfigFile string `yaml:"original_config_file,omitempty" json:"original_config_file,omitempty"`
+	EnableParameters   string `yaml:"enable_parameters,omitempty" json:"enable_parameters,omitempty"` // A list of comma separated parameters to specify
+	IMG2IMG            bool   `yaml:"img2img,omitempty" json:"img2img,omitempty"`                     // Image to Image Diffuser
+	ClipSkip           int    `yaml:"clip_skip,omitempty" json:"clip_skip,omitempty"`                 // Skip every N frames
+	ClipModel          string `yaml:"clip_model,omitempty" json:"clip_model,omitempty"`               // Clip model to use
+	ClipSubFolder      string `yaml:"clip_subfolder,omitempty" json:"clip_subfolder,omitempty"`       // Subfolder to use for clip model
+	ControlNet         string `yaml:"control_net,omitempty" json:"control_net,omitempty"`
 }
 
 // @Description LLMConfig is a struct that holds the configuration that are generic for most of the LLM backends.

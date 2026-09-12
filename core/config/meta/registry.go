@@ -93,6 +93,13 @@ func DefaultRegistry() map[string]FieldMetaOverride {
 			Advanced:    true,
 			Order:       9,
 		},
+		"env": {
+			Section:     "general",
+			Label:       "Environment Variables",
+			Description: "Environment variables to be applied to the backend process",
+			Component:   "map-editor",
+			Order:       10,
+		},
 
 		// --- LLM ---
 		"context_size": {
@@ -895,6 +902,13 @@ func DefaultRegistry() map[string]FieldMetaOverride {
 			Component:   "input",
 			Order:       91,
 		},
+		"tts.voices": {
+			Section:     "tts",
+			Label:       "Named Voices",
+			Description: "Named voices that this model accepts. Each entry requires a name and can include language and gender metadata.",
+			Component:   "json-editor",
+			Order:       92,
+		},
 
 		// --- Diffusers ---
 		"diffusers.pipeline_type": {
@@ -913,11 +927,19 @@ func DefaultRegistry() map[string]FieldMetaOverride {
 			Options:     DiffusersSchedulerOptions,
 			Order:       81,
 		},
+		"diffusers.original_config_file": {
+			Section:     "diffusers",
+			Label:       "Original Config File",
+			Description: "Original model configuration file used when loading a single-file checkpoint",
+			Component:   "input",
+			Advanced:    true,
+			Order:       82,
+		},
 		"diffusers.cuda": {
 			Section:     "diffusers",
 			Label:       "CUDA",
 			Description: "Enable CUDA for diffusers",
-			Order:       82,
+			Order:       83,
 		},
 
 		// --- PII filtering (per-model) ---

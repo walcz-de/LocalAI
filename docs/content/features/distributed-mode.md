@@ -568,6 +568,21 @@ The responses from `GET /api/node/:id/models` and `GET /api/nodes/:id/models` in
 
 `model.unload` releases model memory inside a running backend. It does not replace the exact process stop that configuration cleanup requires. The `backend.stop` operation remains an administrative backend operation.
 
+#### `backend.stop` is acknowledged
+
+`backend.stop` is request-reply. The worker answers with what it terminated, so the controller can tell a stop that worked from one that matched nothing or failed outright.
+
+This matters for `POST /api/nodes/:id/models/unload`, which stops the backend after unloading the model. The stop used to be fire-and-forget, so the endpoint answered `200` as soon as the message left the frontend — including when the backend was still running and still holding its VRAM. It now returns an error when the worker reports that the stop failed.
+
+Two outcomes are deliberately **not** errors:
+
+- **Nothing matched.** The worker reports an empty stopped-process list, logged as `backend.stop matched no running process`. Stopping a backend that is not running leaves the caller in the state it asked for, and eviction and cleanup paths stop already-gone models routinely.
+- **No answer.** A worker built before this reply performs the stop and never responds. The controller waits 15 seconds, logs `Worker did not acknowledge backend.stop`, and assumes delivery, so a fleet mid-upgrade keeps working. A transport failure is reported rather than assumed.
+
+{{% notice note %}}
+On a mixed fleet, every stop against a worker that predates the reply costs the full 15-second wait before falling back. Upgrading the workers removes the delay.
+{{% /notice %}}
+
 ### Per-node VRAM budget
 
 Each worker advertises its detected VRAM, and the SmartRouter uses that number when picking a node with enough free memory. You can cap the VRAM a node offers for placement so it never gets scheduled beyond a chosen limit, leaving headroom for other workloads on that machine.
@@ -1251,15 +1266,61 @@ Notes:
 - Verify the backend gallery configuration is correct
 - The worker needs network access to download backends from the gallery
 
+## Routing pipeline
+
+Loaded replicas are selected through a filter, scorer, and picker pipeline.
+The initial pipeline applies the load guard as an eligibility filter, scores
+eligible replicas using prefix-cache affinity and cold-placement order, then
+picks the highest score with a deterministic node/replica tie-break.
+
+Per-model scheduling fields configure the initial pipeline:
+
+- `route_policy` enables `prefix_cache` scoring or selects the
+  `round_robin` floor.
+- `balance_abs_threshold` and `balance_rel_threshold` configure the load
+  eligibility filter.
+- `min_prefix_match` controls when prefix affinity contributes the highest
+  score.
+- `scorer_weights` enables or weights named scorers. The initial scorer is
+  `prefix_cache`; set `scorer_weights: {prefix_cache: 0}` to disable its
+  contribution while retaining the load filter and deterministic picker.
+
+The pipeline accepts additional independently weighted scorers and alternate
+pickers without coupling them to `SmartRouter`. This is the extension point for
+queue depth, precise KV utilization, latency, and fairness signals.
+
 ## Roadmap: Routing and Caching Enhancements
 
-The scheduling algorithm above is load-based (least in-flight, then least-recently-used). Work is underway to make routing **prefix-cache-aware**: bias each request toward the replica that already holds the relevant KV/prefix cache (multi-turn conversations and shared system prompts), so backends reuse cache instead of recomputing it. The first step is a router-side radix tree of prompt-prefix hashes mapped to nodes, with longest-prefix match, a load guard that preserves round-robin behavior under imbalance, and NATS sync across frontends. It is purely a routing-layer hint (no backend changes) and never routes worse than today's round-robin.
+The scheduling algorithm supports **prefix-cache-aware** routing: bias each request toward the replica that already holds the relevant KV/prefix cache (multi-turn conversations and shared system prompts), so backends reuse cache instead of recomputing it. A router-side radix tree maps prompt-prefix hashes to nodes, with longest-prefix match, a load guard that preserves round-robin behavior under imbalance, and NATS sync across frontends. It is purely a routing-layer hint (no backend changes) and never routes worse than round-robin.
+
+When the load guard must route away from a warm replica, the frontend emits a forced-disturb event. These events and the reset sent after a successful pressure-triggered scale-up are broadcast over NATS, so the rolling autoscale threshold is cluster-wide rather than per frontend. The Prometheus counter `localai_prefix_cache_forced_disturb_total{model="..."}` records events at their originating frontend; sum it across frontend replicas to inspect cluster pressure without counting the NATS copies.
+
+Backends can report exact KV-cache residency on the `prefixcache.residency`
+NATS subject. The JSON event contract is:
+
+```json
+{
+  "operation": "store",
+  "model": "model-name",
+  "node_id": "worker-id",
+  "replica": 0,
+  "chain": [1203053429005847826, 15485907386658061715]
+}
+```
+
+`operation` is `store`, `remove`, or `clear`. `store` adds the announced
+shallow-to-deep chain for one model replica, `remove` removes only that exact
+announced chain, and `clear` removes all reported residency for that model
+replica (and may omit `chain`). Producers must generate the chain with exactly
+the same windowing and hashing algorithm as the router; hashes from a different
+chain algorithm are not compatible and will never match requests correctly.
+Reported events populate the exact-residency provider, but the guessed provider
+remains the routing default until a backend producer is available.
 
 Further enhancements, surfaced from a survey of SGLang, vLLM production-stack, Ray Serve, llm-d, AIBrix, and NVIDIA Dynamo, are tracked under the routing roadmap epic ([#10063](https://github.com/mudler/LocalAI/issues/10063)):
 
 - **Reported/precise KV-event mode** ([#10064](https://github.com/mudler/LocalAI/issues/10064)): subscribe to actual backend KV-cache events for exact residency instead of inferring it from routing history.
 - **Multi-tier cache-overlap scoring** ([#10065](https://github.com/mudler/LocalAI/issues/10065)): credit GPU/CPU/disk cache tiers separately.
-- **Pluggable scorer/filter/picker pipeline** ([#10066](https://github.com/mudler/LocalAI/issues/10066)): composable multi-signal routing (cache, queue depth, KV utilization, latency).
 - **Load-shaping** ([#10067](https://github.com/mudler/LocalAI/issues/10067)): anti-herding (softmax/temperature) and dispatch-time freshness.
 - **Prefill/decode disaggregation routing** ([#10068](https://github.com/mudler/LocalAI/issues/10068)): route prefill and decode to separate pools with KV transfer.
 - **Per-user fairness (VTC)** ([#10069](https://github.com/mudler/LocalAI/issues/10069)): balance per-user token usage against pod load.
