@@ -170,11 +170,10 @@ func CheckUpgradesAgainst(ctx context.Context, galleries []config.Gallery, syste
 
 		// Fall back to OCI digest comparison when versions are unavailable.
 		if downloader.URI(galleryEntry.URI).LooksLikeOCI() {
-			// LooksLikeOCI() accepts either a known host (quay.io, ghcr.io, docker.io)
-			// or an explicit "oci://" scheme. name.ParseReference, which GetImageDigest
-			// calls, cannot parse the scheme — so a self-hosted registry (which must set
-			// it to be recognised at all) silently loses upgrade detection. Strip it, as
-			// the other call sites do (pkg/downloader/uri.go, gallery/importers/llama-cpp.go).
+			// Strip the oci:// scheme — name.ParseReference (called by
+			// GetImageDigest) cannot parse it. Self-hosted registries must
+			// set the scheme to be recognised at all, so without stripping
+			// they silently lose upgrade detection.
 			remoteDigest, err := oci.GetImageDigest(
 				strings.TrimPrefix(galleryEntry.URI, downloader.OCIPrefix), "", nil, nil)
 			if err != nil {
