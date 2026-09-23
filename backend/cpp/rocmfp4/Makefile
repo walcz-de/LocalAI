@@ -1,6 +1,6 @@
 # Pinned to the HEAD of the `rocmfp4` branch on https://github.com/walcz-de/llama.cpp-ROCmFP4.
 # Auto-bumped nightly by .github/workflows/bump_deps.yaml.
-ROCMFP4_VERSION?=5f91425d5034df4f4cac013c883d5d65c61d775d
+ROCMFP4_VERSION?=3ea20ad3e3c6c568bab4de6d135da068f9106b59
 LLAMA_REPO?=https://github.com/walcz-de/llama.cpp-ROCmFP4
 
 CMAKE_ARGS?=
