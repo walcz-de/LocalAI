@@ -1470,6 +1470,8 @@ github.com/walcz-de/LocalAGI v0.0.0-20260927115855-788d3af97316 h1:TdXzNiKJzTjfe
 github.com/walcz-de/LocalAGI v0.0.0-20260927115855-788d3af97316/go.mod h1:3WJd57N1uFxRyFC+igx4H03aYKIJ+DQ4HpxwsBY/dXk=
 github.com/walcz-de/LocalAGI v0.0.0-20260927120224-63a7f4968dfc h1:Hd3KBoQl3dkjEGQvv3Uye8JPyl5yl1zcVNZeDzq/loQ=
 github.com/walcz-de/LocalAGI v0.0.0-20260927120224-63a7f4968dfc/go.mod h1:3WJd57N1uFxRyFC+igx4H03aYKIJ+DQ4HpxwsBY/dXk=
+github.com/walcz-de/LocalAGI v0.0.0-20260927160255-dc3a4ceb7941 h1:otV0p/0dblf5+EgTqgyT6kOlyTmCgrVQu8gYrfiAscc=
+github.com/walcz-de/LocalAGI v0.0.0-20260927160255-dc3a4ceb7941/go.mod h1:3WJd57N1uFxRyFC+igx4H03aYKIJ+DQ4HpxwsBY/dXk=
 github.com/walcz-de/LocalRecall v0.6.4-0.20260911133707-e7a241c97839 h1:+6/XOoUtLQAtbe0D05tgtB9TMvJLI6nupr1h5UvXSzc=
 github.com/walcz-de/LocalRecall v0.6.4-0.20260911133707-e7a241c97839/go.mod h1:28k5n19raUrkuwXkacdNsBlj8yuSnGhpT16tu+2+4dU=
 github.com/walcz-de/cogito v0.11.1-0.20260712155709-85b99c144b9f h1:jPS4XgPPNVYQjXEfeGd21ejdV9stt0Ec7piSq78HmGI=
