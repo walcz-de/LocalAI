@@ -559,7 +559,7 @@ require (
 	lukechampine.com/blake3 v1.4.1 // indirect
 )
 
-replace github.com/mudler/LocalAGI => github.com/walcz-de/LocalAGI v0.0.0-20260912104110-716a8404829f
+replace github.com/mudler/LocalAGI => github.com/walcz-de/LocalAGI v0.0.0-20260927115855-788d3af97316
 
 replace github.com/mudler/skillserver => github.com/walcz-de/skillserver v0.0.7-0.20260711083112-62ca2188b2a7
 
