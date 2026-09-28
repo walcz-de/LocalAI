@@ -457,20 +457,14 @@ func (s *AgentPoolService) Chat(name, message string) (string, error) {
 		outcome := "completed"
 		if response == nil {
 			outcome = "cancelled"
-		} else if response.Error != nil {
+		} else if response.Error != nil || strings.TrimSpace(response.Response) == "" {
 			outcome = "error"
 		}
 		recordAgentRun(name, outcome, time.Since(started).Seconds())
 
-		if response == nil {
+		if failure := chatFailure(response); failure != "" {
 			errMsg, _ := json.Marshal(map[string]any{
-				"error":     "agent request failed or was cancelled",
-				"timestamp": time.Now().Format(time.RFC3339),
-			})
-			manager.Send(sse.NewMessage(string(errMsg)).WithEvent("json_error"))
-		} else if response.Error != nil {
-			errMsg, _ := json.Marshal(map[string]any{
-				"error":     response.Error.Error(),
+				"error":     failure,
 				"timestamp": time.Now().Format(time.RFC3339),
 			})
 			manager.Send(sse.NewMessage(string(errMsg)).WithEvent("json_error"))
@@ -522,6 +516,22 @@ func (s *AgentPoolService) Chat(name, message string) (string, error) {
 	}()
 
 	return messageID, nil
+}
+
+// chatFailure reports why a finished agent run cannot be delivered as a chat
+// reply, or "" when it can. A chat must always end with an answer or an error:
+// a run that finishes without error but with an empty response used to be sent
+// as a blank agent message, which chat clients render as nothing at all.
+func chatFailure(response *coreTypes.JobResult) string {
+	switch {
+	case response == nil:
+		return "agent request failed or was cancelled"
+	case response.Error != nil:
+		return response.Error.Error()
+	case strings.TrimSpace(response.Response) == "":
+		return "agent finished without producing a response"
+	}
+	return ""
 }
 
 func (s *AgentPoolService) appendLocalAGIKBCitations(response, agentKey, message string, states []coreTypes.ActionState) string {
