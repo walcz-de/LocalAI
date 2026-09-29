@@ -292,6 +292,7 @@ func (r *RunCMD) Run(ctx *cliContext.Context) error {
 	}
 
 	opts := []config.AppOption{
+		config.WithProxyAPIKeyEnvLookup(os.Getenv),
 		config.WithContext(context.Background()),
 		config.WithArtifactDownloadConcurrency(r.ArtifactDownloadConcurrency),
 		config.WithModelArtifactMaterializer(modelartifacts.NewDefaultManager(
