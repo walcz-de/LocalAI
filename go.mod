@@ -561,4 +561,4 @@ replace github.com/mudler/LocalAGI => github.com/walcz-de/LocalAGI v0.0.0-202609
 
 replace github.com/mudler/skillserver => github.com/walcz-de/skillserver v0.0.7-0.20261002083035-f1c4ac8f7192
 
-replace github.com/mudler/cogito => github.com/walcz-de/cogito v0.11.1-0.20261002133512-0400c221d249
+replace github.com/mudler/cogito => github.com/walcz-de/cogito v0.11.1-0.20261002171934-fcb7c3ae9660
