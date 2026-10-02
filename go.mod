@@ -559,6 +559,6 @@ require (
 
 replace github.com/mudler/LocalAGI => github.com/walcz-de/LocalAGI v0.0.0-20260928142008-27ae188d339e
 
-replace github.com/mudler/skillserver => github.com/walcz-de/skillserver v0.0.7-0.20260711083112-62ca2188b2a7
+replace github.com/mudler/skillserver => github.com/walcz-de/skillserver v0.0.7-0.20261002083035-f1c4ac8f7192
 
-replace github.com/mudler/cogito => github.com/walcz-de/cogito v0.11.1-0.20260928090554-ea06ada8e3d3
+replace github.com/mudler/cogito => github.com/walcz-de/cogito v0.11.1-0.20261002112502-d96c205495d2
