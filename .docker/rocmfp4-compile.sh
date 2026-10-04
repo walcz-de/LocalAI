@@ -23,6 +23,11 @@ if [[ -n "${CUDA_DOCKER_ARCH:-}" ]]; then
   rm -rf /LocalAI/backend/cpp/rocmfp4-*-build
 fi
 
+# The shared grpc-server links JPEG and zlib for the strict decision decoders (upstream #12449 installs them in
+# llama-cpp-compile.sh); this backend compiles the same grpc-server and needs them too.
+sh /LocalAI/.docker/apt-mirror.sh || true
+apt-get update -qq && apt-get install -y --no-install-recommends libjpeg-dev zlib1g-dev
+
 cd /LocalAI/backend/cpp/rocmfp4
 
 # rocmfp4 is ROCm-only: the single matrix entry is hipblas/amd64, so BUILD_TYPE is always
