@@ -243,6 +243,60 @@ options:
 
 By default each request runs on its own. Raise `batch_max_size` (for example 4 to 16) to enable batching; it pays off on GPU under concurrent load, where coalescing the per-step decode GEMMs across requests is a large throughput win. Leave it at 1 on CPU and for low-concurrency setups, where batching only adds latency. Batching only affects concurrent unary requests; streaming sessions always run on their own.
 
+### Moondream Ultra and Redux
+
+[Moondream](https://huggingface.co/moondream) publishes two derivatives of NVIDIA parakeet-tdt-0.6b-v3, Ultra and Redux. Both have a voice-activity-detection (VAD) head. The gallery has five entries, built from the GGUFs in [`mudler/parakeet-cpp-gguf`](https://huggingface.co/mudler/parakeet-cpp-gguf):
+
+| Gallery entry | File | Runs on |
+|---|---|---|
+| `parakeet-cpp-moondream-ultra-f16` | `ultra-f16.gguf` | CPU and GPU |
+| `parakeet-cpp-moondream-ultra-q8_0` | `ultra-q8_0.gguf` | CPU and GPU |
+| `parakeet-cpp-moondream-redux-packed` | `redux-packed.gguf` | CPU only, offline only |
+| `parakeet-cpp-moondream-redux-f16` | `redux-f16.gguf` | any backend, can stream |
+| `parakeet-cpp-moondream-redux-q8_0` | `redux-q8_0.gguf` | any backend |
+
+The packed Redux file stores the encoder as ternary weights (213 MB). It cannot load on a GPU backend and cannot stream. If a GPU build fails to load it, check the backend log for the library message and use the `redux-f16` or `redux-q8_0` entry instead. The weights are CC-BY-4.0: credit Moondream and NVIDIA.
+
+With `vad:true`, long audio is cut at pauses found by the model's VAD head into pieces of at most 30 seconds, and each piece is transcribed in turn. Word timestamps stay relative to the whole file. Audio of 30 seconds or less gives the same result as without the option. The gallery entries set it. Add it to your own model YAML like this:
+
+```yaml
+name: moondream-ultra
+backend: parakeet-cpp
+parameters:
+  model: ultra-q8_0.gguf
+options:
+- vad:true   # cut long audio at pauses (default false); needs a model with a VAD head
+```
+
+`vad:true` applies to offline transcription only and bypasses dynamic batching, because the batched entry point has no VAD variant. Streaming is not affected. A model without a VAD head fails each request with `model has no VAD head`, and a `libparakeet.so` that is too old to export the VAD entry point fails the load. Remove the option for models that have no VAD head.
+
+### Cutting long audio with Silero (`vad_model`)
+
+A model without a VAD head, such as `parakeet-cpp-tdt-0.6b-v3` or a Nemotron model, can cut long audio with [Silero VAD](https://github.com/snakers4/silero-vad) instead. Name a Silero GGUF in the `vad_model` option. The path is resolved against the models directory, like the other companion files. `vad_model` implies `vad`:
+
+```yaml
+name: parakeet-v3-silero
+backend: parakeet-cpp
+parameters:
+  model: parakeet-cpp/tdt-0.6b-v3-f16.gguf
+options:
+- vad_model:parakeet-cpp/silero-vad-f16.gguf   # Silero GGUF that cuts long audio at pauses
+- vad_min_pause:0.3                            # optional, seconds
+```
+
+The gallery entry `parakeet-cpp-tdt-0.6b-v3-silero-vad` installs both files with this configuration. Audio of 30 seconds or less is transcribed whole and the VAD does not run. `vad:true` alone keeps meaning "use the model's own head". With `vad_model` set, the Silero model is used even if the ASR model has a head.
+
+The segmenter options below apply to both `vad:true` and `vad_model`. Each is optional; an unset value keeps the default of the detector in use, and a bad value fails the load:
+
+| Option | Unit | Meaning |
+|---|---|---|
+| `vad_threshold` | 0 to 1 | A frame is speech when its probability is at least this |
+| `vad_min_pause` | seconds | A silence this long separates two pieces |
+| `vad_min_speech` | seconds | Shorter speech runs are dropped |
+| `vad_max_segment` | seconds | Cap on the length of a piece (default 30) |
+
+`vad_speech_pad` (seconds) pads each region and only affects the [VAD endpoint]({{%relref "features/voice-activity-detection" %}}). `vad_model` needs a `libparakeet.so` that exports `parakeet_capi_transcribe_path_json_vad_with`; an older library fails the load with a message that names it.
+
 ## See also
 
 - [Audio Transform]({{< relref "audio-transform.md" >}}) - clean up the audio (echo cancellation, noise suppression, dereverberation) before passing it to a transcription model.

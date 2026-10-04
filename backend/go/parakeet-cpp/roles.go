@@ -18,6 +18,7 @@ const (
 	modelKindDiarization = 2
 	modelKindSound       = 3
 	modelKindSpeaker     = 4
+	modelKindVAD         = 5 // Silero VAD GGUF
 )
 
 // Diarization streaming latency modes (mirrors PARAKEET_DIAR_LATENCY_* in
@@ -41,6 +42,8 @@ func modelKindName(kind int32) string {
 		return "sound"
 	case modelKindSpeaker:
 		return "speaker"
+	case modelKindVAD:
+		return "VAD"
 	default:
 		return "unknown"
 	}
@@ -133,10 +136,11 @@ func (p *ParakeetCpp) loadRoles(opts *pb.ModelOptions) error {
 	asrModelOpt := optString(opts, "asr_model")
 	soundModelOpt := optString(opts, "sound_model")
 	speakerModelOpt := optString(opts, "speaker_model")
-	hasCompanionOpts := diarModelOpt != "" || asrModelOpt != "" || soundModelOpt != "" || speakerModelOpt != ""
+	vadModelOpt := optString(opts, "vad_model")
+	hasCompanionOpts := diarModelOpt != "" || asrModelOpt != "" || soundModelOpt != "" || speakerModelOpt != "" || vadModelOpt != ""
 
 	if hasCompanionOpts && CppModelKind == nil {
-		return errors.New("parakeet-cpp: asr_model/diarization_model/sound_model/speaker_model options need " +
+		return errors.New("parakeet-cpp: asr_model/diarization_model/sound_model/speaker_model/vad_model options need " +
 			"parakeet_capi_model_kind (ABI v8) to verify what they load; the loaded libparakeet.so " +
 			"is too old to report companion model roles")
 	}
@@ -166,7 +170,12 @@ func (p *ParakeetCpp) loadRoles(opts *pb.ModelOptions) error {
 		// No ctx to ask for last_error (the C-API's last-error buffer lives on
 		// the ctx that was never returned). Surface the path so the operator
 		// at least knows which load failed.
-		return fmt.Errorf("parakeet-cpp: parakeet_capi_load failed for %q", opts.ModelFile)
+		//
+		// A packed ternary Redux GGUF (redux-packed) is the likeliest cause on a
+		// GPU build: the library refuses it with a message that goes to its own
+		// log, not through the C-API, so name the cause here.
+		return fmt.Errorf("parakeet-cpp: parakeet_capi_load failed for %q (see the backend log for the library message; "+
+			"a packed ternary Redux model is CPU only and is refused on a GPU backend, use the redux-f16 or redux-q8_0 file there)", opts.ModelFile)
 	}
 	loaded := []uintptr{primary}
 	// freeLoaded undoes everything loadRoles opened this call: every context
@@ -179,7 +188,7 @@ func (p *ParakeetCpp) loadRoles(opts *pb.ModelOptions) error {
 		for _, c := range loaded {
 			CppFree(c)
 		}
-		p.ctxPtr, p.diarCtx, p.tagCtx, p.spkCtx = 0, 0, 0, 0
+		p.ctxPtr, p.diarCtx, p.tagCtx, p.spkCtx, p.vadCtx = 0, 0, 0, 0, 0
 		p.companions = nil
 	}
 
@@ -200,6 +209,8 @@ func (p *ParakeetCpp) loadRoles(opts *pb.ModelOptions) error {
 		freeLoaded()
 		return errors.New("parakeet-cpp: a speaker model cannot be the primary model; " +
 			"use it as speaker_model: next to a diarization model")
+	case modelKindVAD:
+		p.vadCtx = primary
 	default:
 		p.ctxPtr = primary
 	}
@@ -217,6 +228,9 @@ func (p *ParakeetCpp) loadRoles(opts *pb.ModelOptions) error {
 		{"speaker_model", speakerModelOpt, modelKindSpeaker,
 			func(pp *ParakeetCpp, c uintptr) { pp.spkCtx = c },
 			func(pp *ParakeetCpp) uintptr { return pp.spkCtx }},
+		{"vad_model", vadModelOpt, modelKindVAD,
+			func(pp *ParakeetCpp, c uintptr) { pp.vadCtx = c },
+			func(pp *ParakeetCpp) uintptr { return pp.vadCtx }},
 	}
 	for _, spec := range specs {
 		if spec.value == "" {
@@ -240,13 +254,18 @@ func (p *ParakeetCpp) loadRoles(opts *pb.ModelOptions) error {
 		loaded = append(loaded, cctx)
 		if gotKind := CppModelKind(cctx); gotKind != spec.wantKind {
 			freeLoaded()
-			return fmt.Errorf("parakeet-cpp: %s %q is a %s model, expected a %s model",
-				spec.optName, resolved, modelKindName(gotKind), modelKindName(spec.wantKind))
+			return fmt.Errorf("parakeet-cpp: %s %q is %s %s model, expected %s %s model",
+				spec.optName, resolved, indefiniteArticle(modelKindName(gotKind)), modelKindName(gotKind),
+				indefiniteArticle(modelKindName(spec.wantKind)), modelKindName(spec.wantKind))
 		}
 		spec.assign(p, cctx)
 		p.companions = append(p.companions, cctx)
 	}
 
+	if vadModelOpt != "" && p.ctxPtr == 0 {
+		freeLoaded()
+		return errors.New("parakeet-cpp: vad_model cuts audio for transcription and needs an ASR model (the primary or asr_model:)")
+	}
 	if p.spkCtx != 0 && p.diarCtx == 0 {
 		freeLoaded()
 		return errors.New("parakeet-cpp: speaker_model needs a diarization model (the primary or diarization_model:)")
@@ -270,6 +289,9 @@ func (p *ParakeetCpp) notASRError() error {
 	case p.tagCtx != 0:
 		return errors.New("parakeet-cpp: loaded model is a sound model, not ASR " +
 			"(use SoundDetection)")
+	case p.vadCtx != 0:
+		return errors.New("parakeet-cpp: loaded model is a Silero VAD model, not ASR " +
+			"(use the VAD endpoint, or load an ASR model with vad_model:)")
 	default:
 		return nil
 	}
