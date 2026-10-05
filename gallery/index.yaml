@@ -373,7 +373,7 @@
   files:
     - filename: ds4flash.gguf
       uri: https://huggingface.co/unsloth/DeepSeek-V4-Flash-Vision-Exp-GGUF
-      sha256: 91e503ce52714f45e3d3447f23161c6ab6d4a9341a9fcabf0dc1acbbba4418ce
+      sha256: a1456fc5fc3257c53fa0317b40e9a49f3badb059b69ca6f7f22093325f4c584b
 - name: "qwopus3.8-27b-flash-v2"
   variants:
     - model: qwopus3.8-27b-flash-v2-q8
@@ -54685,6 +54685,178 @@
     - filename: parakeet-cpp/ced-base-q8_0.gguf
       uri: huggingface://mudler/ced-gguf/ced-base-q8_0.gguf
       sha256: bd34a7710169f0047fea17267965d211f967828ab25ba6fb9d3768481393f6e2
+- name: parakeet-cpp-bundle-small
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://huggingface.co/mudler/parakeet-cpp-gguf
+    - https://github.com/mudler/parakeet.cpp
+    - https://huggingface.co/nvidia/parakeet-tdt_ctc-110m
+    - https://huggingface.co/nvidia/Nemotron-3-Diarization
+    - https://huggingface.co/mispeech/ced-small
+    - https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM
+    - https://github.com/snakers4/silero-vad
+  description: |
+    Parakeet TDT+CTC 110M with diarization, sound events, speaker naming and VAD. One bundle GGUF file (about 338 MB) that holds five models for the parakeet-cpp backend
+    (C++/ggml port of NVIDIA NeMo Parakeet): Parakeet TDT+CTC 110M (English, Q8_0), Nemotron-3-Diarization (Q8_0), CED-Small sound
+    events (Q8_0), WeSpeaker ResNet34-LM speaker encoder (F32) and Silero VAD (F16). One install serves
+    transcription (/v1/audio/transcriptions), voice activity detection (/v1/vad), speaker diarization with
+    text and named speakers (/v1/audio/diarization) and sound events (/v1/audio/classification). The vad:true
+    option cuts long audio at pauses found by Silero before it transcribes. The bundle options
+    (diar_component, sound_component, speaker_component) load each model from the same file; see the
+    audio-to-text docs for the option list.
+    A bundle has no single license: each model keeps its own, listed in the file header and in the NOTICE file
+    next to the file. Parakeet TDT+CTC 110M by NVIDIA is CC-BY-4.0, Nemotron-3-Diarization by NVIDIA is OpenMDW-1.1, CED-Small is Apache-2.0
+    (as stated on the model card; the upstream code repository is GPL-3.0 and the original checkpoint records say
+    CC-BY-4.0, so the licence of the weights is not consistent upstream; the model here is converted, not trained),
+    WeSpeaker ResNet34-LM by the WeSpeaker project is CC-BY-4.0, Silero VAD by the Silero Team is MIT. The
+    weights were converted to GGUF and quantised where stated; nothing was retrained.
+  license: other
+  tags:
+    - parakeet
+    - parakeet-cpp
+    - nemotron
+    - sortformer
+    - ced
+    - silero
+    - bundle
+    - asr
+    - speech-recognition
+    - stt
+    - vad
+    - diarization
+    - speaker-diarization
+    - sound-classification
+    - gguf
+    - ggml
+    - quantized
+  overrides:
+    backend: parakeet-cpp
+    known_usecases:
+      - transcript
+      - vad
+      - diarization
+      - sound_classification
+    name: parakeet-cpp-bundle-small
+    options:
+      - vad:true
+      - diar_component:diar
+      - sound_component:ced
+      - speaker_component:voice
+    parameters:
+      model: parakeet-cpp/parakeet-bundle-small.gguf
+  files:
+    - filename: parakeet-cpp/parakeet-bundle-small.gguf
+      uri: huggingface://mudler/parakeet-cpp-gguf/parakeet-bundle-small.gguf
+      sha256: 5f2c6697eb08d4d67e858692d4223a9d911aacc51ae16cf2aee9e760f8a2269a
+- name: parakeet-cpp-bundle-standard
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://huggingface.co/mudler/parakeet-cpp-gguf
+    - https://github.com/mudler/parakeet.cpp
+    - https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
+    - https://huggingface.co/nvidia/Nemotron-3-Diarization
+    - https://huggingface.co/mispeech/ced-small
+    - https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM
+    - https://github.com/snakers4/silero-vad
+  description: |
+    Parakeet TDT 0.6B v3 (multilingual) with diarization, sound events, speaker naming and VAD. One bundle GGUF file (about 1101 MB) that holds five models for the parakeet-cpp backend
+    (C++/ggml port of NVIDIA NeMo Parakeet): Parakeet TDT 0.6B v3 (multilingual, Q8_0), Nemotron-3-Diarization (Q8_0), CED-Small sound
+    events (Q8_0), WeSpeaker ResNet34-LM speaker encoder (F32) and Silero VAD (F16). One install serves
+    transcription (/v1/audio/transcriptions), voice activity detection (/v1/vad), speaker diarization with
+    text and named speakers (/v1/audio/diarization) and sound events (/v1/audio/classification). The vad:true
+    option cuts long audio at pauses found by Silero before it transcribes. The bundle options
+    (diar_component, sound_component, speaker_component) load each model from the same file; see the
+    audio-to-text docs for the option list.
+    A bundle has no single license: each model keeps its own, listed in the file header and in the NOTICE file
+    next to the file. Parakeet TDT 0.6B v3 by NVIDIA is CC-BY-4.0, Nemotron-3-Diarization by NVIDIA is OpenMDW-1.1, CED-Small is Apache-2.0
+    (as stated on the model card; the upstream code repository is GPL-3.0 and the original checkpoint records say
+    CC-BY-4.0, so the licence of the weights is not consistent upstream; the model here is converted, not trained),
+    WeSpeaker ResNet34-LM by the WeSpeaker project is CC-BY-4.0, Silero VAD by the Silero Team is MIT. The
+    weights were converted to GGUF and quantised where stated; nothing was retrained.
+  license: other
+  tags:
+    - parakeet
+    - parakeet-cpp
+    - nemotron
+    - sortformer
+    - ced
+    - silero
+    - bundle
+    - asr
+    - speech-recognition
+    - stt
+    - vad
+    - diarization
+    - speaker-diarization
+    - sound-classification
+    - gguf
+    - ggml
+    - quantized
+  overrides:
+    backend: parakeet-cpp
+    known_usecases:
+      - transcript
+      - vad
+      - diarization
+      - sound_classification
+    name: parakeet-cpp-bundle-standard
+    options:
+      - vad:true
+      - diar_component:diar
+      - sound_component:ced
+      - speaker_component:voice
+    parameters:
+      model: parakeet-cpp/parakeet-bundle-standard.gguf
+  files:
+    - filename: parakeet-cpp/parakeet-bundle-standard.gguf
+      uri: huggingface://mudler/parakeet-cpp-gguf/parakeet-bundle-standard.gguf
+      sha256: 85304e3bb49de04b84a7d0c76baaa7dedd1a0c02c0920078a99f92c00cffbdf6
+- name: parakeet-cpp-bundle-moondream-redux
+  url: github:mudler/LocalAI/gallery/virtual.yaml@master
+  urls:
+    - https://huggingface.co/mudler/parakeet-cpp-gguf
+    - https://github.com/mudler/parakeet.cpp
+    - https://huggingface.co/moondream/parakeet-redux
+    - https://github.com/snakers4/silero-vad
+  description: |
+    Moondream Redux with Silero VAD in one bundle GGUF file (about 215 MB) for the parakeet-cpp backend
+    (C++/ggml port of NVIDIA NeMo Parakeet). Redux is Moondream's ternary-encoder derivative of NVIDIA
+    parakeet-tdt-0.6b-v3 (TDT, 0.6B), kept as published with the packed ternary weights. The bundle also holds
+    Silero VAD (F16). One install serves transcription (/v1/audio/transcriptions) and voice activity detection
+    (/v1/vad). The vad:true option cuts long audio at pauses before it transcribes, with Silero as the VAD source.
+    CPU only and offline only: the library refuses the packed Redux model on a GPU backend and does not stream it.
+    For a GPU or for streaming, use the redux-f16 or redux-q8_0 entry instead.
+    A bundle has no single license: each model keeps its own, listed in the file header and in the NOTICE file
+    next to the file. Parakeet Redux by Moondream, derived from Parakeet TDT 0.6B v3 by NVIDIA, is CC-BY-4.0
+    (credit Moondream and NVIDIA); Silero VAD by the Silero Team is MIT. The weights were converted to GGUF;
+    nothing was retrained.
+  license: other
+  tags:
+    - parakeet
+    - parakeet-cpp
+    - moondream
+    - silero
+    - bundle
+    - asr
+    - speech-recognition
+    - stt
+    - vad
+    - gguf
+    - ggml
+  overrides:
+    backend: parakeet-cpp
+    known_usecases:
+      - transcript
+      - vad
+    name: parakeet-cpp-bundle-moondream-redux
+    options:
+      - vad:true
+    parameters:
+      model: parakeet-cpp/parakeet-bundle-moondream-redux.gguf
+  files:
+    - filename: parakeet-cpp/parakeet-bundle-moondream-redux.gguf
+      uri: huggingface://mudler/parakeet-cpp-gguf/parakeet-bundle-moondream-redux.gguf
+      sha256: d7c5bff66b1dbc02f4c7a83148b0836b57805676c844193c214c751249853d7b
 - name: moss-transcribe-cpp-0.9b
   url: github:mudler/LocalAI/gallery/virtual.yaml@master
   urls:
@@ -64955,9 +65127,7 @@
   urls:
     - https://huggingface.co/convaiinnovations/laya
     - https://huggingface.co/ggml-org/Laya-GGUF/tree/da4b4753d62197659d8c90103cd4c43bef9afea6
-  description: Laya typed decision model for text-only choice, score, and noul requests
-    through /v1/systemone. Uses native llama.cpp decisions, not text generation. No
-    image/projector support. Evaluate accuracy for your own tasks.
+  description: Laya typed decision model for text-only choice, score, and noul requests through /v1/systemone. Uses native llama.cpp decisions, not text generation. No image/projector support. Evaluate accuracy for your own tasks.
   license: apache-2.0
   tags:
     - decisions
@@ -64980,9 +65150,7 @@
   urls:
     - https://huggingface.co/jaredpalmer/kev-4b
     - https://huggingface.co/ggml-org/Kev-4B-GGUF/tree/d924f2e2c3872da8b8aaf3eb4453b4126deceb79
-  description: Kev-4B typed decision model for text-only choice, score, and noul requests
-    through /v1/systemone. Uses native llama.cpp decisions, not text generation. No
-    image/projector support. Evaluate accuracy for your own tasks.
+  description: Kev-4B typed decision model for text-only choice, score, and noul requests through /v1/systemone. Uses native llama.cpp decisions, not text generation. No image/projector support. Evaluate accuracy for your own tasks.
   license: apache-2.0
   tags:
     - decisions
@@ -65005,9 +65173,7 @@
   urls:
     - https://huggingface.co/interfaze-ai/lev
     - https://huggingface.co/ggml-org/lev-GGUF/tree/3e9286a79ae857b4e1de051c92fab6dc574581ce
-  description: lev typed decision model for text-only choice, score, and noul requests
-    through /v1/systemone. Uses native llama.cpp decisions, not text generation. No
-    image/projector support. Evaluate accuracy for your own tasks.
+  description: lev typed decision model for text-only choice, score, and noul requests through /v1/systemone. Uses native llama.cpp decisions, not text generation. No image/projector support. Evaluate accuracy for your own tasks.
   license: apache-2.0
   tags:
     - decisions
@@ -65030,11 +65196,7 @@
   urls:
     - https://huggingface.co/openjev/openjev
     - https://huggingface.co/ggml-org/OpenJev-GGUF/tree/10840f375658dea7afc5ff4711127bca8218b560
-  description: 'OpenJev typed decision model for text and image choice, score, and noul
-    requests through /v1/systemone. Uses native llama.cpp decisions, not text generation.
-    Includes the pinned Q8 vision projector. Evaluate accuracy for your own tasks. Noncommercial
-    use only under CC-BY-NC-4.0. Large model: provision memory separately from download
-    size.'
+  description: 'OpenJev typed decision model for text and image choice, score, and noul requests through /v1/systemone. Uses native llama.cpp decisions, not text generation. Includes the pinned Q8 vision projector. Evaluate accuracy for your own tasks. Noncommercial use only under CC-BY-NC-4.0. Large model: provision memory separately from download size.'
   license: cc-by-nc-4.0
   tags:
     - decisions
