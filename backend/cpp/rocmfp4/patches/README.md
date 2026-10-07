@@ -28,8 +28,11 @@ Rules:
 
 ## Current series
 
-- `0001-revert-c7d87229-hip-integrated-crossover.patch` — identical to the `llama-cpp` copy.
-  Reverts ggml-org/llama.cpp#25992: `prop.integrated` on HIP iGPUs (gfx1151/UMA) mixes up
-  responses across requests under `-np 4 --kv-unified`, which is our standing
-  `LLAMACPP_PARALLEL=4` configuration. Drop it here and in `llama-cpp` together, once fixed
-  upstream.
+- `0002-kolibri1-architecture.patch` — Kolibri-1 (Aleph Alpha, `kolibri1`) support, the C++ part of
+  the community patch shipped with the Kolibri-1 GGUF (Apache-2.0). Not fork skew and not a revert:
+  a new model architecture upstream does not carry yet (feature request ggml-org/llama.cpp#29922).
+  Drop it once llama.cpp supports `kolibri1` and the fork is rebased onto that pin.
+
+(The former `0001-revert-c7d87229-hip-integrated-crossover.patch` was retired when upstream
+reverted c7d87229 itself — see the `llama-cpp` pin bump of 2026-09-12.)
+
