@@ -1,5 +1,12 @@
 basePath: /
 definitions:
+  auth.WebSocketTicketResponse:
+    properties:
+      expires_at:
+        type: string
+      ticket:
+        type: string
+    type: object
   config.Gallery:
     properties:
       artifact_verification:
@@ -578,6 +585,39 @@ definitions:
         type: integer
       success:
         type: boolean
+    type: object
+  localai.MotionSessionInfo:
+    properties:
+      frames:
+        type: integer
+      id:
+        type: string
+      model:
+        type: string
+      poses:
+        type: integer
+      profile:
+        type: string
+      time_origin:
+        type: string
+      upload_accepted:
+        type: integer
+      upload_dropped:
+        type: integer
+    type: object
+  localai.MotionSessionRequest:
+    properties:
+      model:
+        type: string
+      profile:
+        type: string
+      time_origin:
+        type: string
+    type: object
+  localai.MotionTicketRequest:
+    properties:
+      origin:
+        type: string
     type: object
   localai.TTSModelVoices:
     properties:
@@ -4665,6 +4705,96 @@ paths:
       summary: Estimate VRAM usage for a model
       tags:
       - config
+  /api/motion/sessions:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Model, output profile and source clock origin
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/localai.MotionSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/localai.MotionSessionInfo'
+      summary: Create a motion capture session
+      tags:
+      - motion
+  /api/motion/sessions/{id}:
+    delete:
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+      summary: Close a motion session
+      tags:
+      - motion
+    get:
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/localai.MotionSessionInfo'
+      summary: Get motion session status
+      tags:
+      - motion
+  /api/motion/sessions/{id}/poses:
+    get:
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "101":
+          description: Switching Protocols
+      summary: Stream motion frames and poses over a duplex WebSocket
+      tags:
+      - motion
+  /api/motion/sessions/{id}/tickets:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Browser origin
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/localai.MotionTicketRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/auth.WebSocketTicketResponse'
+      summary: Issue a motion WebSocket ticket (30 seconds, single use)
+      tags:
+      - motion
   /api/nodes/{id}/max-replicas-per-model:
     delete:
       parameters:
@@ -5616,6 +5746,42 @@ paths:
               $ref: '#/definitions/config.Gallery'
             type: array
       summary: List all Galleries
+      tags:
+      - models
+  /models/import:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Writes the posted model configuration. A config referencing
+        remote assets (download_files entries, URI-valued model/mmproj)
+        is enqueued on the gallery job queue and answered with a job id
+        plus status URL to poll, like a gallery install; a config with
+        no downloads is written synchronously and answered with a
+        plain success response. A queued import runs the gallery
+        installer, which also adds recommended inference defaults the
+        config leaves unset and installs the backend when automatic
+        backend installation is enabled; the synchronous path stores
+        the body as posted.
+      parameters:
+      - description: model configuration (YAML or JSON body)
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'remote assets present: job id and status URL'
+          schema:
+            $ref: '#/definitions/schema.GalleryResponse'
+        "400":
+          description: invalid or incomplete configuration
+          schema:
+            $ref: '#/definitions/localai.ModelResponse'
+      summary: Import a model from a raw YAML or JSON configuration
       tags:
       - models
   /models/jobs:

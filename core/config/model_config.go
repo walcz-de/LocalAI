@@ -4,8 +4,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"math"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -830,6 +833,11 @@ func (c *MCPConfig) MCPConfigFromYAML() (MCPGenericConfig[MCPRemoteServers], MCP
 	if err := yaml.Unmarshal([]byte(c.Stdio), &stdio); err != nil {
 		return remote, stdio, err
 	}
+	for name, server := range remote.Servers {
+		if err := server.Validate(); err != nil {
+			return remote, stdio, fmt.Errorf("remote MCP server %q: %w", name, err)
+		}
+	}
 	return remote, stdio, nil
 }
 
@@ -846,6 +854,97 @@ type (
 type MCPRemoteServer struct {
 	URL   string `json:"url,omitempty"`
 	Token string `json:"token,omitempty"`
+	// OAuth2 makes LocalAI obtain short-lived access tokens with the
+	// client_credentials grant instead of sending a static Token. The two are
+	// mutually exclusive.
+	OAuth2 *MCPOAuth2Config `yaml:"oauth2,omitempty" json:"oauth2,omitempty"`
+}
+
+// @Description OAuth2 client_credentials settings for a remote MCP server
+type MCPOAuth2Config struct {
+	TokenURL string `yaml:"token_url,omitempty" json:"token_url,omitempty"`
+	// ClientID / ClientSecret may be given literally, or by naming an
+	// environment variable (*_env) so the secret stays out of the model YAML.
+	// Exactly one of the two forms must be set for each.
+	ClientID        string   `yaml:"client_id,omitempty" json:"client_id,omitempty"`
+	ClientIDEnv     string   `yaml:"client_id_env,omitempty" json:"client_id_env,omitempty"`
+	ClientSecret    string   `yaml:"client_secret,omitempty" json:"client_secret,omitempty"`
+	ClientSecretEnv string   `yaml:"client_secret_env,omitempty" json:"client_secret_env,omitempty"`
+	Scopes          []string `yaml:"scopes,omitempty" json:"scopes,omitempty"`
+	// EndpointParams are extra form parameters for the token request, e.g.
+	// "audience" (Auth0/Keycloak) or "resource" (RFC 8707).
+	EndpointParams map[string]string `yaml:"endpoint_params,omitempty" json:"endpoint_params,omitempty"`
+}
+
+// Validate checks the static shape of a remote server entry. Environment
+// variables are deliberately not resolved here: in distributed mode the
+// connection is made on an agent worker, whose environment may differ from
+// the frontend that loads the YAML.
+func (s MCPRemoteServer) Validate() error {
+	if s.OAuth2 == nil {
+		return nil
+	}
+	if s.Token != "" {
+		return errors.New("token and oauth2 are mutually exclusive")
+	}
+	o := s.OAuth2
+	if o.TokenURL == "" {
+		return errors.New("oauth2.token_url is required")
+	}
+	if err := validateTokenURL(o.TokenURL); err != nil {
+		return err
+	}
+	if err := exactlyOne("client_id", o.ClientID, o.ClientIDEnv); err != nil {
+		return err
+	}
+	return exactlyOne("client_secret", o.ClientSecret, o.ClientSecretEnv)
+}
+
+// validateTokenURL requires https for the token endpoint so the client
+// secret is not sent in clear text. Loopback hosts are exempt to allow
+// local identity providers and tests.
+func validateTokenURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return fmt.Errorf("oauth2.token_url %q is not a valid absolute URL", raw)
+	}
+	switch u.Scheme {
+	case "https":
+		return nil
+	case "http":
+		switch u.Hostname() {
+		case "localhost", "127.0.0.1", "::1":
+			return nil
+		}
+	}
+	return errors.New("oauth2.token_url must use https (http is allowed only for localhost, 127.0.0.1 and ::1)")
+}
+
+func exactlyOne(field, literal, env string) error {
+	switch {
+	case literal != "" && env != "":
+		return fmt.Errorf("oauth2.%s and oauth2.%s_env are mutually exclusive", field, field)
+	case literal == "" && env == "":
+		return fmt.Errorf("oauth2 requires %s or %s_env", field, field)
+	}
+	return nil
+}
+
+// String redacts credentials when server entries are formatted as text.
+func (s MCPRemoteServer) String() string {
+	auth := "none"
+	switch {
+	case s.OAuth2 != nil:
+		auth = "oauth2(" + s.OAuth2.TokenURL + ")"
+	case s.Token != "":
+		auth = "token([redacted])"
+	}
+	return fmt.Sprintf("{url: %s, auth: %s}", s.URL, auth)
+}
+
+// LogValue also redacts credentials in structured JSON logs, which bypass String.
+func (s MCPRemoteServer) LogValue() slog.Value {
+	return slog.StringValue(s.String())
 }
 
 // @Description MCP STDIO server configuration
@@ -2144,6 +2243,11 @@ const (
 	// Marks a model as an image upscaler served by the UpscaleImage RPC.
 	FLAG_UPSCALE ModelConfigUsecase = 1 << 26
 
+	// Marks a model as a motion-capture backend (GEM-X pose streaming).
+	// Keep every usecase flag a distinct bit: the "Usecase flags" spec
+	// guards against two flags silently sharing one.
+	FLAG_MOTION ModelConfigUsecase = 1 << 27
+
 	// Common Subsets
 	FLAG_LLM ModelConfigUsecase = FLAG_CHAT | FLAG_COMPLETION | FLAG_EDIT
 )
@@ -2153,7 +2257,7 @@ const (
 // both text/language). A model is multimodal when its usecases span 2+ groups.
 var ModalityGroups = []ModelConfigUsecase{
 	FLAG_CHAT | FLAG_COMPLETION | FLAG_EDIT,                           // text/language
-	FLAG_VISION | FLAG_DETECTION,                                      // visual understanding
+	FLAG_VISION | FLAG_DETECTION | FLAG_MOTION,                        // visual understanding
 	FLAG_TRANSCRIPT | FLAG_REALTIME_AUDIO | FLAG_SOUND_CLASSIFICATION, // audio input — realtime_audio is any-to-any, so it counts here too
 	FLAG_TTS | FLAG_SOUND_GENERATION | FLAG_REALTIME_AUDIO,            // audio output — and here, so a lone realtime_audio flag still reads as multimodal
 	FLAG_AUDIO_TRANSFORM,                                              // audio in/out transforms
@@ -2208,6 +2312,7 @@ func GetAllModelConfigUsecases() map[string]ModelConfigUsecase {
 		"FLAG_3D_ANIMATION":         FLAG_3D_ANIMATION,
 		"FLAG_DECISIONS":            FLAG_DECISIONS,
 		"FLAG_UPSCALE":              FLAG_UPSCALE,
+		"FLAG_MOTION":               FLAG_MOTION,
 	}
 }
 
@@ -2262,6 +2367,12 @@ func (c *ModelConfig) GuessUsecases(u ModelConfigUsecase) bool {
 	// Upscaling requires a dedicated model declaration, not just an image backend.
 	if u&FLAG_UPSCALE != 0 {
 		return false
+	}
+	if u&FLAG_MOTION != 0 {
+		// Motion is declared by the backend registry, never inferred from templates.
+		if cap := GetBackendCapability(c.Backend); cap == nil || !slices.Contains(cap.PossibleUsecases, UsecaseMotion) {
+			return false
+		}
 	}
 	// Backends that are clearly not text-generation
 	nonTextGenBackends := []string{

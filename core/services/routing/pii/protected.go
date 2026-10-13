@@ -36,21 +36,74 @@ type shield struct {
 }
 
 // File reloads can produce indefinitely many distinct lists. Retain only a
-// bounded set of compiled matchers; eviction changes no detection policy.
-var protectedMatchers = struct {
+// bounded set of compiled matchers, least recently used first out;
+// eviction changes no detection policy.
+//
+// An entry is found by comparing the raw term list it was built from
+// (slices.Equal: no normalising, sorting or joining on the hot path, and
+// pointer-equal strings compare without touching their bytes). The lists
+// that LoadProtectedTerms hands out share their strings with the cached
+// file entries, so a repeat call is a handful of comparisons.
+type matcherEntry struct {
+	raw []string
+	re  *regexp.Regexp // nil: the list has no usable term
+}
+
+var protectedMatchers struct {
 	sync.Mutex
-	entries map[string]*regexp.Regexp
-	order   []string
-}{entries: make(map[string]*regexp.Regexp)}
+	entries []matcherEntry // least recently used first
+}
 
 const maxProtectedMatchers = 32
 
-// protectedMatcher caches a case-insensitive matcher for the terms,
-// longest first so that "Hotel
-// Seeblick Spa" wins over "Hotel Seeblick". Whitespace inside a term
-// matches any whitespace run, so a term still matches across a line wrap.
+// protectedSpace matches one run of whitespace between the words of a
+// term: RE2's \s is ASCII only, so no-break and other Unicode spaces
+// (common in text pasted from invoices and web pages) are added.
+const protectedSpace = `[\s\p{Z}]+`
+
+func lookupProtectedMatcher(terms []string) (*regexp.Regexp, bool) {
+	protectedMatchers.Lock()
+	defer protectedMatchers.Unlock()
+	for i, e := range protectedMatchers.entries {
+		if slices.Equal(e.raw, terms) {
+			last := len(protectedMatchers.entries) - 1
+			copy(protectedMatchers.entries[i:], protectedMatchers.entries[i+1:])
+			protectedMatchers.entries[last] = e
+			return e.re, true
+		}
+	}
+	return nil, false
+}
+
+// protectedMatcher returns a cached case-insensitive matcher for the terms,
+// longest first so that "Hotel Seeblick Spa" wins over "Hotel Seeblick".
+// Whitespace inside a term matches any whitespace run (line breaks and
+// Unicode spaces included), so a term still matches across a line wrap.
 // Returns nil when no usable term remains.
 func protectedMatcher(terms []string) *regexp.Regexp {
+	if len(terms) == 0 {
+		return nil
+	}
+	if re, ok := lookupProtectedMatcher(terms); ok {
+		return re
+	}
+	// Compile outside the lock: a slow build must not stall every request.
+	re := compileProtectedMatcher(terms)
+	protectedMatchers.Lock()
+	defer protectedMatchers.Unlock()
+	for _, e := range protectedMatchers.entries {
+		if slices.Equal(e.raw, terms) {
+			return e.re
+		}
+	}
+	if len(protectedMatchers.entries) >= maxProtectedMatchers {
+		protectedMatchers.entries = protectedMatchers.entries[1:]
+	}
+	protectedMatchers.entries = append(protectedMatchers.entries, matcherEntry{raw: slices.Clone(terms), re: re})
+	return re
+}
+
+func compileProtectedMatcher(terms []string) *regexp.Regexp {
 	var norm []string
 	for _, t := range terms {
 		t = strings.Join(strings.Fields(t), " ")
@@ -69,32 +122,52 @@ func protectedMatcher(terms []string) *regexp.Regexp {
 		return strings.Compare(a, b)
 	})
 	norm = slices.Compact(norm)
-	key := strings.Join(norm, "\x00")
-	protectedMatchers.Lock()
-	defer protectedMatchers.Unlock()
-	if re, ok := protectedMatchers.entries[key]; ok {
-		return re
-	}
 	alts := make([]string, len(norm))
 	for i, t := range norm {
 		words := strings.Fields(t)
 		for j, w := range words {
 			words[j] = regexp.QuoteMeta(w)
 		}
-		alts[i] = strings.Join(words, `\s+`)
+		alts[i] = strings.Join(words, protectedSpace)
 	}
-	re := regexp.MustCompile(`(?i)(?:` + strings.Join(alts, "|") + `)`)
-	if len(protectedMatchers.order) == maxProtectedMatchers {
-		delete(protectedMatchers.entries, protectedMatchers.order[0])
-		protectedMatchers.order = protectedMatchers.order[1:]
-	}
-	protectedMatchers.entries[key] = re
-	protectedMatchers.order = append(protectedMatchers.order, key)
-	return re
+	return regexp.MustCompile(`(?i)(?:` + strings.Join(alts, "|") + `)`)
 }
 
 func isWordRune(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsMark(r)
+}
+
+// isJoiner reports the characters that join two parts of one word (the
+// hyphen in "Anna-Lena", the apostrophe in "O'Brien"), consistent with the
+// word extensions in redactor.go.
+func isJoiner(r rune) bool { return r == '-' || r == '\'' }
+
+// touchesWordBefore reports whether the text ends in a word character, or
+// in a joiner that is itself preceded by one: a protected term that is the
+// tail of "Anna-Lena" is not a whole word.
+func touchesWordBefore(text string) bool {
+	r, size := utf8.DecodeLastRuneInString(text)
+	if isWordRune(r) {
+		return true
+	}
+	if !isJoiner(r) {
+		return false
+	}
+	r, _ = utf8.DecodeLastRuneInString(text[:len(text)-size])
+	return isWordRune(r)
+}
+
+// touchesWordAfter is the mirror of touchesWordBefore.
+func touchesWordAfter(text string) bool {
+	r, size := utf8.DecodeRuneInString(text)
+	if isWordRune(r) {
+		return true
+	}
+	if !isJoiner(r) {
+		return false
+	}
+	r, _ = utf8.DecodeRuneInString(text[size:])
+	return isWordRune(r)
 }
 
 // shieldProtected replaces every whole-word occurrence of a protected term
@@ -110,15 +183,11 @@ func shieldProtected(text string, re *regexp.Regexp) (string, []shield) {
 	cursor := 0
 	for _, m := range re.FindAllStringIndex(text, -1) {
 		s, e := m[0], m[1]
-		if s > 0 {
-			if r, _ := utf8.DecodeLastRuneInString(text[:s]); isWordRune(r) {
-				continue
-			}
+		if s > 0 && touchesWordBefore(text[:s]) {
+			continue
 		}
-		if e < len(text) {
-			if r, _ := utf8.DecodeRuneInString(text[e:]); isWordRune(r) {
-				continue
-			}
+		if e < len(text) && touchesWordAfter(text[e:]) {
+			continue
 		}
 		b.WriteString(text[cursor:s])
 		scanStart := b.Len()
@@ -245,7 +314,7 @@ func readProtectedFile(path string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer fh.Close()
+	defer func() { _ = fh.Close() }()
 	var terms []string
 	sc := bufio.NewScanner(fh)
 	for sc.Scan() {

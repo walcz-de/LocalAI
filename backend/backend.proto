@@ -18,6 +18,7 @@ service Backend {
   rpc UpscaleImage(UpscaleImageRequest) returns (Result) {}
   rpc GenerateVideo(GenerateVideoRequest) returns (Result) {}
   rpc Generate3D(Generate3DRequest) returns (Result) {}
+  rpc MotionStream(stream MotionRequest) returns (stream MotionResponse) {}
   rpc Animate3D(Animate3DRequest) returns (Result) {}
   rpc AudioTranscription(TranscriptRequest) returns (TranscriptResult) {}
   rpc AudioTranscriptionStream(TranscriptRequest) returns (stream TranscriptStreamResponse) {}
@@ -727,6 +728,19 @@ message GenerateVideoRequest {
   // PredictOptions.ModelIdentity for the full rationale. Empty means "no
   // identity supplied" and backends MUST skip the check.
   string ModelIdentity = 15;
+  // Reference conditioning (MiniMax-H3 Ref2VA). Additive: `audio` and
+  // params["ref_image"] keep working and count as one more reference each.
+  // Keyframes (start_image/end_image) and references are mutually exclusive.
+  repeated string ref_images = 16;          // Staged paths of reference images
+  repeated VideoReference ref_videos = 17;  // Reference videos given as frame directories
+  repeated string ref_audios = 18;          // Staged paths of reference audio clips (WAV)
+}
+
+// VideoReference is one reference video for GenerateVideoRequest.
+message VideoReference {
+  string frames_dir = 1;  // Staged directory of frame images, read in lexicographic file-name order
+  int32 fps = 2;          // Frame rate of the source frames; 0 means the backend default
+  string audio = 3;       // Optional staged WAV path paired with this video
 }
 
 // A named conditioning input. Media references are staged local paths by the
@@ -1574,4 +1588,16 @@ message ForwardReply {
   int32 status = 1;
   repeated ForwardHeader headers = 2;
   bytes body_chunk = 3;
+}
+
+// Configuration is first; later messages contain input only.
+message MotionRequest {
+  string model_identity = 1;
+  string profile = 2;
+  bytes input = 3; // Serialized public localai.motion.v1.Input.
+}
+message MotionResponse {
+  bytes output = 1; // Serialized public localai.motion.v1.Output.
+  // Backend-only bounded stage timings; not part of the public wire protocol.
+  map<string, double> stage_ms = 2;
 }
