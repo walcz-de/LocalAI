@@ -63,6 +63,7 @@
 #include "thread_params.h"
 #include "parallel_params.h"
 #include "message_content.h"
+#include "moe_cache_option.h"
 #include "passthrough_options.h"
 #include "stream_peer.h"
 #include "tts_request_options.h"
@@ -108,6 +109,12 @@ using grpc::Status;
 // requests without a matching "authorization: Bearer <token>" metadata header.
 
 // Cached auth token — empty means auth is disabled.
+// Newer llama.cpp returns common_chat_params::prompt as a common_chat_prompt
+// (use .str()); older forks such as turboquant still return std::string.
+static inline std::string chat_prompt_str(const std::string & p) { return p; }
+template <typename T>
+static inline std::string chat_prompt_str(const T & p) { return p.str(); }
+
 static std::string g_grpc_auth_token;
 
 // Minimal constant-time comparison (avoids OpenSSL dependency)
@@ -1157,6 +1164,21 @@ static void params_parse(server_context& /*ctx_server*/, const backend::ModelOpt
                 optval_str == "on" || optval_str == "enabled";
             if (enable) {
                 params.tensor_buft_overrides.push_back(llm_ffn_exps_cpu_override());
+            }
+        } else if (!strcmp(optname, "moe_cache_mib")) {
+            // GPU cache for MoE experts kept in host memory (upstream --moe-cache-mib).
+            // Whole MiB, off (0) by default; invalid values keep the default.
+            if (optval != NULL) {
+                const auto bytes = llama_grpc::parse_moe_cache_bytes(optval_str);
+                if (!bytes) {
+                    SRV_WRN("moe_cache_mib: ignoring invalid value '%s' (expected a non-negative integer in MiB)\n", optval_str.c_str());
+                } else {
+#if LOCALAI_HAS_MOE_CACHE
+                    params.moe_cache_size = *bytes;
+#else
+                    SRV_WRN("%s", "moe_cache_mib: this llama.cpp build has no MoE cache, ignoring\n");
+#endif
+                }
             }
         } else if (!strcmp(optname, "n_cpu_moe")) {
             if (optval != NULL) {
@@ -3823,7 +3845,7 @@ public:
             dummy_inputs.use_jinja = params_base.use_jinja;
             
             const auto rendered = common_chat_templates_apply(ctx_server.impl->chat_params.tmpls.get(), dummy_inputs);
-            rendered_template = rendered.prompt;
+            rendered_template = chat_prompt_str(rendered.prompt);
         }
         
         response->set_rendered_template(rendered_template);
