@@ -277,9 +277,9 @@ elif [ "x${BUILD_TYPE}" == "xhipblas" ]; then
     # changes. AMD's own ROCm 10 image pairs torch 2.12 with vllm 0.27 -- that is the
     # next step to evaluate, but it moves two things at once, so not in this change.
     uv pip install --index-url https://stable.repo.amd.com/rocm/whl-next \
-        "torch[device-${_gpu_arch}]==2.11.0+rocm10.0.0" \
-        "torchvision==0.26.0+rocm10.0.0" \
-        "rocm-sdk-devel==10.0.0"
+        "torch[device-${_gpu_arch}]==2.12.0+rocm10.1.0" \
+        "torchvision==0.27.0+rocm10.1.0" \
+        "rocm-sdk-devel==10.1.0"
     installRequirements
 
     # Expand the devel tree and link the installed rocm-sdk-device-* wheels into

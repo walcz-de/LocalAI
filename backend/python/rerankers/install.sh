@@ -39,7 +39,7 @@ if [ "x${BUILD_PROFILE}" == "xhipblas" ]; then
     # whl-next, so PyPI cannot shadow the ROCm packages.
     uv pip install --index-url https://stable.repo.amd.com/rocm/whl-next \
         --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match \
-        "torch[device-${_gpu_arch}]==2.11.0+rocm10.0.0"
+        "torch[device-${_gpu_arch}]==2.12.0+rocm10.1.0"
 fi
 
 installRequirements
