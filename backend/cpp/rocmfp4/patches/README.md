@@ -28,11 +28,10 @@ Rules:
 
 ## Current series
 
-- `0002-kolibri1-architecture.patch` — Kolibri-1 (Aleph Alpha, `kolibri1`) support, the C++ part of
-  the community patch shipped with the Kolibri-1 GGUF (Apache-2.0). Not fork skew and not a revert:
-  a new model architecture upstream does not carry yet (feature request ggml-org/llama.cpp#29922).
-  Drop it once llama.cpp supports `kolibri1` and the fork is rebased onto that pin.
+None. The fork sits on the `llama-cpp` pin and carries everything the shared server needs.
 
-(The former `0001-revert-c7d87229-hip-integrated-crossover.patch` was retired when upstream
-reverted c7d87229 itself — see the `llama-cpp` pin bump of 2026-09-12.)
-
+(Retired: `0001-revert-c7d87229-hip-integrated-crossover.patch` when upstream reverted c7d87229
+itself — see the `llama-cpp` pin bump of 2026-09-12; `0002-kolibri1-architecture.patch` when
+llama.cpp added Kolibri-1 support itself, ggml-org/llama.cpp#30673. Kolibri GGUFs converted with
+the community patch carry `tokenizer.ggml.pre = kolibri1`; upstream maps Kolibri-1 to `qwen2`, so
+such a model needs `overrides: ["tokenizer.ggml.pre=str:qwen2"]` in its model config.)
