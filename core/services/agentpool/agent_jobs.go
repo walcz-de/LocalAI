@@ -901,6 +901,15 @@ func (s *AgentJobService) ExecuteJobInternal(job schema.Job, task schema.Task, c
 	// Create LLM client
 	defaultLLM := clients.NewLocalAILLM(modelConfig.Name, apiKey, "http://127.0.0.1:"+port)
 
+	// Per-completion generation cap — backstop against runaway generation in the
+	// agent loop (cogito sets no max_tokens itself). Configurable per model via
+	// agent.max_generation_tokens; safe default otherwise.
+	genCap := modelConfig.Agent.MaxGenerationTokens
+	if genCap <= 0 {
+		genCap = config.DefaultAgentMaxGenerationTokens
+	}
+	defaultLLM.SetMaxTokens(genCap)
+
 	// Initialize traces slice
 	job.Traces = []schema.JobTrace{}
 
