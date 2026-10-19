@@ -1,0 +1,58 @@
+# =============================================================================
+# diffusers-Backend für gfx1151 / ROCm 7.14 (Strix Halo, RDNA3.5)
+# =============================================================================
+# FROM AMDs offiziellem gfx1151-Container (bringt torch 2.11.0+rocm7.14.0, hip
+# 7.14.60850, py3.14) — dieselbe Basis wie das vLLM-Backend.
+#
+# WARUM NICHT der schlanke localai.sh-FROM-scratch-Weg (Dockerfile.python):
+# 2026-07-18 bewiesen — das AMD-torch-Wheel (2.11+rocm7.14) läuft in AMDs Container
+# sauber auf gfx1151 (torch.randn+matmul 0.2s), aber im FROM-scratch-Repackaging
+# (rocm7-base + package-gpu-libs + portable-venv) gibt es `hipErrorInvalidImage`
+# (ROCm-Userspace-Mismatch: comgr/device-libs/HSA unseres Base vs AMDs). torchs
+# arch_list ENTHÄLT gfx1151 — es ist die Umgebung, nicht der Wheel. Darum läuft
+# diffusers wie vLLM als ExternalGRPCBackend FROM AMDs Container. Doku:
+# memory project_ocr_garble... + LocalAI#10883.
+# =============================================================================
+ARG BASE_IMAGE=rocm/vllm:rocm7.14.0_rdna_ubuntu24.04_py3.14_pytorch_2.11.0_vllm_0.23.0
+FROM ${BASE_IMAGE}
+
+ARG BACKEND=diffusers
+ENV BACKEND=${BACKEND}
+# AMD-Container-Python (torch/rocm liegen hier) — NICHT anfassen
+ENV DIFFUSERS_PYTHON=/opt/python/bin/python
+
+WORKDIR /${BACKEND}
+
+# LocalAI-gRPC-Wrapper + Proto + gemeinsame Helfer
+COPY backend/python/${BACKEND} /${BACKEND}
+COPY backend/backend.proto /${BACKEND}/backend.proto
+COPY backend/python/common/ /${BACKEND}/common
+
+# gRPC-Stubs-Toolchain: Base hat grpcio 1.78.0 + protobuf 6.33.6 bereits —
+# NUR grpcio-tools nachrüsten, exakt gepinnt + --no-deps, damit der Resolver
+# keine Base-Pakete (grpcio/protobuf/torch) anfasst.
+RUN ${DIFFUSERS_PYTHON} -m pip install --no-cache-dir --no-deps grpcio-tools==1.78.0
+
+# diffusers-Stack aus PyPI. torch/torchvision sind im Base (2.11+rocm7.14) und
+# erfüllen die Abhängigkeit → OHNE --upgrade wird torch NICHT ersetzt. Danach
+# hart verifizieren, dass genau das AMD-torch erhalten blieb (kein CUDA-torch reingerutscht).
+# av (PyAV): diffusers importiert es transitiv (ltx2/export_utils) — ohne bricht
+# `import diffusers` mit ImportError. War in der alten FROM-scratch-requirements.txt.
+RUN ${DIFFUSERS_PYTHON} -m pip install --no-cache-dir \
+        diffusers==0.38.0 transformers==4.57.6 accelerate peft sentencepiece \
+        optimum-quanto ftfy opencv-python-headless av \
+    && ${DIFFUSERS_PYTHON} -c "import torch, diffusers, transformers, cv2, av; \
+assert torch.__version__ == '2.11.0+rocm7.14.0', 'torch verbogen: '+torch.__version__; \
+print('OK torch', torch.__version__, 'diffusers', diffusers.__version__, 'transformers', transformers.__version__)"
+
+# gRPC-Stubs generieren (backend_pb2*, sonst importiert backend.py nicht)
+RUN cd /${BACKEND} && ${DIFFUSERS_PYTHON} -m grpc_tools.protoc \
+        -I. --python_out=. --grpc_python_out=. backend.proto
+
+# gfx1151-UMA-Defaults (wie vLLM-Backend). enforce/Device-Details am Modell-YAML.
+ENV HSA_XNACK=1 \
+    PYTHONUNBUFFERED=1
+
+# LocalAI startet das Backend als gRPC-Server. Der compose-Service überschreibt
+# das Entrypoint auf `python backend.py --addr 0.0.0.0:<port>` (wie vllm-backend).
+ENTRYPOINT ["bash", "run.sh"]
