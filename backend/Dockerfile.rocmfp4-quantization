@@ -1,0 +1,48 @@
+# rocmfp4-quantization — the upstream llama-cpp-quantization backend with a
+# llama-quantize that knows the ROCmFP4 tensor types.
+#
+# Why a separate backend and not a patch: the quantization service imports a
+# finished job with `backend: <quantization-backend> minus "-quantization"`
+# (core/services/quantization/service.go, inferenceBackendFor). Installed
+# under the name `walcz-rocmfp4-quantization`, a ROCmFP4 GGUF is therefore
+# imported with `backend: walcz-rocmfp4` and loads without editing the model
+# YAML. The upstream backend stays untouched for the standard types.
+#
+# Quantization is CPU work, so llama-quantize is built CPU-only (no HIP) from
+# the same fork and pin as the rocmfp4 inference backend
+# (backend/cpp/rocmfp4/Makefile: LLAMA_REPO / ROCMFP4_VERSION). Measured
+# 2026-09-28: CPU build and the HIP-built rocmfp4-quantize produce
+# byte-identical Q4_0_ROCMFP4_STRIX_LEAN output for the same f16 input.
+#
+# Build args passed by the backend build loop (BACKEND, BUILD_TYPE,
+# AMDGPU_TARGETS, BASE_IMAGE, SKIP_DRIVERS) are accepted and not needed.
+
+ARG QUANT_UPSTREAM_IMAGE=quay.io/go-skynet/local-ai-backends:latest-cpu-llama-cpp-quantization
+ARG QUANT_BUILDER_IMAGE=ubuntu:24.04
+
+FROM ${QUANT_UPSTREAM_IMAGE} AS upstream
+
+FROM ${QUANT_BUILDER_IMAGE} AS builder
+ARG BACKEND
+ARG BUILD_TYPE
+ARG AMDGPU_TARGETS
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git cmake build-essential ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+COPY backend/cpp/rocmfp4/Makefile /tmp/rocmfp4.mk
+RUN set -e; \
+    repo=$(sed -n 's/^LLAMA_REPO?=//p' /tmp/rocmfp4.mk); \
+    pin=$(sed -n 's/^ROCMFP4_VERSION?=//p' /tmp/rocmfp4.mk); \
+    test -n "$repo" && test -n "$pin"; \
+    git init -q /src && cd /src && \
+    git remote add origin "$repo" && \
+    git fetch -q --depth 1 origin "$pin" && git checkout -q FETCH_HEAD; \
+    cmake -S . -B build -DGGML_HIP=OFF -DGGML_NATIVE=OFF -DLLAMA_CURL=OFF \
+          -DBUILD_SHARED_LIBS=OFF -DLLAMA_BUILD_TESTS=OFF \
+          -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF; \
+    cmake --build build --target llama-quantize -j"$(nproc)"; \
+    ./build/bin/llama-quantize --help 2>&1 | grep -q Q4_0_ROCMFP4_STRIX_LEAN
+
+FROM scratch
+COPY --from=upstream / /
+COPY --from=builder /src/build/bin/llama-quantize /llama-quantize
