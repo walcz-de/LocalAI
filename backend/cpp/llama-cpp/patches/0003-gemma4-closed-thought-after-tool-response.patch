@@ -1,0 +1,122 @@
+From c3b174a181e59a8ce15357f6cead083c5052eae2 Mon Sep 17 00:00:00 2001
+From: Stefan Walcz <stefan.walcz@walcz.de>
+Date: Fri, 16 Oct 2026 07:21:24 +0200
+Subject: [PATCH] common : gemma4 add closed thought channel after tool
+ response when thinking is disabled
+
+The Gemma 4 template adds no generation prompt after a tool response, so
+the empty thought channel it adds after a user turn is missing. With
+thinking disabled the model then opens its own thought channel and the
+whole answer ends up in reasoning_content.
+
+Assisted-by: Claude Code:claude-opus-5-5
+Signed-off-by: Stefan Walcz <stefan.walcz@walcz.de>
+---
+ common/parsers/gemma4.cpp |  7 ++++
+ tests/test-chat.cpp       | 72 +++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 79 insertions(+)
+
+diff --git a/common/parsers/gemma4.cpp b/common/parsers/gemma4.cpp
+index 1a63fa927..ce44bf9b4 100644
+--- a/common/parsers/gemma4.cpp
++++ b/common/parsers/gemma4.cpp
+@@ -163,6 +163,13 @@ common_chat_params common_chat_params_init_gemma4(const common_chat_template &
+         data.prompt.append(data.generation_prompt);
+     }
+ 
++    if (inputs.add_generation_prompt && !inputs.enable_thinking &&
++        (string_ends_with(data.prompt.str(), "<tool_response|>") || string_ends_with(data.prompt.str(), "<turn|>\n<|turn>model\n"))) {
++        // After a tool response the template does not add the empty thought channel, so the model opens its own thought channel.
++        data.generation_prompt += "<|channel>thought\n<channel|>";
++        data.prompt.append("<|channel>thought\n<channel|>");
++    }
++
+     data.message_delimiters = {
+         { COMMON_CHAT_ROLE_USER,      "<|turn>user"  },
+         { COMMON_CHAT_ROLE_ASSISTANT, "<|turn>model" },
+diff --git a/tests/test-chat.cpp b/tests/test-chat.cpp
+index 01b2220da..0211316ff 100644
+--- a/tests/test-chat.cpp
++++ b/tests/test-chat.cpp
+@@ -3248,6 +3248,78 @@ static void test_template_output_peg_parsers(bool detailed_debug) {
+                     throw std::runtime_error("Gemma 4: generation prompt was modified despite add_generation_prompt=false");
+                 }
+             }
++
++            // thinking disabled: after a tool response the prompt must end with an empty, closed thought channel
++            common_chat_msg tool_call_only_msg = simple_assist_msg("", "", "special_function", "{\"arg1\": 1}", "c0");
++
++            for (const auto & call_msg : { tool_call_only_msg, tool_call_msg }) {
++                common_chat_templates_inputs inputs;
++                inputs.messages              = { message_user, call_msg, tool_msg };
++                inputs.tools                 = { special_function_tool };
++                inputs.add_generation_prompt = true;
++                inputs.enable_thinking       = false;
++
++                auto params = common_chat_templates_apply(tmpls.get(), inputs);
++
++                if (!string_ends_with(params.prompt.str(), "<|channel>thought\n<channel|>")) {
++                    throw std::runtime_error("Gemma 4: missing closed thought channel after tool response with thinking disabled");
++                }
++                if (!string_ends_with(params.generation_prompt, "<|channel>thought\n<channel|>")) {
++                    throw std::runtime_error("Gemma 4: generation_prompt lacks closed thought channel after tool response");
++                }
++            }
++
++            {
++                common_chat_templates_inputs inputs;
++                inputs.messages              = { message_user, tool_call_only_msg, tool_msg };
++                inputs.tools                 = { special_function_tool };
++                inputs.add_generation_prompt = true;
++                inputs.enable_thinking       = true;
++
++                auto params = common_chat_templates_apply(tmpls.get(), inputs);
++
++                if (params.prompt.str().find("<|channel>thought\n<channel|>") != std::string::npos) {
++                    throw std::runtime_error("Gemma 4: closed thought channel added although thinking is enabled");
++                }
++            }
++
++            {
++                common_chat_templates_inputs inputs;
++                inputs.messages              = { message_user, tool_call_only_msg, tool_msg };
++                inputs.tools                 = { special_function_tool };
++                inputs.add_generation_prompt = false;
++                inputs.enable_thinking       = false;
++
++                auto params = common_chat_templates_apply(tmpls.get(), inputs);
++
++                if (params.prompt.str().find("<|channel>thought\n<channel|>") != std::string::npos) {
++                    throw std::runtime_error("Gemma 4: closed thought channel added despite add_generation_prompt=false");
++                }
++            }
++
++            {
++                // after a user turn the template adds the closed channel itself; it must appear once
++                common_chat_templates_inputs inputs;
++                inputs.messages              = { message_user };
++                inputs.add_generation_prompt = true;
++                inputs.enable_thinking       = false;
++
++                auto params = common_chat_templates_apply(tmpls.get(), inputs);
++
++                if (!string_ends_with(params.prompt.str(), "<turn|>\n<|turn>model\n<|channel>thought\n<channel|>") ||
++                    string_ends_with(params.prompt.str(), "<|channel>thought\n<channel|><|channel>thought\n<channel|>")) {
++                    throw std::runtime_error("Gemma 4: generation prompt after user turn changed");
++                }
++            }
++
++            // model answer after the closed channel is parsed as content
++            tst.test("Hello, world!\nWhat's up?")
++                .reasoning_format(COMMON_REASONING_FORMAT_AUTO)
++                .enable_thinking(false)
++                .tools({ special_function_tool })
++                .messages({ message_user, tool_call_only_msg, tool_msg })
++                .expect(simple_assist_msg("Hello, world!\nWhat's up?"))
++                .run();
+         }
+ 
+         {
+-- 
+2.53.0
+
