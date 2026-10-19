@@ -27,4 +27,41 @@ if [ "x${BUILD_PROFILE}" == "xl4t13" ]; then
   PY_STANDALONE_TAG="20251120"
 fi
 
+# ROCm/gfx1151: the community whl/rocm7.0 torch wheels do not enumerate Strix
+# Halo (device_count == 0). AMD ships per-GPU builds selected with the
+# torch[device-gfx<arch>] extra. Install torch + torchvision (the same pinned
+# versions, from that index) in an isolated step: uv aborts on that index's
+# 403-for-missing-package responses, so we must not let it resolve PyPI-only
+# packages (diffusers, transformers, ...) there. Everything else then resolves
+# from PyPI in installRequirements.
+#
+# ROCm 10 (2026-08-31): the index moved to stable.repo.amd.com/rocm/whl-next.
+# The old repo.amd.com/rocm/whl-multi-arch/ tops out at rocm7.14.0 and carries no
+# ROCm 10 build at all, which makes it easy to conclude none exists -- it does,
+# just elsewhere. whl-next is the index AMD's own ROCm 10 container carries as
+# PIP_EXTRA_INDEX_URL, and it serves torch 2.11/2.12/2.13+rocm10.0.0 plus the
+# matching amd-torch-device-gfx* packages for gfx1103 and gfx1151.
+#
+# 2.11 rather than the newest 2.13: it is the smallest step off the previous
+# 2.10 pin that whl-next actually offers (it has no 2.10), so the ROCm generation
+# is the only thing that really changes here. torchvision tracks torch:
+# 2.11->0.26, 2.12->0.27, 2.13->0.28.
+if [ "x${BUILD_PROFILE}" == "xhipblas" ]; then
+    # Arch from the build (AMDGPU_TARGETS); default gfx1151 -- the only arch we
+    # could validate on real hardware. The torch[device-...] extra takes one arch.
+    _gpu_arch="${AMDGPU_TARGETS:-gfx1151}"; _gpu_arch="${_gpu_arch%%;*}"; _gpu_arch="${_gpu_arch%% *}"
+    ensureVenv
+    # PyPI must stay reachable here: torchvision 0.26+rocm10 declares a numpy
+    # dependency, and whl-next carries numpy only as cp312/cp313/cp314 wheels. This
+    # backend runs on portable CPython 3.10, so a bare --index-url (which REPLACES
+    # PyPI) resolves to "no wheels with a matching Python implementation tag" and the
+    # whole install fails. --extra-index-url + unsafe-best-match lets numpy come from
+    # PyPI while the +rocm10.0.0 local versions still only exist on whl-next, so the
+    # ROCm packages cannot be shadowed.
+    uv pip install --index-url https://stable.repo.amd.com/rocm/whl-next \
+        --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match \
+        "torch[device-${_gpu_arch}]==2.12.0+rocm10.1.0" \
+        "torchvision==0.27.0+rocm10.1.0"
+fi
+
 installRequirements
