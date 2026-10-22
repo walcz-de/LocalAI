@@ -3,6 +3,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link, useOutletContext, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { backendsApi, modelsApi, nodesApi } from '../utils/api'
+import { apiUrl } from '../utils/basePath'
+import { FEATURE_BACKEND_INSTALL } from '../utils/capabilities'
 import { useDebouncedCallback } from '../hooks/useDebounce'
 import { useOperations } from '../hooks/useOperations'
 import { useDistributedMode } from '../hooks/useDistributedMode'
@@ -19,6 +21,9 @@ import BackendsTable from '../components/operate/BackendsTable'
 import HomeUndoToast from '../components/home/HomeUndoToast'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Icon from '../components/Icon'
+import CatalogSearchBox from '../components/catalog/CatalogSearchBox'
+import CatalogPager from '../components/catalog/CatalogPager'
+import CatalogEmpty from '../components/catalog/CatalogEmpty'
 import './operate.css'
 
 const CATALOG_FILTERS = [
@@ -61,6 +66,16 @@ export default function Backends() {
   const [sortOrder, setSortOrder] = useState('asc')
   const [page, setPage] = useState(1)
   const [showManualInstall, setShowManualInstall] = useState(false)
+  // Servers run with --disable-backend-install answer 403 to every install
+  // and upgrade; the page shows that up front instead of after the click.
+  const [installEnabled, setInstallEnabled] = useState(true)
+
+  useEffect(() => {
+    fetch(apiUrl('/api/features'))
+      .then(r => r.json())
+      .then(data => setInstallEnabled(data[FEATURE_BACKEND_INSTALL] !== false))
+      .catch(() => {})
+  }, [])
   const [manualUri, setManualUri] = useState('')
   const [manualName, setManualName] = useState('')
   const [manualAlias, setManualAlias] = useState('')
@@ -663,6 +678,10 @@ export default function Backends() {
         : null
     } else if (state.kind === 'removing') {
       action = null
+    } else if (!installEnabled) {
+      action = b.installed
+        ? null
+        : <span className="dk-badge" title={t('backends.installDisabledTitle')}><Icon name="lock" /> {t('backends.installDisabledShort')}</span>
     } else if (state.kind === 'failed') {
       action = <button type="button" className="dk-btn dk-btn--secondary dk-btn--sm" disabled={isNodeScoped ? targetBusy(targetNode.id, name) : busy} onClick={() => isNodeScoped ? handleInstallOnTarget(name) : handleInstall(name)} aria-label={t('backends.retryLabel', { name })}>{t('backends.retry')}</button>
     } else if (isNodeScoped) {
@@ -807,6 +826,18 @@ export default function Backends() {
         : null
     } else if (b.IsSystem) {
       action = <span className="dk-badge" title={t('backends.protectedTitle')}><Icon name="lock" /> {t('backends.protected')}</span>
+    } else if (!installEnabled) {
+      // Update and reinstall acquire; delete does not.
+      action = (
+        <ActionMenu
+          compact
+          ariaLabel={t('backends.actionsFor', { name })}
+          triggerLabel={t('backends.actionsFor', { name })}
+          items={[
+            { key: 'delete', icon: 'trash', label: t('backends.deleteBackend'), danger: true, onClick: () => handleDelete(name, 'installed') },
+          ]}
+        />
+      )
     } else {
       action = (
         <>
@@ -850,7 +881,7 @@ export default function Backends() {
         )}
         {usedBy(name)}
         <div className="bk-detail__acts">
-          {!b.IsSystem && upgrade && (
+          {installEnabled && !b.IsSystem && upgrade && (
             <button type="button" className="dk-btn dk-btn--primary dk-btn--sm" disabled={busy} onClick={() => handleUpgrade(name)}>
               <Icon name="arrow-up" /> {upgrade.available_version ? t('backends.updateTo', { version: upgrade.available_version }) : t('backends.update')}
             </button>
@@ -904,31 +935,30 @@ export default function Backends() {
           </Link>
         </div>
 
-        <div className="dk-input-icon bk-search">
-          <Icon name="search" className="dk-icon" />
-          <input
-            className="dk-input"
-            type="text"
-            aria-label={activeView === 'installed' ? t('backends.searchInstalled') : t('backends.searchCatalog')}
-            placeholder={activeView === 'installed' ? t('backends.searchInstalled') : t('backends.searchCatalog')}
-            value={activeView === 'installed' ? query : search}
-            onChange={e => (activeView === 'installed' ? updateUrlParam('q', e.target.value) : handleSearch(e.target.value))}
-          />
-        </div>
+        <CatalogSearchBox
+          className="bk-search"
+          label={activeView === 'installed' ? t('backends.searchInstalled') : t('backends.searchCatalog')}
+          value={activeView === 'installed' ? query : search}
+          onChange={value => (activeView === 'installed' ? updateUrlParam('q', value) : handleSearch(value))}
+        />
 
         <div className="bk-bar__acts">
-          {updateNames.length > 0 && (
+          {installEnabled && updateNames.length > 0 && (
             <button type="button" className="dk-btn dk-btn--primary" onClick={handleUpgradeAll} disabled={upgradingAll}>
               <Icon name={upgradingAll ? 'spinner' : 'arrow-up'} spin={Boolean(upgradingAll)} />
               {upgradingAll ? t('backends.updating') : t('backends.updateAll', { count: updateNames.length })}
             </button>
           )}
-          <button type="button" className="dk-btn dk-btn--ghost" onClick={handleCheck} disabled={checking}>
-            <Icon name="refresh" spin={checking} /> {t('backends.check')}
-          </button>
-          <button type="button" className="dk-btn dk-btn--ghost" aria-expanded={showManualInstall} onClick={() => setShowManualInstall(v => !v)}>
-            <Icon name={showManualInstall ? 'chevron-up' : 'plus'} /> {t('backends.fromUrl')}
-          </button>
+          {installEnabled && (
+            <button type="button" className="dk-btn dk-btn--ghost" onClick={handleCheck} disabled={checking}>
+              <Icon name="refresh" spin={checking} /> {t('backends.check')}
+            </button>
+          )}
+          {installEnabled && (
+            <button type="button" className="dk-btn dk-btn--ghost" aria-expanded={showManualInstall} onClick={() => setShowManualInstall(v => !v)}>
+              <Icon name={showManualInstall ? 'chevron-up' : 'plus'} /> {t('backends.fromUrl')}
+            </button>
+          )}
         </div>
       </div>
 
@@ -983,6 +1013,13 @@ export default function Backends() {
         </div>
       </div>
 
+      {!installEnabled && (
+        <div className="op-notice" data-testid="backends-install-disabled">
+          <Icon name="lock" />
+          <span>{t('backends.installDisabled')}</span>
+        </div>
+      )}
+
       {activeView === 'catalog' && targetNode && (
         <div className="op-notice" data-testid="backends-target">
           <Icon name="target" />
@@ -1021,7 +1058,7 @@ export default function Backends() {
         </form>
       )}
 
-      {recommended && (
+      {installEnabled && recommended && (
         <div className="bk-recommend" data-testid="backends-recommend">
           <div>
             <h2 className="bk-recommend__title">{t('backends.recommendTitle', { name: recommended.name || recommended.id })}</h2>
@@ -1037,16 +1074,11 @@ export default function Backends() {
         <div className="op-loading"><LoadingSpinner size="lg" /></div>
       ) : activeView === 'installed' ? (
         installed.length === 0 && globalError ? null : installed.length === 0 ? (
-          <div className="dk-empty">
-            <div className="dk-empty-icon"><Icon name="server" /></div>
-            <h2 className="dk-empty-title">{t('backends.emptyTitle')}</h2>
-            <p className="dk-empty-text">{t('backends.emptyBody')}</p>
+          <CatalogEmpty icon="server" title={t('backends.emptyTitle')} text={t('backends.emptyBody')}>
             <Link className="dk-btn dk-btn--primary" to={hrefForView('catalog')}>{t('backends.openCatalog')}</Link>
-          </div>
+          </CatalogEmpty>
         ) : installedRows.length === 0 ? (
-          <div className="dk-empty">
-            <div className="dk-empty-icon"><Icon name="filter" /></div>
-            <p className="dk-empty-text">{t('backends.noMatches')}</p>
+          <CatalogEmpty icon="filter" text={t('backends.noMatches')}>
             <button
               type="button"
               className="dk-btn dk-btn--ghost"
@@ -1059,7 +1091,7 @@ export default function Backends() {
             >
               {t('backends.clearFilters')}
             </button>
-          </div>
+          </CatalogEmpty>
         ) : (
           <BackendsTable
             rows={installedRows}
@@ -1070,11 +1102,7 @@ export default function Backends() {
           />
         )
       ) : catalogRows.length === 0 ? (
-        <div className="dk-empty">
-          <div className="dk-empty-icon"><Icon name="server" /></div>
-          <h2 className="dk-empty-title">{t('backends.noneFound')}</h2>
-          <p className="dk-empty-text">{search || catalogFilter ? t('backends.noneFoundFiltered') : t('backends.noneFoundBody')}</p>
-        </div>
+        <CatalogEmpty icon="server" title={t('backends.noneFound')} text={search || catalogFilter ? t('backends.noneFoundFiltered') : t('backends.noneFoundBody')} />
       ) : (
         <>
           <BackendsTable
@@ -1089,17 +1117,13 @@ export default function Backends() {
             caption={t('backends.catalogAria')}
           />
           <p className="bk-count">{t('backends.shown', { shown: catalogPage.length, total: allBackends.length })}</p>
-          {totalPages > 1 && (
-            <div className="bk-pager">
-              <button type="button" className="dk-btn dk-btn--ghost dk-btn--sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} aria-label={t('backends.prevPage')}>
-                <Icon name="chevron-left" />
-              </button>
-              <span className="dk-mono">{page} / {totalPages}</span>
-              <button type="button" className="dk-btn dk-btn--ghost dk-btn--sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} aria-label={t('backends.nextPage')}>
-                <Icon name="chevron-right" />
-              </button>
-            </div>
-          )}
+          <CatalogPager
+            className="bk-pager"
+            page={page}
+            totalPages={totalPages}
+            onPage={setPage}
+            labels={{ previous: t('backends.prevPage'), next: t('backends.nextPage') }}
+          />
         </>
       )}
 
