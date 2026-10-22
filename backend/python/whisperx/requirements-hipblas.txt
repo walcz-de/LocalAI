@@ -7,4 +7,8 @@
 # see the comment there. whisperX pins torch~=2.8.0, AMD's ROCm 10 index starts at
 # 2.11, so torch resolves to the CPU/CUDA build from PyPI and runs on CPU. whisperX's
 # transcription path (faster-whisper/ctranslate2) has no ROCm backend either.
+# 2026-10-22: whisperX moved torchaudio into the optional extra "align-torch"; pyannote-audio only asks for
+# torchaudio>=2.8.0, so the resolver took torchaudio 2.11.0 (a CUDA 13 build) next to torch 2.8.0+cu128 and the
+# backend died on load with "libcudart.so.13: cannot open shared object file". Keep torchaudio on torch's line.
+torchaudio~=2.8.0
 whisperx @ git+https://github.com/m-bain/whisperX.git
