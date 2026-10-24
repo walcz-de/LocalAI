@@ -1115,6 +1115,17 @@ function ChatPage() {
     />
   )
 
+  // The add-on tools control sits right after the MCP control: both decide what
+  // the model may call in this chat.
+  const addonsControl = (
+    <AddonToolsMenu
+      addons={toolAddonList}
+      enabledIds={enabledAddonIds(activeChat, toolAddonList)}
+      onToggle={(id) => updateChatSettings(activeChat.id, toggleAddonSettings(activeChat, toolAddonList, id))}
+      onToggleAll={() => updateChatSettings(activeChat.id, toggleAllAddonSettings(activeChat, toolAddonList))}
+    />
+  )
+
   const mcp = (
     <UnifiedMCPDropdown
       serverMCPAvailable={mcpAvailable}
@@ -1258,14 +1269,6 @@ function ChatPage() {
           onSettings={() => setShowSettings(v => !v)}
           settingsOpen={showSettings}
           moreItems={moreItems}
-          addonsMenu={(
-            <AddonToolsMenu
-              addons={toolAddonList}
-              enabledIds={enabledAddonIds(activeChat, toolAddonList)}
-              onToggle={(id) => updateChatSettings(activeChat.id, toggleAddonSettings(activeChat, toolAddonList, id))}
-              onToggleAll={() => updateChatSettings(activeChat.id, toggleAllAddonSettings(activeChat, toolAddonList))}
-            />
-          )}
         />
 
         {find.open && (
@@ -1354,7 +1357,7 @@ function ChatPage() {
               sendTitle={activeChat.model ? t('input.send') : t('input.selectModelFirst')}
               textareaRef={textareaRef}
               picker={picker}
-              mcp={mcp}
+              mcp={<>{mcp}{addonsControl}</>}
               chips={composerChips}
               extras={<AddonSlot slot="chat.composer.actions" context={composerSlotContext} />}
               files={files}
