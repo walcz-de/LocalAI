@@ -949,16 +949,23 @@ type AgentConfig struct {
 	LoopDetection         int  `yaml:"loop_detection,omitempty" json:"loop_detection,omitempty"`
 	MaxAdjustmentAttempts int  `yaml:"max_adjustment_attempts,omitempty" json:"max_adjustment_attempts,omitempty"`
 	ForceReasoningTool    bool `yaml:"force_reasoning_tool,omitempty" json:"force_reasoning_tool,omitempty"`
-	// MaxGenerationTokens caps tokens generated per LLM completion in the agent
-	// loop (backstop against runaway narration/emoji loops that neither
-	// loop_detection nor max_iterations can stop). 0 falls back to a safe default.
+	// MaxGenerationTokens caps the tokens a single completion may generate in
+	// the agent loop. Neither max_iterations nor loop_detection stops one
+	// completion that keeps generating; without a per-model value every model
+	// gets the client's fixed default, which is too low for some reasoning
+	// models and far above what others need. 0 keeps the client default.
 	MaxGenerationTokens int `yaml:"max_generation_tokens,omitempty" json:"max_generation_tokens,omitempty"`
 }
 
-// DefaultAgentMaxGenerationTokens is the per-completion cap applied in the agent
-// path when a model does not set agent.max_generation_tokens. Guards against
-// runaway generation to full context; generous enough for tool-decisions/replies.
-const DefaultAgentMaxGenerationTokens = 4096
+// ApplyAgentGenerationCap puts agent.max_generation_tokens on the LLM client
+// the agent loop uses. The client applies it to every request that carries no
+// cap of its own, so a larger cap cogito sets when it retries a completion
+// truncated by length still wins. Unset leaves the client default in place.
+func (c *ModelConfig) ApplyAgentGenerationCap(llm interface{ SetMaxTokens(int) }) {
+	if c.Agent.MaxGenerationTokens > 0 {
+		llm.SetMaxTokens(c.Agent.MaxGenerationTokens)
+	}
+}
 
 // HasMCPServers returns true if any MCP servers (remote or stdio) are configured.
 func (c MCPConfig) HasMCPServers() bool {
@@ -1312,7 +1319,7 @@ func (c *ModelConfig) ApplyReasoningEffort(requestEffort string) {
 	case "none":
 		disable := true
 		c.ReasoningConfig.DisableReasoning = &disable
-	case "minimal", "low", "medium", "high":
+	case "minimal", "low", "medium", "high", "xhigh", "max":
 		if c.ReasoningConfig.DisableReasoning == nil || !*c.ReasoningConfig.DisableReasoning {
 			enable := false
 			c.ReasoningConfig.DisableReasoning = &enable
