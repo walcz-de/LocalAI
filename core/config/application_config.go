@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"regexp"
+	"sync/atomic"
 	"time"
 
 	"github.com/mudler/LocalAI/core/services/addons/gateway"
@@ -21,6 +22,10 @@ import (
 type AddonConfig struct {
 	Transport     *gateway.CarrierConfig `json:"-" yaml:"-"`
 	ListenAddress string
+
+	// Frontend is set for the frontend role, also when add-ons are off. A
+	// frontend keeps no owner state, so it never opens the library store.
+	Frontend bool
 
 	Enabled                                            bool
 	InstanceID, OwnerID, OwnerAddress, StorageID, Root string
@@ -64,6 +69,12 @@ type AddonConfig struct {
 	// zero is the contract default of one hour. It is a programmatic option
 	// that no flag sets: the acceptance fixture shortens it to test expiry.
 	ArtifactExpiry time.Duration
+}
+
+// IsFrontend says whether this process is an add-on frontend: the role was set,
+// or the instance is not the owner it forwards to.
+func (c AddonConfig) IsFrontend() bool {
+	return c.Frontend || (c.Enabled && c.OwnerID != "" && c.InstanceID != c.OwnerID)
 }
 
 func WithAddons(c AddonConfig) AppOption {
@@ -113,14 +124,22 @@ type ApplicationConfig struct {
 	WebRTCUDPPort                       int
 	UploadLimitMB, Threads, ContextSize int
 	ArtifactDownloadConcurrency         int
-	F16                                 bool
-	Debug                               bool
-	EnableTracing                       bool
-	MaxConcurrentBackendRequests        int
-	TracingMaxItems                     int
-	TracingMaxBodyBytes                 int // Per-body cap for captured request/response bodies; 0 disables the cap
-	EnableBackendLogging                bool
-	GeneratedContentDir                 string
+
+	// MaxConcurrentBackendOperations bounds how many backend install, upgrade
+	// and delete operations run at once. Always >= 1.
+	MaxConcurrentBackendOperations int
+	// liveMaxBackendOps mirrors MaxConcurrentBackendOperations for readers on
+	// other goroutines, since a runtime settings change can land at any time.
+	liveMaxBackendOps atomic.Int64
+
+	F16                          bool
+	Debug                        bool
+	EnableTracing                bool
+	MaxConcurrentBackendRequests int
+	TracingMaxItems              int
+	TracingMaxBodyBytes          int // Per-body cap for captured request/response bodies; 0 disables the cap
+	EnableBackendLogging         bool
+	GeneratedContentDir          string
 
 	UploadDir string
 	DataPath  string // Persistent data directory for collectiondb, agents, etc.
@@ -380,10 +399,13 @@ func NewApplicationConfig(o ...AppOption) *ApplicationConfig {
 		EnableBackendLogging:        true,
 		VRAMPersistentCache:         true,
 		ArtifactDownloadConcurrency: modelartifacts.DefaultDownloadConcurrency,
-		AgentJobRetentionDays:       30,               // Default: 30 days
-		LRUEvictionMaxRetries:       30,               // Default: 30 retries
-		LRUEvictionRetryInterval:    1 * time.Second,  // Default: 1 second
-		ModelLoadFailureCooldown:    10 * time.Second, // Default: 10s base cooldown after a failed load
+
+		MaxConcurrentBackendOperations: 1,
+
+		AgentJobRetentionDays:    30,               // Default: 30 days
+		LRUEvictionMaxRetries:    30,               // Default: 30 retries
+		LRUEvictionRetryInterval: 1 * time.Second,  // Default: 1 second
+		ModelLoadFailureCooldown: 10 * time.Second, // Default: 10s base cooldown after a failed load
 		// WatchDogInterval is intentionally left at the zero value here.
 		// The startup loader applies a persisted runtime_settings.json value
 		// only when the interval is still 0 (its "not set by env var"
@@ -408,6 +430,7 @@ func NewApplicationConfig(o ...AppOption) *ApplicationConfig {
 	for _, oo := range o {
 		oo(opt)
 	}
+	opt.SetMaxConcurrentBackendOperations(opt.MaxConcurrentBackendOperations)
 	return opt
 }
 
@@ -790,6 +813,38 @@ func WithModelArtifactMaterializer(materializer ArtifactMaterializer) AppOption 
 			o.ModelArtifactMaterializer = materializer
 		}
 	}
+}
+
+// WithMaxConcurrentBackendOperations sets how many backend operations run at
+// once. Values below 1 fall back to 1.
+func WithMaxConcurrentBackendOperations(n int) AppOption {
+	return func(o *ApplicationConfig) {
+		if n < 1 {
+			n = 1
+		}
+		o.SetMaxConcurrentBackendOperations(n)
+	}
+}
+
+// SetMaxConcurrentBackendOperations stores the limit, clamped to at least 1.
+func (o *ApplicationConfig) SetMaxConcurrentBackendOperations(n int) {
+	if n < 1 {
+		n = 1
+	}
+	o.MaxConcurrentBackendOperations = n
+	o.liveMaxBackendOps.Store(int64(n))
+}
+
+// BackendOperationLimit returns how many backend operations may run at once.
+// It is safe to call while a runtime settings change is applied.
+func (o *ApplicationConfig) BackendOperationLimit() int {
+	if n := o.liveMaxBackendOps.Load(); n >= 1 {
+		return int(n)
+	}
+	if o.MaxConcurrentBackendOperations >= 1 {
+		return o.MaxConcurrentBackendOperations
+	}
+	return 1
 }
 
 func WithArtifactDownloadConcurrency(concurrency int) AppOption {

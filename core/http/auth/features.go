@@ -116,6 +116,9 @@ var RouteFeatureRegistry = []RouteFeature{
 	// Detection
 	{"POST", "/v1/detection", FeatureDetection},
 
+	// Time-series forecasting
+	{"POST", "/v1/forecast", FeatureForecast},
+
 	// Decisions API (OpenAI and SystemOne wire contracts)
 	{"POST", "/v1/decisions", FeatureDecisions},
 	{"POST", "/v1/systemone", FeatureDecisions},
@@ -183,6 +186,7 @@ var RouteFeatureRegistry = []RouteFeature{
 	{"POST", "/stores/find", FeatureStores},
 
 	// Fine-tuning
+	{"GET", "/api/fine-tuning/status", FeatureFineTuning},
 	{"POST", "/api/fine-tuning/jobs", FeatureFineTuning},
 	{"GET", "/api/fine-tuning/jobs", FeatureFineTuning},
 	{"GET", "/api/fine-tuning/jobs/:id", FeatureFineTuning},
@@ -208,6 +212,7 @@ var RouteFeatureRegistry = []RouteFeature{
 	{"DELETE", "/api/conversations/:id", FeatureChatHistory},
 
 	// Quantization
+	{"GET", "/api/quantization/status", FeatureQuantization},
 	{"POST", "/api/quantization/jobs", FeatureQuantization},
 	{"GET", "/api/quantization/jobs", FeatureQuantization},
 	{"GET", "/api/quantization/jobs/:id", FeatureQuantization},
@@ -272,6 +277,7 @@ func APIFeatureMetas() []FeatureMeta {
 		{FeatureAudioTransform, "Audio Transform", true},
 		{FeaturePIIFilter, "PII Analyze / Redact", true},
 		{FeatureDecisions, "Decisions", true},
+		{FeatureForecast, "Forecast", true},
 		{FeatureChatHistory, "Chat History", true},
 	}
 }

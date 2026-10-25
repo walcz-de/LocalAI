@@ -104,10 +104,14 @@ func TestLibraryGalleryReadsTheBackendLibrary(t *testing.T) {
 	official.Library = true
 	official.URL = srv.URL + "/backends/index.yaml"
 	backends := names(official)
-	// Fork (walcz-de): the library carries the four rocmfp4 entries on top of the golden gallery.
-	const forkBackends = 4
-	if len(backends) != goldenGalleryNames+forkBackends {
-		t.Fatalf("the library gave %d backends, want %d", len(backends), goldenGalleryNames+forkBackends)
+	// One backend per distinct name: platform images of one backend share it.
+	// The count follows the library, so adding a backend does not break this.
+	wantNames := map[string]bool{}
+	for _, r := range loadRealBackendLibrary(t) {
+		wantNames[r.Name] = true
+	}
+	if len(backends) != len(wantNames) {
+		t.Fatalf("the library gave %d backends, want %d", len(backends), len(wantNames))
 	}
 	llama := backends.FindByName("llama-cpp")
 	if llama == nil || !llama.IsMeta() || llama.CapabilitiesMap["nvidia"] != "cuda12-llama-cpp" || llama.Alias != "llama-cpp" {

@@ -16,7 +16,6 @@ import (
 	cliContext "github.com/mudler/LocalAI/core/cli/context"
 	"github.com/mudler/LocalAI/core/config"
 	"github.com/mudler/LocalAI/core/http"
-	"github.com/mudler/LocalAI/core/library"
 	"github.com/mudler/LocalAI/core/p2p"
 	"github.com/mudler/LocalAI/internal"
 	"github.com/mudler/LocalAI/pkg/diagnostics"
@@ -37,6 +36,10 @@ type RunCMD struct {
 	AddonHostOps              string `name:"addon-host-ops" env:"LOCALAI_ADDON_HOST_OPS" default:"fine-tuning=finetune.,quantization=quantize." help:"Add-ons that may call host operations, as a comma list of addon-id=operation-prefix. An add-on that is not listed gets no host operation channel. Empty gives none" group:"addons"`
 	AddonsEnabled             bool   `name:"addons-enabled" env:"LOCALAI_ADDONS_ENABLED" default:"true" help:"Run the add-on owner, which installs and supervises add-ons. Turn it off with --addons-enabled=false" group:"addons"`
 	AddonsOwnershipMode       string `name:"addons-ownership-mode" env:"LOCALAI_ADDONS_OWNERSHIP_MODE" help:"Who may use add-ons: named-user (each account has its own access; needs authentication) or local-owner (every caller shares one owner). Default: local-owner when authentication is off, named-user when it is on" group:"addons"`
+	AddonsRole                string `name:"addons-role" env:"LOCALAI_ADDONS_ROLE" default:"combined" help:"How this process takes part in the add-on owner: combined (this node is its own owner, the default), owner (only the owner, serves the carrier on the network) or frontend (no owner here; every add-on request goes to the owner). owner and frontend need --addons-owner-address and --addons-carrier-dir" group:"addons"`
+	AddonsOwnerAddress        string `name:"addons-owner-address" env:"LOCALAI_ADDONS_OWNER_ADDRESS" help:"Address of the add-on owner carrier, as https://host:port with no path. Use a stable service name, never a pod address. Required for the owner and frontend roles" group:"addons"`
+	AddonsOwnerListen         string `name:"addons-owner-listen" env:"LOCALAI_ADDONS_OWNER_LISTEN" help:"Owner role only: the address the carrier listens on. Empty listens on all interfaces, on the port of --addons-owner-address" group:"addons"`
+	AddonsCarrierDir          string `name:"addons-carrier-dir" env:"LOCALAI_ADDONS_CARRIER_DIR" type:"path" help:"Directory with the carrier key set made by 'local-ai util addons-carrier-keys'. Required for the owner and frontend roles" group:"addons"`
 	AutoUpgradeAddons         bool   `name:"auto-upgrade-addons" env:"LOCALAI_AUTO_UPGRADE_ADDONS" default:"false" help:"Upgrade installed add-ons on their own when a newer version appears in their library. Off by default; upgrades then stay manual" group:"addons"`
 	AddonsOfficialLibrary     bool   `name:"addons-official-library" env:"LOCALAI_ADDONS_OFFICIAL_LIBRARY" default:"true" help:"Register the official add-on library on the first start, when the add-on owner has no sources.json yet. A library the admin removes later stays removed. Turn it off with --addons-official-library=false" group:"addons"`
 	AddonsBackendLibrary      bool   `name:"addons-backend-library" env:"LOCALAI_ADDONS_BACKEND_LIBRARY" default:"true" help:"Register the backend library on the first start, when the add-on owner has no sources.json yet. A build from master reads it as the backend source; a tagged build reads the backend gallery until the release cutover. Turn it off to read the backend gallery only" group:"addons"`
@@ -53,15 +56,18 @@ type RunCMD struct {
 	NoColor   string   `env:"NO_COLOR" hidden:""`
 	HFToken   string   `env:"HF_TOKEN" hidden:""`
 
-	ExternalBackends             []string      `env:"LOCALAI_EXTERNAL_BACKENDS,EXTERNAL_BACKENDS" help:"A list of external backends to load from gallery on boot" group:"backends"`
-	WebRTCNAT1To1IPs             []string      `env:"LOCALAI_WEBRTC_NAT_1TO1_IPS,WEBRTC_NAT_1TO1_IPS" help:"IPs advertised as the host ICE candidates for /v1/realtime WebRTC instead of every local interface. Set to the reachable host/LAN IP when running under Docker host networking or NAT, where pion otherwise offers unreachable bridge addresses and the connection drops after ICE consent checks fail." group:"api"`
-	WebRTCICEInterfaces          []string      `env:"LOCALAI_WEBRTC_ICE_INTERFACES,WEBRTC_ICE_INTERFACES" help:"Restrict /v1/realtime WebRTC ICE candidate gathering to these network interfaces (e.g. eth0), filtering out docker0/veth noise." group:"api"`
-	WebRTCUDPPort                int           `env:"LOCALAI_WEBRTC_UDP_PORT" help:"Shared UDP port for /v1/realtime WebRTC ICE traffic. Publish this port as UDP and allow it through the firewall." group:"api" name:"web-rtc-udp-port"`
-	BackendsPath                 string        `env:"LOCALAI_BACKENDS_PATH,BACKENDS_PATH" type:"path" default:"${basepath}/backends" help:"Path containing backends used for inferencing" group:"backends"`
-	BackendsSystemPath           string        `env:"LOCALAI_BACKENDS_SYSTEM_PATH,BACKEND_SYSTEM_PATH" type:"path" default:"/var/lib/local-ai/backends" help:"Path containing system backends used for inferencing" group:"backends"`
-	ModelsPath                   string        `env:"LOCALAI_MODELS_PATH,MODELS_PATH" type:"path" default:"${basepath}/models" help:"Path containing models used for inferencing" group:"storage"`
-	DownloadStagingPath          string        `env:"LOCALAI_DOWNLOAD_STAGING_PATH,DOWNLOAD_STAGING_PATH" type:"path" default:"${basepath}/downloading" help:"Path where in-flight downloads are staged before extraction" group:"storage"`
-	ArtifactDownloadConcurrency  int           `env:"LOCALAI_ARTIFACT_DOWNLOAD_CONCURRENCY" help:"How many files of a model artifact to download at once. 1 (the default) downloads sequentially. Raising it helps artifacts split into many files on a fast link, at the cost of more concurrent load on the models volume" group:"storage" default:"1"`
+	ExternalBackends            []string `env:"LOCALAI_EXTERNAL_BACKENDS,EXTERNAL_BACKENDS" help:"A list of external backends to load from gallery on boot" group:"backends"`
+	WebRTCNAT1To1IPs            []string `env:"LOCALAI_WEBRTC_NAT_1TO1_IPS,WEBRTC_NAT_1TO1_IPS" help:"IPs advertised as the host ICE candidates for /v1/realtime WebRTC instead of every local interface. Set to the reachable host/LAN IP when running under Docker host networking or NAT, where pion otherwise offers unreachable bridge addresses and the connection drops after ICE consent checks fail." group:"api"`
+	WebRTCICEInterfaces         []string `env:"LOCALAI_WEBRTC_ICE_INTERFACES,WEBRTC_ICE_INTERFACES" help:"Restrict /v1/realtime WebRTC ICE candidate gathering to these network interfaces (e.g. eth0), filtering out docker0/veth noise." group:"api"`
+	WebRTCUDPPort               int      `env:"LOCALAI_WEBRTC_UDP_PORT" help:"Shared UDP port for /v1/realtime WebRTC ICE traffic. Publish this port as UDP and allow it through the firewall." group:"api" name:"web-rtc-udp-port"`
+	BackendsPath                string   `env:"LOCALAI_BACKENDS_PATH,BACKENDS_PATH" type:"path" default:"${basepath}/backends" help:"Path containing backends used for inferencing" group:"backends"`
+	BackendsSystemPath          string   `env:"LOCALAI_BACKENDS_SYSTEM_PATH,BACKEND_SYSTEM_PATH" type:"path" default:"/var/lib/local-ai/backends" help:"Path containing system backends used for inferencing" group:"backends"`
+	ModelsPath                  string   `env:"LOCALAI_MODELS_PATH,MODELS_PATH" type:"path" default:"${basepath}/models" help:"Path containing models used for inferencing" group:"storage"`
+	DownloadStagingPath         string   `env:"LOCALAI_DOWNLOAD_STAGING_PATH,DOWNLOAD_STAGING_PATH" type:"path" default:"${basepath}/downloading" help:"Path where in-flight downloads are staged before extraction" group:"storage"`
+	ArtifactDownloadConcurrency int      `env:"LOCALAI_ARTIFACT_DOWNLOAD_CONCURRENCY" help:"How many files of a model artifact to download at once. 1 (the default) downloads sequentially. Raising it helps artifacts split into many files on a fast link, at the cost of more concurrent load on the models volume" group:"storage" default:"1"`
+
+	MaxConcurrentBackendOperations int `env:"LOCALAI_MAX_CONCURRENT_BACKEND_OPERATIONS" help:"How many backend install, upgrade and delete operations run at once. 1 (the default) runs them one after the other. Operations on the same backend always run one at a time" group:"backends" default:"1"`
+
 	GeneratedContentPath         string        `env:"LOCALAI_GENERATED_CONTENT_PATH,GENERATED_CONTENT_PATH" type:"path" default:"${generatedcontentpath}" help:"Location for generated content (e.g. images, audio, videos)" group:"storage"`
 	UploadPath                   string        `env:"LOCALAI_UPLOAD_PATH,UPLOAD_PATH" type:"path" default:"${uploadpath}" help:"Path to store uploads from files api" group:"storage"`
 	DataPath                     string        `env:"LOCALAI_DATA_PATH" type:"path" default:"${basepath}/data" help:"Path for persistent data (collectiondb, agent state, tasks, jobs). Separates mutable data from configuration" group:"storage"`
@@ -337,6 +343,7 @@ func (r *RunCMD) Run(ctx *cliContext.Context) (result error) {
 		config.WithProxyAPIKeyEnvLookup(os.Getenv),
 		config.WithContext(runCtx),
 		config.WithArtifactDownloadConcurrency(r.ArtifactDownloadConcurrency),
+		config.WithMaxConcurrentBackendOperations(r.MaxConcurrentBackendOperations),
 		config.WithModelArtifactMaterializer(modelartifacts.NewDefaultManager(
 			modelartifacts.WithHuggingFaceToken(r.HFToken),
 			modelartifacts.WithDownloadConcurrency(r.ArtifactDownloadConcurrency),
@@ -359,7 +366,7 @@ func (r *RunCMD) Run(ctx *cliContext.Context) (result error) {
 		// The galleries the flags named also become library sources, and the
 		// library sources decide which galleries are read. This must stay
 		// after the two options above.
-		library.Option(r.DataPath, r.AddonsOfficialLibrary, r.AddonsBackendLibrary, r.OfficialLibraries),
+		libraryOptionFor(r),
 		config.WithVRAMPersistentCache(r.VRAMPersistentCache),
 		config.WithCors(r.CORS),
 		config.WithCorsAllowOrigins(r.CORSAllowOrigins),
@@ -677,16 +684,23 @@ func (r *RunCMD) Run(ctx *cliContext.Context) (result error) {
 
 	// Authentication
 	authEnabled := r.AuthEnabled || r.GitHubClientID != "" || r.OIDCClientID != ""
-	addonCfg, err := addonConfigFor(r.AddonsEnabled, r.AddonsOwnershipMode, r.DataPath, authEnabled)
+	addonCfg, err := addonConfigFor(r.AddonsEnabled, r.AddonsOwnershipMode, r.DataPath, authEnabled, addonRoleFlags{Role: r.AddonsRole, OwnerAddress: r.AddonsOwnerAddress, OwnerListen: r.AddonsOwnerListen, CarrierDir: r.AddonsCarrierDir})
 	if err != nil {
 		cancelRun(nil)
 		return err
+	}
+	addonCfg.Frontend = r.AddonsRole == addonRoleFrontend
+	if addonCfg.Enabled && r.AddonsRole == addonRoleFrontend && !authEnabled {
+		xlog.Warn("This add-on frontend has no account database, so its add-on pins are kept in this process only and differ between frontends")
 	}
 	if addonCfg.Enabled {
 		addonCfg.OfficialLibrary = r.AddonsOfficialLibrary
 		addonCfg.OfficialBackendLibrary = r.AddonsBackendLibrary
 		addonCfg.BackendMaxBytes = r.AddonsBackendMaxBytes
 		opts = append(opts, config.WithAddons(addonCfg))
+	} else if addonCfg.Frontend {
+		// Add-ons are off, but the role still forbids owner state.
+		opts = append(opts, config.WithAddons(config.AddonConfig{Frontend: true}))
 	}
 	if authEnabled {
 		opts = append(opts, config.WithAuthEnabled(true))
