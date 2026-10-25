@@ -8,7 +8,7 @@ import { extractCodeArtifacts, renderMarkdownWithArtifacts } from '../utils/arti
 // eslint-disable-next-line no-unused-vars
 import CanvasPanel from '../components/CanvasPanel'
 // eslint-disable-next-line no-unused-vars
-import { fileToBase64, modelsApi, mcpApi, agentCollectionsApi } from '../utils/api'
+import { fileToBase64, modelsApi, mcpApi, agentCollectionsApi, featuresApi } from '../utils/api'
 import { readAttachmentText, renderPdfPages, PdfNoTextError } from '../utils/pdf'
 import { CAP_CHAT } from '../utils/capabilities'
 import { useMCPClient } from '../hooks/useMCPClient'
@@ -47,19 +47,19 @@ import ConfirmDialog from '../components/ConfirmDialog'
 // eslint-disable-next-line no-unused-vars
 import ChatsMenu from '../components/ChatsMenu'
 import { useAuth } from '../context/AuthContext'
-import { apiUrl } from '../utils/basePath'
-import { useHubAuth } from '../components/hub/useHubAuth'
-import {
-  canSaveAttachments, collectionNames, effectiveCollection,
-  loadAttachmentCollection, saveAttachmentCollection, saveAttachmentsWhenReady, restoreAttachmentSources,
-} from '../utils/attachmentCollection'
-// eslint-disable-next-line no-unused-vars
-import AttachmentUploads from '../components/chat/AttachmentUploads'
 import { useAddonToolAddons } from '../addons/useAddonRegistry'
 import AddonToolsMenu from '../components/chat/AddonToolsMenu'
 import { enabledAddonIds, toggleAddonSettings, toggleAllAddonSettings } from '../utils/chatAddons'
 // eslint-disable-next-line no-unused-vars
 import AddonSlot from '../addons/AddonSlot'
+import { useHubAuth } from '../components/hub/useHubAuth'
+import {
+  canSaveAttachments, collectionNames, effectiveCollection,
+  loadAttachmentCollection, saveAttachmentCollection, saveAttachmentsWhenReady, restoreAttachmentSources,
+  retryAttachmentUpload,
+} from '../utils/attachmentCollection'
+// eslint-disable-next-line no-unused-vars
+import AttachmentUploads from '../components/chat/AttachmentUploads'
 import { useOperations } from '../hooks/useOperations'
 import { useLoadedModels } from '../hooks/useLoadedModels'
 import { copyToClipboard } from '../utils/clipboard'
@@ -258,6 +258,8 @@ function ChatPage() {
   const [attachmentCollectionChoice, setAttachmentCollectionChoice] = useState(() => loadAttachmentCollection())
   const [attachmentUploads, setAttachmentUploads] = useState([])
   const uploadBatchRef = useRef(0)
+  // Read the list once per page, not on every open of the settings sheet;
+  // each send that saves attachments reads it again and refreshes it.
   useEffect(() => {
     if (!collectionsAllowed) { setCollectionOptions(null); return }
     let live = true
@@ -265,7 +267,7 @@ function ChatPage() {
       .then(data => { if (live) setCollectionOptions(collectionNames(data)) })
       .catch(() => { if (live) setCollectionOptions(null) })
     return () => { live = false }
-  }, [collectionsAllowed, showSettings])
+  }, [collectionsAllowed])
   useEffect(() => {
     uploadBatchRef.current++
     setAttachmentUploads([])
@@ -286,10 +288,12 @@ function ChatPage() {
       selected: attachmentCollectionChoice,
       loadAvailable: async () => {
         const features = hubAuth.features.agents === undefined
-          ? await fetch(apiUrl('/api/features')).then(r => r.json())
+          ? await featuresApi.get()
           : hubAuth.features
         if (!canSaveAttachments({ features, hasFeature: hubAuth.hasFeature })) return []
-        return collectionNames(await agentCollectionsApi.list())
+        const names = collectionNames(await agentCollectionsApi.list())
+        setCollectionOptions(names)
+        return names
       },
       entries,
       upload: (name, form) => agentCollectionsApi.upload(name, form),
@@ -297,6 +301,20 @@ function ChatPage() {
       onStatus: (statuses) => { if (uploadBatchRef.current === batch) setAttachmentUploads(statuses) },
     })
   }, [attachmentCollectionChoice, hubAuth.features, hubAuth.hasFeature])
+
+  // A retry belongs to the batch it was started in: a newer message or a chat
+  // switch replaces the strip, and the late answer must not write into it.
+  const retryAttachment = useCallback((status) => {
+    const batch = uploadBatchRef.current
+    retryAttachmentUpload({
+      status,
+      upload: (name, form) => agentCollectionsApi.upload(name, form),
+      onPatch: (patch) => {
+        if (uploadBatchRef.current !== batch) return
+        setAttachmentUploads(prev => prev.map(s => (s.id === status.id ? { ...s, ...patch } : s)))
+      },
+    })
+  }, [])
 
   const toggleFocusMode = (next) => {
     setFocusModeEnabled(next)
@@ -1347,7 +1365,7 @@ function ChatPage() {
         {/* Dock: the Home command bar under the thread */}
         <div className="cx-dock">
           <div className="cx-dock__in">
-            <AttachmentUploads uploads={attachmentUploads} onDismiss={() => setAttachmentUploads([])} />
+            <AttachmentUploads uploads={attachmentUploads} onDismiss={() => setAttachmentUploads([])} onRetry={retryAttachment} />
             <HomeComposer
               onDictateError={(m) => addToast(m, 'error')}
               message={input}

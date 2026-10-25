@@ -320,6 +320,14 @@
     "gallery": "Browse the gallery",
     "import": "Import a model"
   },
+  "addons": {
+    "label": "Add-ons",
+    "title": "Add-on tools for this chat",
+    "heading": "Add-on tools",
+    "selectAll": "Select all",
+    "deselectAll": "Deselect all",
+    "note": "An add-on that is off here does nothing in this chat."
+  },
   "attachmentCollection": {
     "title": "Attachments",
     "label": "Save attachments to collection",
@@ -329,14 +337,8 @@
     "uploading": "saving to {{collection}}…",
     "saved": "saved to {{collection}}",
     "failed": "failed: {{reason}}",
-    "dismiss": "Dismiss upload status"
-  },
-  "addons": {
-    "label": "Add-ons",
-    "title": "Add-on tools for this chat",
-    "heading": "Add-on tools",
-    "selectAll": "Select all",
-    "deselectAll": "Deselect all",
-    "note": "An add-on that is off here does nothing in this chat."
+    "dismiss": "Dismiss upload status",
+    "retry": "Retry",
+    "retryLabel": "Retry saving {{name}}"
   }
 }
