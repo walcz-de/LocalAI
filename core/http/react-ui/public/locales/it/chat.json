@@ -143,5 +143,8 @@
     "dismiss": "Nascondi lo stato del caricamento",
     "retry": "Riprova",
     "retryLabel": "Riprova a salvare {{name}}"
+  },
+  "unsaved": {
+    "warning": "Questa chat non è salvata: lo spazio del browser è pieno e nessuna copia ha raggiunto il server. Andrà persa se ricarichi o chiudi la pagina."
   }
 }

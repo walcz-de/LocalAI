@@ -143,5 +143,8 @@
     "dismiss": "Upload-Status ausblenden",
     "retry": "Erneut versuchen",
     "retryLabel": "{{name}} erneut speichern"
+  },
+  "unsaved": {
+    "warning": "Dieser Chat ist nicht gespeichert: Der Browserspeicher ist voll und keine Kopie hat den Server erreicht. Beim Neuladen oder Schließen der Seite geht er verloren."
   }
 }

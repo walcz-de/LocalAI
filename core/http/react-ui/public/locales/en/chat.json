@@ -340,5 +340,8 @@
     "dismiss": "Dismiss upload status",
     "retry": "Retry",
     "retryLabel": "Retry saving {{name}}"
+  },
+  "unsaved": {
+    "warning": "This chat is not saved: the browser storage is full and no copy reached the server. It will be lost if you reload or close the page."
   }
 }

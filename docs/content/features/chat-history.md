@@ -15,6 +15,8 @@ Chat history is only active when user authentication is enabled (`LOCALAI_AUTH=t
 
 Access is controlled by the `chat_history` feature permission. Like the other API features it is **on by default** for new users; an admin can turn it off per user under **Settings → Users and keys**. A user without it gets `403` from every endpoint, and their web UI falls back to browser storage.
 
+The web UI treats only `404` (chat history not enabled on this server) and `403` (permission off) as "no server history". Any other failure of the list - the server is still starting (`5xx`), the network is down - is asked again with a growing delay (1 s, 2 s, 4 s, ... up to 30 s), and at once when the browser comes back online or the tab becomes visible again.
+
 ## Deletions are final
 
 A deleted conversation must not come back because another device still has a copy. The server therefore keeps a **tombstone** for every deleted conversation: the row stays, its content is dropped, and it is marked deleted.
@@ -30,7 +32,7 @@ Within a live conversation the last write wins: there is no merge of two devices
 
 ## How the web UI syncs
 
-On load the Chat page asks the server for the list and reconciles it with what the browser has:
+On load the Chat page asks the server for the list (again, as above, until it gets an answer) and reconciles it with what the browser has:
 
 - A conversation the server reports as deleted is removed locally.
 - A conversation on both sides keeps the copy with the newer `updatedAt`. A message you send while the list is still loading is kept, and uploaded afterwards.
@@ -38,7 +40,13 @@ On load the Chat page asks the server for the list and reconciles it with what t
 - A conversation only on the server is added.
 - A conversation you delete while the list is still loading is deleted on the server once the list arrives.
 
-After that, every change is saved on its own (debounced, only conversations that changed). When a save returns `410`, the UI removes that conversation locally. On any other error it keeps the browser copy and tries again with the next change. `localStorage` stays a cache of the last state either way. The web UI does not use the bulk endpoint: every upload goes through the per-conversation save, so the tombstone check applies to each one.
+Conversations written while the list was failing are uploaded as soon as it arrives - no reload needed. After that, every change is saved on its own (debounced, only conversations that changed). A pending save is not dropped when you leave the Chat page, reload or close the tab: it is written right away. When a save returns `410`, the UI removes that conversation locally. On any other error it keeps the browser copy and tries again: with the next change, after a growing delay, and when the browser comes back online. `localStorage` stays a cache of the last state either way.
+
+### Pictures and the browser cache
+
+Pictures, audio and video are stored in a message as inline data (base64), and a few of them fill the few megabytes a browser allows for `localStorage`. So the cache keeps a placeholder instead of the bytes for every conversation the server already holds in its current state; the server copy has them and fills them back in on the next load. A conversation the server does not hold yet keeps its media in the cache. When the cache is full anyway, the conversations are cached without their media, so at least their text survives a reload. Without user authentication the browser is the only copy, so media stay in the cache as long as it has room.
+
+If a conversation can be kept neither in the browser nor on the server, the Chat page says so above the message box: it would be lost on reload. The note goes away once a copy is saved. The web UI does not use the bulk endpoint: every upload goes through the per-conversation save, so the tombstone check applies to each one.
 
 ### Deletes wait for the server
 
