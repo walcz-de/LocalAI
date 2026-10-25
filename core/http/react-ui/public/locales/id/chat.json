@@ -143,5 +143,8 @@
     "dismiss": "Tutup status unggahan",
     "retry": "Coba Lagi",
     "retryLabel": "Coba simpan {{name}} lagi"
+  },
+  "unsaved": {
+    "warning": "Obrolan ini belum tersimpan: penyimpanan browser penuh dan tidak ada salinan yang sampai ke server. Obrolan akan hilang jika Anda memuat ulang atau menutup halaman."
   }
 }

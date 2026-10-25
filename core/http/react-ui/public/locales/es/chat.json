@@ -143,5 +143,8 @@
     "dismiss": "Ocultar el estado de la subida",
     "retry": "Reintentar",
     "retryLabel": "Reintentar guardar {{name}}"
+  },
+  "unsaved": {
+    "warning": "Este chat no está guardado: el almacenamiento del navegador está lleno y ninguna copia llegó al servidor. Se perderá si recargas o cierras la página."
   }
 }

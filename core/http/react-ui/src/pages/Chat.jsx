@@ -134,7 +134,7 @@ function ChatPage() {
     chats, activeChat, activeChatId, isStreaming, streamingChatId, streamingContent,
     streamingReasoning, streamingToolCalls, tokensPerSecond, maxTokensPerSecond, modelLoading,
     addChat, forkChat, switchChat, deleteChat, deleteAllChats, renameChat, updateChatSettings,
-    sendMessage, stopGeneration, clearHistory, getContextUsagePercent, addMessage,
+    sendMessage, stopGeneration, clearHistory, getContextUsagePercent, addMessage, unsaved,
   } = useChat(urlModel || '')
 
   // Detect active staging operation for the current chat's model
@@ -1365,6 +1365,12 @@ function ChatPage() {
         <div className="cx-dock">
           <div className="cx-dock__in">
             <AttachmentUploads uploads={attachmentUploads} onDismiss={() => setAttachmentUploads([])} onRetry={retryAttachment} />
+            {unsaved && (
+              <div className="cx-unsaved" role="alert" data-testid="chat-unsaved-warning">
+                <Icon name="alert-circle" />
+                <span>{t('unsaved.warning')}</span>
+              </div>
+            )}
             <HomeComposer
               onDictateError={(m) => addToast(m, 'error')}
               message={input}

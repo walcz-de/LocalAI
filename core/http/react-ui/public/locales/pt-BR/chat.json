@@ -149,5 +149,8 @@
     "dismiss": "Fechar o status do envio",
     "retry": "Tentar novamente",
     "retryLabel": "Tentar salvar {{name}} novamente"
+  },
+  "unsaved": {
+    "warning": "Este chat não está salvo: o armazenamento do navegador está cheio e nenhuma cópia chegou ao servidor. Ele será perdido se você recarregar ou fechar a página."
   }
 }

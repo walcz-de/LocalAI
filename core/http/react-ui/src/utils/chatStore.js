@@ -48,3 +48,95 @@ export function writeChatStore(key, data) {
     return false
   }
 }
+
+// Inline media in the cache.
+//
+// Pictures, audio and video are part of a message as data: URLs (base64), so
+// a few of them fill the few megabytes localStorage allows. A full cache used
+// to fail silently: the chats then lived only in memory and were gone after a
+// reload. So the cache keeps a placeholder instead of the bytes where it can
+// afford to - for chats whose current state the server holds - and, when even
+// that does not fit, the text of every chat rather than nothing.
+
+export const OMITTED_MEDIA = 'omitted_media'
+const MEDIA_PARTS = ['image_url', 'audio_url', 'video_url']
+
+function placeholderFor(part) {
+  if (!part || !MEDIA_PARTS.includes(part.type)) return null
+  const url = part[part.type]?.url
+  if (typeof url !== 'string' || !url.startsWith('data:')) return null
+  const mime = url.slice(5, url.indexOf(';') > 0 ? url.indexOf(';') : 5)
+  return { type: OMITTED_MEDIA, kind: part.type, mime }
+}
+
+// The message list with every inline medium replaced by a placeholder. The
+// same array comes back when there was nothing to replace.
+export function withoutInlineMedia(history) {
+  if (!Array.isArray(history)) return history
+  let changed = false
+  const out = history.map(message => {
+    if (!Array.isArray(message?.content)) return message
+    let touched = false
+    const content = message.content.map(part => {
+      const placeholder = placeholderFor(part)
+      if (!placeholder) return part
+      touched = true
+      return placeholder
+    })
+    if (!touched) return message
+    changed = true
+    return { ...message, content }
+  })
+  return changed ? out : history
+}
+
+// Puts the media of `source` (the same conversation from the server) back
+// where `history` only has placeholders. Positions must match: message i,
+// part j, same kind of medium.
+export function restoreOmittedMedia(history, source) {
+  if (!Array.isArray(history) || !Array.isArray(source)) return history
+  let changed = false
+  const out = history.map((message, i) => {
+    if (!Array.isArray(message?.content)) return message
+    const from = source[i]?.content
+    if (!Array.isArray(from)) return message
+    let touched = false
+    const content = message.content.map((part, j) => {
+      if (part?.type !== OMITTED_MEDIA) return part
+      const original = from[j]
+      if (original?.type !== part.kind || !placeholderFor(original)) return part
+      touched = true
+      return original
+    })
+    if (!touched) return message
+    changed = true
+    return { ...message, content }
+  })
+  return changed ? out : history
+}
+
+// The message list as a model request needs it: placeholders carry no media
+// and are left out.
+export function withoutPlaceholders(history) {
+  if (!Array.isArray(history)) return history
+  return history.map(message => {
+    if (!Array.isArray(message?.content) || !message.content.some(p => p?.type === OMITTED_MEDIA)) return message
+    return { ...message, content: message.content.filter(p => p?.type !== OMITTED_MEDIA) }
+  })
+}
+
+// Writes the Chat page's cache. `serverHolds(chat)` says whether the server
+// has this exact state of the chat; those chats are cached without their
+// media. When the cache does not fit, every chat is written without media.
+// Returns 'full' or 'text' for what was written, or false when nothing could
+// be written.
+export function writeChatCache(key, data, serverHolds = () => false) {
+  const strip = chat => {
+    const history = withoutInlineMedia(chat.history)
+    return history === chat.history ? chat : { ...chat, history }
+  }
+  const chats = data.chats.map(chat => (serverHolds(chat) ? strip(chat) : chat))
+  if (writeChatStore(key, { ...data, chats })) return 'full'
+  if (writeChatStore(key, { ...data, chats: data.chats.map(strip) })) return 'text'
+  return false
+}

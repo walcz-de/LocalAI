@@ -152,5 +152,8 @@
     "dismiss": "Masquer l'état de l'envoi",
     "retry": "Réessayer",
     "retryLabel": "Réessayer d'enregistrer {{name}}"
+  },
+  "unsaved": {
+    "warning": "Cette conversation n'est pas enregistrée : le stockage du navigateur est plein et aucune copie n'a atteint le serveur. Elle sera perdue si vous rechargez ou fermez la page."
   }
 }

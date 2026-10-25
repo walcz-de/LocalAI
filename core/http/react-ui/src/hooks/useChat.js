@@ -5,7 +5,9 @@ import { effectiveSystemPrompt } from '../utils/systemPrompt'
 import { useDebouncedEffect } from './useDebounce'
 import { chatHistoryApi } from '../utils/api'
 import { useAuth } from '../context/AuthContext'
-import { chatsStorageKey, readChatStore, writeChatStore } from '../utils/chatStore'
+import {
+  chatsStorageKey, readChatStore, writeChatStore, writeChatCache, restoreOmittedMedia, withoutPlaceholders,
+} from '../utils/chatStore'
 import { storedResult } from '../addons/proposalResult'
 import { chatHeaders } from '../addons/resourceCalls'
 import { RegistryContext } from '../addons/registryContext'
@@ -131,15 +133,28 @@ function serializeChat(chat) {
   }
 }
 
-function saveChats(key, chats, activeChatId, pendingDeletes) {
-  writeChatStore(key, {
+// Writes the browser cache; see writeChatCache for `serverHolds` and the
+// result. Chats the server holds are cached without their media.
+function saveChats(key, chats, activeChatId, pendingDeletes, serverHolds) {
+  return writeChatCache(key, {
     // The local cache keeps the server version: it is how the next load
     // tells a chat the server has seen from a never-synced draft.
     chats: chats.map(chat => ({ ...serializeChat(chat), version: chat.version })),
     activeChatId,
     pendingDeletes: [...pendingDeletes],
-  })
+  }, serverHolds)
 }
+
+// Errors that mean the server has no chat history for this user: the routes
+// are not registered (404) or the chat_history permission is off (403).
+// Anything else - 5xx while the server starts, a network error, a timeout -
+// is worth asking again.
+function historyUnavailable(err) {
+  return err?.status === 404 || err?.status === 403
+}
+
+const LIST_RETRY_FIRST_MS = 1000
+const RETRY_MAX_MS = 30000
 
 // The server omits empty fields; the UI expects a history array.
 function fromServer(conv) {
@@ -165,7 +180,13 @@ function reconcileWithServer(remote, deleted, local) {
     const r = remoteById.get(c.id)
     if (r) {
       remoteById.delete(c.id)
-      out.push((c.updatedAt || 0) > (r.updatedAt || 0) ? { ...c, version: r.version } : r)
+      if ((c.updatedAt || 0) > (r.updatedAt || 0)) {
+        // The cache may hold placeholders for media the server copy still has.
+        const history = restoreOmittedMedia(c.history, r.history)
+        out.push({ ...c, history, version: r.version })
+      } else {
+        out.push(r)
+      }
     } else if (!c.version) {
       out.push(c)
     }
@@ -256,15 +277,25 @@ export function useChat(initialModel = '') {
   const activeChat = chats.find(c => c.id === activeChatId) || chats[0]
 
   // Server-side persistence. serverEnabledRef is null while we are still
-  // probing, true once a successful list arrives, false on any error
-  // (feature disabled, auth off, denied, network down) and when nobody is
-  // signed in. serializedSentRef caches the JSON last pushed (or received)
-  // per chat so unchanged chats are not written again. deletesInFlightRef
+  // probing (a failed list is asked again with a backoff, and at once when
+  // the browser comes back online or the tab becomes visible), true once a
+  // successful list arrives, and false when the server has no chat history
+  // for this user (404/403) or nobody is signed in. serializedSentRef caches
+  // the JSON last pushed (or received) per chat so unchanged chats are not
+  // written again; serverCopyRef holds the JSON the server confirmed, which
+  // tells the cache which chats it may keep without their media. deletesInFlightRef
   // holds the pending deletes with a request on the way; deleteAllSeqRef
   // counts "delete all" requests, so the answer to an older one does not
   // clear a newer one.
   const serverEnabledRef = useRef(null)
   const serializedSentRef = useRef(new Map())
+  const serverCopyRef = useRef(new Map())
+  // A failed save is tried again after a backoff, not only with the next change.
+  const saveRetryRef = useRef({ timer: null, attempt: 0 })
+  // Whether the last cache write failed completely; with no server copy
+  // either, the open chats would be lost on reload and the page says so.
+  const cacheFailedRef = useRef(false)
+  const [unsaved, setUnsaved] = useState(false)
   const deletesInFlightRef = useRef(new Set())
   const deleteAllSeqRef = useRef(0)
   // Bumped when a confirmed "delete all" lets the held-back saves go out.
@@ -312,45 +343,98 @@ export function useChat(initialModel = '') {
     setChats(prev => (prev.some(c => c.id === chatId) ? nonEmpty(prev.filter(c => c.id !== chatId)) : prev))
   }, [nonEmpty])
 
+  const retrySavesLater = useCallback(() => {
+    const retry = saveRetryRef.current
+    if (retry.timer) return
+    const delay = Math.min(RETRY_MAX_MS, 2 * LIST_RETRY_FIRST_MS * 2 ** retry.attempt)
+    retry.attempt += 1
+    retry.timer = setTimeout(() => {
+      retry.timer = null
+      setSyncTick(t => t + 1)
+    }, delay)
+  }, [])
+
+  useEffect(() => () => clearTimeout(saveRetryRef.current.timer), [])
+
   useEffect(() => {
     if (!accountId) {
       serverEnabledRef.current = false
       return
     }
     let cancelled = false
-    chatHistoryApi.list()
-      .then(resp => {
-        if (cancelled) return
-        const remote = Array.isArray(resp?.conversations) ? resp.conversations : []
-        const deleted = Array.isArray(resp?.deleted) ? [...resp.deleted] : []
-        // A pending delete wins over the list: the server may still have the
-        // chat because the delete has not reached it yet.
-        const pending = pendingDeletesRef.current
-        if (pending.has('*')) {
-          for (const c of remote) deleted.push({ id: c.id })
-        }
-        for (const id of pending) {
-          if (id !== '*') deleted.push({ id })
-        }
-        // What the server holds counts as sent, so adopting a server copy
-        // does not echo it straight back.
-        for (const c of remote) {
-          serializedSentRef.current.set(c.id, JSON.stringify(serializeChat(fromServer(c))))
-        }
-        serverEnabledRef.current = true
-        setChats(prev => nonEmpty(reconcileWithServer(remote, deleted, prev)))
-        flushPendingDeletes()
-      })
-      .catch(() => {
-        if (!cancelled) serverEnabledRef.current = false
-      })
-    return () => { cancelled = true }
+    let inFlight = false
+    let timer = null
+    let attempt = 0
+    const load = () => {
+      if (cancelled || inFlight || serverEnabledRef.current !== null) return
+      clearTimeout(timer)
+      timer = null
+      inFlight = true
+      chatHistoryApi.list()
+        .then(resp => {
+          inFlight = false
+          if (cancelled) return
+          const remote = Array.isArray(resp?.conversations) ? resp.conversations : []
+          const deleted = Array.isArray(resp?.deleted) ? [...resp.deleted] : []
+          // A pending delete wins over the list: the server may still have the
+          // chat because the delete has not reached it yet.
+          const pending = pendingDeletesRef.current
+          if (pending.has('*')) {
+            for (const c of remote) deleted.push({ id: c.id })
+          }
+          for (const id of pending) {
+            if (id !== '*') deleted.push({ id })
+          }
+          // What the server holds counts as sent, so adopting a server copy
+          // does not echo it straight back.
+          for (const c of remote) {
+            const json = JSON.stringify(serializeChat(fromServer(c)))
+            serializedSentRef.current.set(c.id, json)
+            serverCopyRef.current.set(c.id, json)
+          }
+          serverEnabledRef.current = true
+          // The reconcile changes the chats, so the save that follows uploads
+          // whatever was written while the list was failing.
+          setChats(prev => nonEmpty(reconcileWithServer(remote, deleted, prev)))
+          flushPendingDeletes()
+        })
+        .catch(err => {
+          inFlight = false
+          if (cancelled) return
+          if (historyUnavailable(err)) {
+            serverEnabledRef.current = false
+            return
+          }
+          // Transient (the server is starting, the network is down): ask again.
+          timer = setTimeout(load, Math.min(RETRY_MAX_MS, LIST_RETRY_FIRST_MS * 2 ** attempt))
+          attempt += 1
+        })
+    }
+    const wake = () => {
+      if (document.visibilityState === 'hidden') return
+      load()
+    }
+    window.addEventListener('online', wake)
+    document.addEventListener('visibilitychange', wake)
+    load()
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+      window.removeEventListener('online', wake)
+      document.removeEventListener('visibilitychange', wake)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Back online: send pending deletes and the saves that failed meanwhile.
   useEffect(() => {
-    window.addEventListener('online', flushPendingDeletes)
-    return () => window.removeEventListener('online', flushPendingDeletes)
+    const resync = () => {
+      if (serverEnabledRef.current !== true) return
+      flushPendingDeletes()
+      setSyncTick(t => t + 1)
+    }
+    window.addEventListener('online', resync)
+    return () => window.removeEventListener('online', resync)
   }, [flushPendingDeletes])
 
   // The reconcile can remove the open chat.
@@ -361,7 +445,15 @@ export function useChat(initialModel = '') {
   }, [chats, activeChatId])
 
   useDebouncedEffect(() => {
-    saveChats(storageKey, chats, activeChatId, pendingDeletesRef.current)
+    const jsonOf = new Map(chats.map(chat => [chat.id, JSON.stringify(serializeChat(chat))]))
+    const serverHolds = chat => serverCopyRef.current.get(chat.id) === jsonOf.get(chat.id)
+    const cached = saveChats(storageKey, chats, activeChatId, pendingDeletesRef.current, serverHolds)
+    cacheFailedRef.current = cached === false
+    // Unsaved: not in the cache and not (yet) on the server. With the server
+    // on and saves still on their way, their outcome decides.
+    if (cached !== false) setUnsaved(false)
+    else if (serverEnabledRef.current !== true) setUnsaved(true)
+    else if (chats.every(serverHolds)) setUnsaved(false)
     if (serverEnabledRef.current !== true) return
     flushPendingDeletes()
     // Until a "delete all" is confirmed, a chat saved now would be caught by
@@ -370,11 +462,13 @@ export function useChat(initialModel = '') {
     for (const chat of chats) {
       if (pendingDeletesRef.current.has(chat.id)) continue
       const serialized = serializeChat(chat)
-      const json = JSON.stringify(serialized)
+      const json = jsonOf.get(chat.id)
       if (serializedSentRef.current.get(chat.id) === json) continue
       serializedSentRef.current.set(chat.id, json)
       chatHistoryApi.save(serialized)
         .then(saved => {
+          saveRetryRef.current.attempt = 0
+          serverCopyRef.current.set(chat.id, json)
           if (!saved?.version) return
           setChats(prev => {
             if (!prev.some(c => c.id === saved.id && c.version !== saved.version)) return prev
@@ -388,12 +482,14 @@ export function useChat(initialModel = '') {
             dropChatLocally(chat.id)
             return
           }
-          // Keep localStorage as the copy on transient server failures;
-          // the next change retries.
+          // Keep localStorage as the copy on transient server failures and
+          // try again: with the next change, or after a backoff.
           serializedSentRef.current.delete(chat.id)
+          if (cacheFailedRef.current) setUnsaved(true)
+          retrySavesLater()
         })
     }
-  }, [chats, activeChatId, syncTick])
+  }, [chats, activeChatId, syncTick], 500, { flushOnExit: true })
 
   const addChat = useCallback((model = '', systemPrompt = '', mcpMode = false) => {
     const chat = createNewChat(model, systemPrompt, mcpMode)
@@ -575,7 +671,7 @@ export function useChat(initialModel = '') {
       m.role !== 'thinking' && m.role !== 'reasoning' && m.role !== 'tool_call' && m.role !== 'tool_result'
       && !(m.role === 'system' && !effectiveSystemPrompt(typeof m.content === 'string' ? m.content : ''))
     )
-    messages.push(...historyForApi, { role: 'user', content: messageContent })
+    messages.push(...withoutPlaceholders(historyForApi), ...withoutPlaceholders([{ role: 'user', content: messageContent }]))
 
     // include_usage tells LocalAI to emit a trailing chunk with token totals;
     // without it the spec-compliant server drops `usage` from the stream and
@@ -1138,5 +1234,8 @@ export function useChat(initialModel = '') {
     clearHistory,
     getContextUsagePercent,
     addMessage,
+    // True while the open chats are neither in the browser cache nor on the
+    // server: they would be lost on reload.
+    unsaved,
   }
 }
