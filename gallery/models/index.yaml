@@ -3444,7 +3444,7 @@
     files:
       - filename: ds4flash.gguf
         uri: https://huggingface.co/unsloth/DeepSeek-V4-Flash-Vision-Exp-GGUF
-        sha256: ce715af0959dcac0d739e925aacd78fc3d2275b242f6c68a30914c39d5c7a991
+        sha256: a2d4d54069135061221b361fe1900c72518533ab46c571a451c160a48e3c26ab
     overrides:
       backend: ds4
       function:
@@ -15958,8 +15958,8 @@
         sha256: 927d6bc9c4db38b953da1da8d8e1a473725253c7683471a6369e0ce74688cf94
         uri: https://huggingface.co/LuffyTheFox/Qwen3.6-35B-A3B-Uncensored-Genesis-Hermes-V6-GGUF/resolve/main/Hermes3.6-35B-A3B-Uncensored-Genesis-V6-Q8_0.gguf
       - filename: llama-cpp/mmproj/Hermes3.6-35B-A3B-Uncensored-Genesis-V6-Q8_0/mmproj-Hermes3.6-35B-A3B-Uncensored-Genesis-F16.gguf
-        sha256: 9e9f11dfba6f54b74f69fff635ac1643dbab3d95198233b256f279aafff3f566
         uri: https://huggingface.co/LuffyTheFox/Qwen3.6-35B-A3B-Uncensored-Genesis-Hermes-V6-GGUF/resolve/main/mmproj-Hermes3.6-35B-A3B-Uncensored-Genesis-F16.gguf
+        sha256: b327d147da02d09fcb93af1c92600a9ab5d545504f36c2af51148f53281f8621
     overrides:
       backend: llama-cpp
       function:
@@ -16123,8 +16123,8 @@
         sha256: 995c2a82e1aaca7947075891ead093e38d1e7dc5c0b54e4debd1d01058229ff9
         uri: huggingface://LuffyTheFox/Qwen3.6-35B-A3B-Uncensored-Genesis-Hermes-V7-GGUF/Hermes3.6-35B-A3B-Uncensored-Genesis-V7-APEX.gguf
       - filename: llama-cpp/mmproj/Hermes3.6-35B-A3B-Uncensored-Genesis-V7/mmproj-Hermes3.6-35B-A3B-Uncensored-Genesis-F16.gguf
-        sha256: 9e9f11dfba6f54b74f69fff635ac1643dbab3d95198233b256f279aafff3f566
         uri: huggingface://LuffyTheFox/Qwen3.6-35B-A3B-Uncensored-Genesis-Hermes-V7-GGUF/mmproj-Hermes3.6-35B-A3B-Uncensored-Genesis-F16.gguf
+        sha256: b327d147da02d09fcb93af1c92600a9ab5d545504f36c2af51148f53281f8621
     overrides:
       backend: llama-cpp
       function:
@@ -16184,8 +16184,8 @@
         sha256: 41826ae69333ab4f3577d53c0a8b427b306c63c88c6200b4eada32dda28d26b9
         uri: huggingface://LuffyTheFox/Qwen3.6-35B-A3B-Uncensored-Genesis-Hermes-V7-GGUF/Hermes3.6-35B-A3B-Uncensored-Genesis-V7-APEX-Compact.gguf
       - filename: llama-cpp/mmproj/Hermes3.6-35B-A3B-Uncensored-Genesis-V7/mmproj-Hermes3.6-35B-A3B-Uncensored-Genesis-F16.gguf
-        sha256: 9e9f11dfba6f54b74f69fff635ac1643dbab3d95198233b256f279aafff3f566
         uri: huggingface://LuffyTheFox/Qwen3.6-35B-A3B-Uncensored-Genesis-Hermes-V7-GGUF/mmproj-Hermes3.6-35B-A3B-Uncensored-Genesis-F16.gguf
+        sha256: b327d147da02d09fcb93af1c92600a9ab5d545504f36c2af51148f53281f8621
     overrides:
       backend: llama-cpp
       function:
@@ -16241,8 +16241,8 @@
         sha256: 63a3cd730a4f1e7f5b909c89550de32e5a27b33c697c62aed9da60a7bd4643ae
         uri: huggingface://LuffyTheFox/Qwen3.6-35B-A3B-Uncensored-Genesis-Hermes-V7-GGUF/Hermes3.6-35B-A3B-Uncensored-Genesis-V7-MTP-APEX.gguf
       - filename: llama-cpp/mmproj/Hermes3.6-35B-A3B-Uncensored-Genesis-V7/mmproj-Hermes3.6-35B-A3B-Uncensored-Genesis-F16.gguf
-        sha256: 9e9f11dfba6f54b74f69fff635ac1643dbab3d95198233b256f279aafff3f566
         uri: huggingface://LuffyTheFox/Qwen3.6-35B-A3B-Uncensored-Genesis-Hermes-V7-GGUF/mmproj-Hermes3.6-35B-A3B-Uncensored-Genesis-F16.gguf
+        sha256: b327d147da02d09fcb93af1c92600a9ab5d545504f36c2af51148f53281f8621
     overrides:
       backend: llama-cpp
       function:
@@ -16301,8 +16301,8 @@
         sha256: 11edd0da4f28f587c0eb72ae2e417dfb0d02733360303045e21c9ba3aae8d114
         uri: huggingface://LuffyTheFox/Qwen3.6-35B-A3B-Uncensored-Genesis-Hermes-V7-GGUF/Hermes3.6-35B-A3B-Uncensored-Genesis-V7-MTP-APEX-Compact.gguf
       - filename: llama-cpp/mmproj/Hermes3.6-35B-A3B-Uncensored-Genesis-V7/mmproj-Hermes3.6-35B-A3B-Uncensored-Genesis-F16.gguf
-        sha256: 9e9f11dfba6f54b74f69fff635ac1643dbab3d95198233b256f279aafff3f566
         uri: huggingface://LuffyTheFox/Qwen3.6-35B-A3B-Uncensored-Genesis-Hermes-V7-GGUF/mmproj-Hermes3.6-35B-A3B-Uncensored-Genesis-F16.gguf
+        sha256: b327d147da02d09fcb93af1c92600a9ab5d545504f36c2af51148f53281f8621
     overrides:
       backend: llama-cpp
       function:
@@ -16360,8 +16360,8 @@
         sha256: b37a4225ba1eebaaac35b69dfeb78d1955d06fcb9f41fd334a4837cbdaff21c1
         uri: huggingface://LuffyTheFox/Qwen3.6-35B-A3B-Uncensored-Genesis-Hermes-V7-GGUF/Hermes3.6-35B-A3B-Uncensored-Genesis-V7-Q8_K_P.gguf
       - filename: llama-cpp/mmproj/Hermes3.6-35B-A3B-Uncensored-Genesis-V7/mmproj-Hermes3.6-35B-A3B-Uncensored-Genesis-F16.gguf
-        sha256: 9e9f11dfba6f54b74f69fff635ac1643dbab3d95198233b256f279aafff3f566
         uri: huggingface://LuffyTheFox/Qwen3.6-35B-A3B-Uncensored-Genesis-Hermes-V7-GGUF/mmproj-Hermes3.6-35B-A3B-Uncensored-Genesis-F16.gguf
+        sha256: b327d147da02d09fcb93af1c92600a9ab5d545504f36c2af51148f53281f8621
     overrides:
       backend: llama-cpp
       function:
@@ -29250,8 +29250,8 @@
     url: github:mudler/LocalAI/gallery/sherpa-onnx-tts.yaml@master
     files:
       - filename: kokoro-int8-multi-lang-v1_0.tar.bz2
-        sha256: 4c3052abaa60943a341f193888cf6abd68787dae6ab8ae5c925a706caa247e4e
         uri: https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-multi-lang-v1_0.tar.bz2
+        sha256: 72c347230107ef8a31098ec4d468a605244beef5f1ed00db97efa13518800653
     overrides:
       known_usecases:
         - tts
@@ -90747,7 +90747,7 @@
     url: github:mudler/LocalAI/gallery/virtual.yaml@master
     files:
       - filename: audio-cpp/htdemucs-f16.gguf
-        sha256: 27763c59d7e65f64bbb326dc0c15beec952291954b70a813b7f4b83ebe6bd0c9
+        sha256: f8c54ba35df95aafea7881eac214b58ec18a73cbcb6ff5a90f4b762631a286b6
         uri: huggingface://audio-cpp/audio.cpp-gguf/HTDemucs-GGUF/htdemucs-f16.gguf
     overrides:
       backend: audio-cpp
@@ -92068,8 +92068,8 @@
     url: github:mudler/LocalAI/gallery/virtual.yaml@master
     files:
       - filename: llama-cpp/models/clef/Clef-Q4_K_M.gguf
-        sha256: 9997675e4c9e9016273372b5fdedbdda7ad14285bc722949e4b9daca62bf3822
         uri: https://huggingface.co/ggml-org/Clef-GGUF/resolve/63840a1a68cb7084c88610cffc328509356b04cb/Clef-Q4_K_M.gguf
+        sha256: 06a819954debafc9664ac6bf3898818185d21d7efe36d0f01009d9958bf6e1fd
       - filename: llama-cpp/mmproj/clef/mmproj-Clef-Q8_0.gguf
         sha256: 744ad2db24c336fc9120dd5ba06344c0601b9efd365fe96be01ce5c4e6ab64cf
         uri: https://huggingface.co/ggml-org/Clef-GGUF/resolve/63840a1a68cb7084c88610cffc328509356b04cb/mmproj-Clef-Q8_0.gguf
@@ -92110,8 +92110,8 @@
     url: github:mudler/LocalAI/gallery/virtual.yaml@master
     files:
       - filename: llama-cpp/models/clef/Clef-Q8_0.gguf
-        sha256: 537d3c88008b8a4bcdf12d9b79f1e3161fbe02f530b84048bb8f16461b01ddb3
         uri: https://huggingface.co/ggml-org/Clef-GGUF/resolve/63840a1a68cb7084c88610cffc328509356b04cb/Clef-Q8_0.gguf
+        sha256: 728801f58fcebb35e60bb2ac0cf63fc33e3137b07581da132c1f0f5c5e2149fe
       - filename: llama-cpp/mmproj/clef/mmproj-Clef-Q8_0.gguf
         sha256: 744ad2db24c336fc9120dd5ba06344c0601b9efd365fe96be01ce5c4e6ab64cf
         uri: https://huggingface.co/ggml-org/Clef-GGUF/resolve/63840a1a68cb7084c88610cffc328509356b04cb/mmproj-Clef-Q8_0.gguf
@@ -92181,8 +92181,8 @@
     url: github:mudler/LocalAI/gallery/virtual.yaml@master
     files:
       - filename: llama-cpp/models/clef-flash/Clef-Flash-Q4_K_M.gguf
-        sha256: 3626116623ca8d89641952471fac9ce12af84fb3517520029a2ac6f5146868a2
         uri: https://huggingface.co/ggml-org/Clef-Flash-GGUF/resolve/4a192915ef971886004b5b13294f2b4c7a7fc39d/Clef-Flash-Q4_K_M.gguf
+        sha256: eef2968c238a80d49d340430f22410ea3db9934ad1c6fdb233a503cbf9a9b54e
       - filename: llama-cpp/mmproj/clef-flash/mmproj-Clef-Flash-Q8_0.gguf
         sha256: 9dd8bc279f57d33b0697d4d0fe900fe751a24c9e3d30ab90969d4714ffc0722d
         uri: https://huggingface.co/ggml-org/Clef-Flash-GGUF/resolve/4a192915ef971886004b5b13294f2b4c7a7fc39d/mmproj-Clef-Flash-Q8_0.gguf
@@ -92223,8 +92223,8 @@
     url: github:mudler/LocalAI/gallery/virtual.yaml@master
     files:
       - filename: llama-cpp/models/clef-flash/Clef-Flash-Q8_0.gguf
-        sha256: 87a232aa1f7495cfc90ce22f08bb3779655e1b05c991c84b21afa4c1c8c4e0f5
         uri: https://huggingface.co/ggml-org/Clef-Flash-GGUF/resolve/4a192915ef971886004b5b13294f2b4c7a7fc39d/Clef-Flash-Q8_0.gguf
+        sha256: 25f801e2a27610b0ccc0cb1558d7eda3d7a304e34e2c4a04e3079357ff7d906e
       - filename: llama-cpp/mmproj/clef-flash/mmproj-Clef-Flash-Q8_0.gguf
         sha256: 9dd8bc279f57d33b0697d4d0fe900fe751a24c9e3d30ab90969d4714ffc0722d
         uri: https://huggingface.co/ggml-org/Clef-Flash-GGUF/resolve/4a192915ef971886004b5b13294f2b4c7a7fc39d/mmproj-Clef-Flash-Q8_0.gguf
