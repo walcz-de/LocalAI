@@ -264,15 +264,14 @@ export function useChat(initialModel = '') {
   const [streamingReasoning, setStreamingReasoning] = useState('')
   const [streamingToolCalls, setStreamingToolCalls] = useState([])
   const [tokensPerSecond, setTokensPerSecond] = useState(null)
-  const [maxTokensPerSecond, setMaxTokensPerSecond] = useState(null)
+  const [throughputIsEstimated, setThroughputIsEstimated] = useState(true)
   // Live progress of a cold load the request is waiting on, so the composer can
   // say "staging to nvidia-thor, 41%" instead of showing an error for a model
   // that is loading exactly as it should.
   const [modelLoading, setModelLoading] = useState(null)
   const abortControllerRef = useRef(null)
   const startTimeRef = useRef(null)
-  const tokenCountRef = useRef(0)
-  const maxTpsRef = useRef(0)
+  const outputCharactersRef = useRef(0)
 
   const activeChat = chats.find(c => c.id === activeChatId) || chats[0]
 
@@ -522,7 +521,7 @@ export function useChat(initialModel = '') {
     setStreamingReasoning('')
     setStreamingToolCalls([])
     setTokensPerSecond(null)
-    setMaxTokensPerSecond(null)
+    setThroughputIsEstimated(true)
   }, [])
 
   const deleteChat = useCallback((chatId) => {
@@ -549,7 +548,7 @@ export function useChat(initialModel = '') {
     setStreamingReasoning('')
     setStreamingToolCalls([])
     setTokensPerSecond(null)
-    setMaxTokensPerSecond(null)
+    setThroughputIsEstimated(true)
     serializedSentRef.current.clear()
     if (!accountId) return
     // Covers every delete still pending before it.
@@ -736,15 +735,18 @@ export function useChat(initialModel = '') {
     setStreamingReasoning('')
     setStreamingToolCalls([])
     setTokensPerSecond(null)
-    setMaxTokensPerSecond(null)
+    setThroughputIsEstimated(true)
     startTimeRef.current = Date.now()
-    tokenCountRef.current = 0
-    maxTpsRef.current = 0
+    outputCharactersRef.current = 0
 
     let usage = {}
+    let completionTokens = 0
+    let completeUsage = true
     const newMessages = [] // Accumulate messages to add to history
 
     if (activeChat.mcpMode && !hasMcpServers) {
+      // Legacy MCP events do not report completion-token usage.
+      completeUsage = false
       // Legacy MCP SSE streaming (custom event types from /v1/mcp/chat/completions)
       try {
         const timeoutId = setTimeout(() => controller.abort(), 300000) // 5 min timeout
@@ -788,7 +790,7 @@ export function useChat(initialModel = '') {
                   hasReasoningFromAPI = true
                   if (eventData.content) {
                     reasoningContent += eventData.content
-                    tokenCountRef.current += Math.ceil(eventData.content.length / 4)
+                    outputCharactersRef.current += eventData.content.length
                     showReasoning(reasoningContent)
                     updateTps()
                   }
@@ -828,7 +830,7 @@ export function useChat(initialModel = '') {
                 case 'assistant':
                   if (eventData.content) {
                     assistantContent += eventData.content
-                    tokenCountRef.current += Math.ceil(eventData.content.length / 4)
+                    outputCharactersRef.current += eventData.content.length
                     // Handle thinking tags if no API reasoning
                     if (!hasReasoningFromAPI) {
                       const { regularContent, thinkingContent } = extractThinking(assistantContent)
@@ -892,6 +894,7 @@ export function useChat(initialModel = '') {
         let currentToolCalls = []
         let finishReason = null
         let fullToolCalls = [] // Tool calls with id for agentic loop
+        let turnCompletionTokens = null
 
         try {
           const response = await fetchWithModelLoadWait(apiUrl(endpoint), {
@@ -928,6 +931,7 @@ export function useChat(initialModel = '') {
 
                 // Handle structured error events
                 if (parsed.error) {
+                  completeUsage = false
                   const errMsg = typeof parsed.error === 'string'
                     ? parsed.error
                     : parsed.error.message || 'Unknown error'
@@ -970,7 +974,7 @@ export function useChat(initialModel = '') {
                 if (delta?.reasoning) {
                   hasReasoningFromAPI = true
                   reasoningContent += delta.reasoning
-                  tokenCountRef.current++
+                  outputCharactersRef.current += delta.reasoning.length
                   showReasoning(reasoningContent)
                   updateTps()
                 }
@@ -1007,7 +1011,7 @@ export function useChat(initialModel = '') {
 
                 if (delta?.content) {
                   rawContent += delta.content
-                  tokenCountRef.current++
+                  outputCharactersRef.current += delta.content.length
 
                   if (!hasReasoningFromAPI) {
                     if (openThinkTagRegex.test(rawContent) && !closeThinkTagRegex.test(rawContent)) {
@@ -1045,6 +1049,11 @@ export function useChat(initialModel = '') {
                 }
                 if (parsed?.usage) {
                   usage = parsed.usage
+                  if (Number.isFinite(usage.completion_tokens) && usage.completion_tokens >= 0) {
+                    // Usage is cumulative within a turn, not a delta. Reasoning
+                    // is already included in completion_tokens.
+                    turnCompletionTokens = usage.completion_tokens
+                  }
                 }
               } catch (_e) {
                 // skip malformed JSON
@@ -1052,10 +1061,14 @@ export function useChat(initialModel = '') {
             }
           }
         } catch (err) {
+          completeUsage = false
           if (err.name !== 'AbortError') {
             rawContent += `\n\nError: ${err.message}`
           }
         }
+
+        if (turnCompletionTokens === null) completeUsage = false
+        else completionTokens += turnCompletionTokens
 
         // Client-side agentic loop: check for client tool calls
         const validToolCalls = fullToolCalls.filter(Boolean)
@@ -1151,10 +1164,11 @@ export function useChat(initialModel = '') {
     setStreamingReasoning('')
     setStreamingToolCalls([])
 
-    // Set max tokens/sec badge
-    if (maxTpsRef.current > 0) {
-      setMaxTokensPerSecond(Math.round(maxTpsRef.current * 10) / 10)
-    }
+    // Use the same end-to-end window for every turn, including tool execution.
+    // An interrupted stream may not have reported its final usage.
+    const reported = completeUsage && !controller.signal.aborted
+    updateTps(reported ? completionTokens : undefined)
+    setThroughputIsEstimated(!reported)
 
     // Add messages to history
     if (newMessages.length > 0) {
@@ -1174,14 +1188,14 @@ export function useChat(initialModel = '') {
     }
   }, [activeChat, chats])
 
-  function updateTps() {
+  function updateTps(reportedTokens) {
     const elapsed = (Date.now() - startTimeRef.current) / 1000
     if (elapsed > 0) {
-      const tps = tokenCountRef.current / elapsed
+      // Four characters per token is only a live estimate, independent of
+      // how the backend splits content and reasoning into streaming chunks.
+      const tokens = reportedTokens ?? outputCharactersRef.current / 4
+      const tps = tokens / elapsed
       setTokensPerSecond(Math.round(tps * 10) / 10)
-      if (tps > maxTpsRef.current) {
-        maxTpsRef.current = tps
-      }
     }
   }
 
@@ -1220,7 +1234,7 @@ export function useChat(initialModel = '') {
     streamingReasoning: isActiveStreaming ? streamingReasoning : '',
     streamingToolCalls: isActiveStreaming ? streamingToolCalls : [],
     tokensPerSecond,
-    maxTokensPerSecond,
+    throughputIsEstimated,
     modelLoading: isActiveStreaming ? modelLoading : null,
     addChat,
     forkChat,
