@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/mudler/LocalAI/core/config"
 	"github.com/mudler/LocalAI/core/schema"
@@ -228,10 +229,10 @@ func newEvidenceGate(cfg *config.ModelConfig, messages []schema.Message) *eviden
 	g := &evidenceGate{sources: check.Sources, sourcesLabel: check.SourcesHeading()}
 	if check.Numbers {
 		g.note = check.EvidenceNote()
-		g.evidence = evidenceNumbers(cfg.SystemPrompt, messages)
+		g.evidence = evidenceNumbers(cfg.RenderedSystemPrompt(time.Now()), messages)
 	}
 	if check.URLs {
-		g.requestURLs = evidenceURLs(cfg.SystemPrompt, messages)
+		g.requestURLs = evidenceURLs(cfg.RenderedSystemPrompt(time.Now()), messages)
 		g.urlsNote = check.UnverifiedURLsNote
 	}
 	return g
