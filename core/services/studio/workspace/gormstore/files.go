@@ -41,19 +41,29 @@ func (s *Workspace) Put(ctx context.Context, a Actor, p string, r io.Reader, o P
 	if err := s.precheckPut(ctx, s.db, a, segs); err != nil {
 		return Node{}, err
 	}
-	sum, size, err := s.blobs.Put(ctx, r, s.limit(o.MaxSize))
-	if err != nil {
-		return Node{}, err
-	}
 	title := "Upload " + segs[len(segs)-1]
 	if o.Title != "" {
 		title = o.Title
 	}
-	w, err := s.beginWrite(ctx, a, title, ChangeUpload)
+	var w *writer
+	if s.sharedFilesystem {
+		w, err = s.beginWrite(ctx, a, title, ChangeUpload)
+		if err != nil {
+			return Node{}, err
+		}
+		defer w.rollback()
+	}
+	sum, size, err := s.blobs.Put(ctx, r, s.limit(o.MaxSize))
 	if err != nil {
 		return Node{}, err
 	}
-	defer w.rollback()
+	if w == nil {
+		w, err = s.beginWrite(ctx, a, title, ChangeUpload)
+		if err != nil {
+			return Node{}, err
+		}
+		defer w.rollback()
+	}
 	n, asked, err := w.put(segs, sum, size, o)
 	if err != nil {
 		return Node{}, err
@@ -124,6 +134,39 @@ func (s *Workspace) Open(ctx context.Context, a Actor, p string) (io.ReadSeekClo
 
 func (s *Workspace) Stat(ctx context.Context, a Actor, p string) (Node, error) {
 	n, err := s.find(ctx, s.db, a, p, ModeRead)
+	if err != nil {
+		return Node{}, err
+	}
+	return s.toNode(ctx, s.db, n)
+}
+
+func (s *Workspace) NodeByID(ctx context.Context, a Actor, id int64) (Node, error) {
+	if err := CheckFence(a); err != nil {
+		return Node{}, err
+	}
+	if id <= 0 {
+		return Node{}, ErrNotFound
+	}
+	ancs, live, err := liveAncestors(ctx, s.db, id)
+	if err != nil {
+		return Node{}, err
+	}
+	if len(ancs) == 0 {
+		return Node{}, ErrNotFound
+	}
+	for _, anc := range ancs {
+		if !live[anc] {
+			return Node{}, ErrNotFound
+		}
+	}
+	m, err := s.access(ctx, s.db, a, id)
+	if err != nil {
+		return Node{}, err
+	}
+	if m < ModeRead {
+		return Node{}, ErrNotFound
+	}
+	n, err := getNode(ctx, s.db, id)
 	if err != nil {
 		return Node{}, err
 	}

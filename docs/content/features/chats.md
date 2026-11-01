@@ -573,7 +573,11 @@ every turn, so it knows which files exist and where they are now.
   `/Chats/<date> <title>/<name>`, for example `/Chats/2026-10-29 Budget/q1.csv`.
   The model sees the same file as
   `/workspace/home/Chats/2026-10-29 Budget/q1.csv`. The folder is made at the
-  first attachment.
+  first attachment. In a chat whose agent works in [one
+  folder]({{%relref "features/chats-agents#one-folder-for-an-agent" %}}), the
+  model sees the chat folder at `/workspace/chat` instead (the file above is
+  `/workspace/chat/q1.csv`), and the folder is made before the first turn. The
+  list on this page keeps the paths in your home.
 - **What is listed.** Every file in the chat folder, and every file that the
   chat's turns created or changed elsewhere in your home folder: with `bash`,
   or with a file tool such as `write_file`. The list is read from the
@@ -733,6 +737,10 @@ later as a message in the conversation and as a `sub_agent_done` event.
   when they run on another frontend and when the parent has no turn left.
 - A `sub_agent_started` event (with the run's id and title) and a
   `sub_agent_done` event mark the run in the parent's event stream.
+- A sub-agent of a chat whose agent works in [one
+  folder]({{%relref "features/chats-agents#one-folder-for-an-agent" %}})
+  works inside the chat's folders, never in more of your files and never
+  with more rights than the chat.
 - A sub-agent cannot run commands when its parent cannot (see [Running
   commands](#running-commands)). A task that asks to run something ("execute
   the script", "run make_deck.py") is then refused at once with "the sub-agent
@@ -756,7 +764,10 @@ is off for every chat until you switch **Saved agents** on in the chat's
 **Tools** menu. The chat then has two more things:
 
 - `list_agents` lists your saved agents: `id`, `name`, `description` and
-  `model`, at most 100. It lists only your own agents.
+  `model`, at most 100, and for an agent that works in a folder the folder's
+  name (`folder`) and its mode (`folder_mode`, `read` or `write`). It lists only
+  your own agents. In a chat whose agent has a folder it lists only the agents
+  that can start there (see [One folder for an agent]({{%relref "features/chats-agents#one-folder-for-an-agent" %}})).
 - `spawn_agent` takes an `agent` argument, the id or the name (ignoring case) of
   one of them. The sub-agent runs with the agent's instructions, its model (or
   the chat's model when the agent names none) and only what the agent grants,
@@ -797,6 +808,12 @@ the server:
   isolation**. This covers a server with no Sandbox, a chat that switched the
   Sandbox off, and a Sandbox that is stopped or cannot run.
 - **Nothing.** With neither, nothing in the chat runs code.
+
+A chat whose agent works in [one
+folder]({{%relref "features/chats-agents#one-folder-for-an-agent" %}}) runs
+commands only in the Sandbox, never on this machine. Its sandbox has the
+agent's folder at `/workspace/home` and the chat's own folder at
+`/workspace/chat`.
 
 At every turn the model is told in one short block which of the three holds.
 With host commands the block says that `bash` runs on this machine with no
@@ -915,6 +932,12 @@ shown when the Sandbox is already installed, or when add-ons are off.
   apply. Install the Sandbox to isolate commands.
 - **Never as root.** When LocalAI runs as root, the built-in `bash` is not
   offered.
+- **Never for an agent limited to one folder.** A chat whose agent works in
+  one folder (and its sub-agents) never gets the built-in `bash`, whatever
+  `chats_host_exec` says: a command here can read every file LocalAI can read,
+  so nothing keeps it in that folder. Such a chat runs commands only in the
+  Sandbox, and its Tools menu says why. See
+  [One folder for an agent]({{%relref "features/chats-agents#one-folder-for-an-agent" %}}).
 - **Your files.** Each chat gets a scratch folder with your files: `home/`
   there is `/workspace/home` of the file tools, and `shared-<name>/` is a
   shared folder. A command starts in `home/`, so a relative path is a path in
@@ -1623,11 +1646,12 @@ everything else in the chats works. A chat then has no skills either, not even
 the built-in ones, and no `load_skill`: skills are files, and every built-in
 skill works on files or runs commands.
 
-In a cluster the bytes go to the object store, so a file written through one
-frontend is read through another. That needs S3 (the storage URL setting); `docker-compose.distributed.yaml` sets it up with Garage.
-Without it the object store is a folder of each frontend, so files are off in
-that cluster, with a reason that says so, instead of every frontend keeping its
-own copy.
+In a cluster, configured S3 holds workspace bytes; the distributed compose
+example sets it up with Garage. Without S3, Files uses the existing
+`DataPath/chats/blobs` directly. All Files participants must then mount the same
+backing data directory and use the same PostgreSQL metadata database. See
+[Shared filesystem for Files](#shared-filesystem-for-files) for the operator
+contract; startup does not verify shared volume identity.
 
 ## Storage
 
@@ -1853,3 +1877,60 @@ The old chat page, the agents, the agent jobs and the old skills were replaced b
 
 The routes are listed under the `chats` tag at `/swagger/index.html`, and
 `GET /api/instructions/chats` returns a machine-readable summary.
+
+### Shared filesystem for Files
+
+Files selects its blob backend automatically, with no separate workspace path or
+coordination flag:
+
+| Existing configuration | Workspace bytes |
+| --- | --- |
+| S3 storage URL configured | S3, using the existing bucket, region and credentials, for every role |
+| No S3 storage URL | Direct filesystem storage at `DataPath/chats/blobs` |
+
+This applies to standalone servers, frontends, optional chat workers and the
+add-on owner. An owner honors configured S3 without joining the distributed
+control plane or changing its role. Global model/input staging is unchanged.
+Standalone JSON/SQLite filesystem behavior and existing blob paths remain stable.
+Without a data path and without S3, Files is disabled; temporary scratch never
+becomes authoritative filesystem storage. With S3 and a database, local cache may
+be temporary and is removed at shutdown. JSON metadata still needs a data path.
+Configured S3 errors and PostgreSQL workspace initialization errors fail startup
+rather than selecting another backend.
+
+Distributed Files requires shared PostgreSQL metadata. PostgreSQL owns names,
+authorization, revisions and blob references; immutable content-addressed bytes
+live in the selected backend. Per-instance caches and scratch are disposable.
+For filesystem storage, every Files consumer must mount the same existing data
+directory/backing storage and use the same PostgreSQL database: frontends, the
+add-on owner and optional chat workers. Inference-only nodes need no Files mount.
+Equal path strings do not prove shared volume identity, and startup does not
+verify shared storage or datastore identity. No local probe certifies a deployment.
+Other data-path contents do not thereby become cluster-safe.
+
+Keep the canonical backing directory service-controlled, with compatible UID/GID
+and permissions for every participant. LocalAI does not recursively chmod/chown
+existing trees. Ordinary platform path aliases are resolved, while symlinks inside
+the canonical blob tree are rejected; do not allow untrusted writers to replace
+paths or redirect mounts. A same-node RWO/local-path volume needs enforced
+co-placement and provides no cross-node failover guarantee. Multi-node use needs
+coherent shared storage, normally an appropriate RWX volume: verify exclusive
+creation, atomic same-filesystem rename, immediate cross-client visibility, file
+sync and directory sync durability. An RWX label alone does not guarantee these
+semantics; validate crash/power-loss behavior with the storage provider.
+
+All PostgreSQL-backed direct-filesystem workspaces automatically hold the revision
+lock through blob ingest and metadata publication, including non-distributed
+owners. This serializes metadata writes during slow uploads. Blocked operations
+must honor request context cancellation. Orphan cleanup uses a bounded 30-second
+context; cancellation can defer cleanup to a later pass. S3 is an alternative to
+this shared-filesystem deployment contract; its local cache is not treated as a
+shared filesystem.
+
+{{% notice warning %}}
+No paths or blobs migrate automatically. Existing local data stays in place and
+existing S3-backed workspaces stay on S3. Switching populated metadata to another
+backend requires a separately planned blob copy and verification procedure, with
+all participants switching consistently. Mixed S3/local/shared backends on the
+same metadata can produce missing content.
+{{% /notice %}}
