@@ -142,9 +142,10 @@ What happens to each part when you switch authentication on:
 - **Old agents, tasks, skills, Telegram connectors and saved chats** of the
   previous agent pool are converted at start and given to the account that owned
   them (see [Chats migration]({{% relref "chats-migration" %}})). With
-  authentication on, an old item that belongs to no user is not converted: the
-  report at `/app/chats/conversion` lists it as skipped, and you make it again
-  under the intended account.
+  authentication on, an old item that belongs to no user goes to the legacy
+  owner (`LOCALAI_AUTH_LEGACY_OWNER`, see below) when one is configured and has an
+  account; otherwise it is not converted: the report at `/app/chats/conversion`
+  lists it as skipped, and you make it again under the intended account.
 
 {{% notice warning %}}
 LocalAI does not migrate, delete or pause anything when you enable
@@ -154,8 +155,7 @@ authentication. Nothing moves the anonymous data to an account.
 To keep the existing data without moving it, name the account that owns it with
 `LOCALAI_AUTH_LEGACY_OWNER`. Requests authenticated as that account (session or
 one of its API keys) use the root storage area instead of a per-user one, so the
-existing agents, collections, skills, jobs, outputs and chat history stay
-visible and usable, and switching auth off again returns to the same data. Every
+existing collections and outputs stay visible and usable, and switching auth off again returns to the same data. Every
 other account keeps its own storage area. The account is matched by e-mail,
 case-insensitively, and must hold the **admin** role: LocalAI grants that role
 only on a verified e-mail, so an OAuth identity that merely reports the owner's
@@ -163,15 +163,6 @@ address without verification keeps its own area. Treat the address like
 `LOCALAI_ADMIN_EMAIL` and register it before anyone else can. Legacy API keys
 (`LOCALAI_API_KEY`) are not the owner, and an owner account that loses the admin
 role loses the root area with it.
-
-The agent pool runs the root agents with its own key (`LOCALAI_AGENT_POOL_API_KEY`).
-When a legacy owner is configured, a knowledge base search made with that key
-(`POST /api/agents/collections/<name>/search`) uses the root storage area too,
-unless it names a user with `?user_id=`; this lets knowledge base auto-search find
-the root agents' collections and append their sources. Every other call made with
-the pool key, including chat history, stays in the pool account's own area. Give
-the account that owns the pool key the `collections` feature, and keep it a
-regular user: it needs no admin rights.
 
 ```bash
 LOCALAI_AUTH=true \
