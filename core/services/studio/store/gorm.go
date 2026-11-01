@@ -901,6 +901,10 @@ func (s *gormStore) TouchTurn(ctx context.Context, principal, id, runID string) 
 }
 
 func (s *gormStore) ReapTurns(ctx context.Context, olderThan time.Time) ([]ReapedTurn, error) {
+	// run_beat is written in UTC. SQLite compares the stored times as text,
+	// so a cut-off in another zone (a server running in CET) would reap
+	// turns that are still beating.
+	olderThan = olderThan.UTC()
 	var rows []chatRow
 	err := s.db.WithContext(ctx).
 		Where("run_id <> ? AND run_id IS NOT NULL AND run_beat < ?", "", olderThan).
