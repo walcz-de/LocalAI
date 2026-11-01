@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -19,7 +18,7 @@ import (
 const (
 	contextKeyUser                = "auth_user"
 	contextKeyRole                = "auth_role"
-	contextKeyAPIKey              = "auth_apikey"
+	contextKeyAPIKey              = "auth_apikey" // #nosec G101 -- the name of a request context key, not a credential
 	contextKeySource              = "auth_source"
 	contextKeyHeaderAuthenticated = "auth_header_authenticated"
 	contextKeyStorageUserID       = "auth_storage_user_id"
@@ -43,6 +42,14 @@ const (
 func Middleware(db *gorm.DB, appConfig *config.ApplicationConfig) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			// An in-process caller (see WithInternalUser) is already authenticated.
+			if u, ok := internalUser(c.Request().Context()); ok {
+				c.Set(contextKeyUser, u)
+				c.Set(contextKeyRole, u.Role)
+				c.Set(contextKeySource, UsageSourceChats)
+				return next(c)
+			}
+
 			authEnabled := db != nil
 			hasLegacyKeys := len(appConfig.ApiKeys) > 0
 
@@ -60,7 +67,7 @@ func Middleware(db *gorm.DB, appConfig *config.ApplicationConfig) echo.Middlewar
 				if user != nil {
 					c.Set(contextKeyUser, user)
 					c.Set(contextKeyRole, user.Role)
-					if IsLegacyOwner(user, appConfig.Auth.LegacyOwnerEmail) || isAgentPoolRootCall(c, appConfig) {
+					if IsLegacyOwner(user, appConfig.Auth.LegacyOwnerEmail) {
 						c.Set(contextKeyStorageUserID, "")
 					}
 					authenticated = true
@@ -239,30 +246,6 @@ func IsLegacyOwner(user *User, legacyOwnerEmail string) bool {
 	owner := strings.TrimSpace(legacyOwnerEmail)
 	return user != nil && owner != "" && user.Role == RoleAdmin &&
 		strings.EqualFold(strings.TrimSpace(user.Email), owner)
-}
-
-// agentPoolRootRoute matches the only call the pool makes back into LocalAI
-// for a root agent: the knowledge base search behind KB auto-search citations.
-var agentPoolRootRoute = regexp.MustCompile(`^/api/agents/collections/[^/]+/search$`)
-
-// isAgentPoolRootCall reports whether the request is the agent pool searching
-// the knowledge base of a root agent with its own API key. The root agents
-// belong to the legacy owner, so their collections live in the root area;
-// without this the pool's service account would search its own, empty area.
-// It applies only when a legacy owner is configured, only to that search
-// route (never to chat history, agents, skills or any other root data), and
-// never when the call names a user (?user_id=), so a user's agent is never
-// answered from the root area.
-func isAgentPoolRootCall(c echo.Context, appConfig *config.ApplicationConfig) bool {
-	poolKey := appConfig.AgentPool.APIKey
-	if strings.TrimSpace(appConfig.Auth.LegacyOwnerEmail) == "" || poolKey == "" || c.QueryParam("user_id") != "" {
-		return false
-	}
-	if c.Request().Method != http.MethodPost || !agentPoolRootRoute.MatchString(c.Request().URL.Path) {
-		return false
-	}
-	key := extractHeaderKey(c)
-	return key != "" && subtle.ConstantTimeCompare([]byte(key), []byte(poolKey)) == 1
 }
 
 // GetStorageUserID returns the user ID that scopes per-user storage (agents,
