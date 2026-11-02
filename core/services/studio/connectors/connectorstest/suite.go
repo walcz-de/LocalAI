@@ -71,6 +71,19 @@ func Run(newStore NewStore) {
 		Expect(got.ReplyMode()).To(Equal(connectors.ReplyProgress))
 		Expect(got.SendsFiles()).To(BeTrue())
 	})
+	It("keeps the media kinds a binding accepts, and none as none", func() {
+		s := newStore()
+		b := binding("media", "u1", "Media")
+		b.InboundMedia = []string{"voice", "photo"}
+		Expect(s.PutBinding(ctx, b)).To(Succeed())
+		got, err := s.GetBinding(ctx, "media")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.InboundMedia).To(Equal([]string{"voice", "photo"}))
+		got.InboundMedia = nil
+		Expect(s.PutBinding(ctx, got)).To(Succeed())
+		got, _ = s.GetBinding(ctx, "media")
+		Expect(got.InboundMedia).To(BeEmpty())
+	})
 	It("gives an old binding the add-on of its kind", func() {
 		// A binding stored before connectors became add-ons has no add-on ID.
 		s := newStore()

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -528,7 +529,7 @@ func (c *Connectors) Ingest(ctx context.Context, addonID string, in contract.Con
 		return nil
 	}
 	if m.Chat == "" || m.SenderID == "" || len(m.SenderID) > contract.MaxConnectorSender || len(m.Chat) > contract.MaxConnectorSender ||
-		len(m.Thread) > contract.MaxConnectorSender || len(m.Media) > contract.MaxConnectorMedia {
+		len(m.Thread) > contract.MaxConnectorSender || len(m.Media) > contract.MaxConnectorMedia || len(m.MediaKinds) > contract.MaxConnectorMedia {
 		return connectors.ErrInvalid
 	}
 	// The sender log keeps the name in a column of 255 characters.
@@ -726,9 +727,14 @@ func (c *Connectors) handle(ctx context.Context, b connectors.Binding, token str
 // in the text under voiceMark; the recording is not kept. The sender is told
 // about a file that could not be read or was too large. It reports false when
 // the message must not start a turn: nothing is left to send, or a voice
-// message cannot be transcribed.
+// message cannot be transcribed. A file of a kind that the binding does not
+// take is never read: the sender is told, and the text still goes.
 func (c *Connectors) inputs(ctx context.Context, b connectors.Binding, token string, m contract.ConnectorMessage, say func(string)) (string, []session.Upload, bool) {
-	got, note := c.media(ctx, b, token, m.Media)
+	refs, refused := c.accepted(b, m)
+	if len(refused) > 0 {
+		say(sentNotAccepted(refused))
+	}
+	got, note := c.media(ctx, b, token, refs)
 	if note != "" {
 		say(note)
 	}
@@ -768,6 +774,53 @@ func (c *Connectors) inputs(ctx context.Context, b connectors.Binding, token str
 		text = strings.Join(parts, "\n\n")
 	}
 	return text, up, len(up) > 0 || strings.TrimSpace(text) != ""
+}
+
+// accepted splits the files of a message into the references that the
+// binding takes and the kinds it refused, before any file is read. A
+// message whose add-on names no kind for a file (MediaKinds missing or not
+// one per file) has files of an unknown kind, which only a binding that
+// takes every kind reads.
+func (c *Connectors) accepted(b connectors.Binding, m contract.ConnectorMessage) ([]string, []string) {
+	var refs, refused []string
+	for i, ref := range m.Media {
+		kind := ""
+		if len(m.MediaKinds) == len(m.Media) {
+			kind = m.MediaKinds[i]
+		}
+		if !b.Accepts(kind) {
+			c.log.Info("studio: a connector message carried a file of a kind the binding does not take", "binding", b.ID, "kind", b.Kind, "media", kind)
+			refused = append(refused, kind)
+			continue
+		}
+		refs = append(refs, ref)
+	}
+	return refs, refused
+}
+
+// refusedNouns name the media kinds in the sentence of sentNotAccepted.
+var refusedNouns = map[string]string{
+	contract.ConnectorMediaPhoto:     "photos",
+	contract.ConnectorMediaVoice:     "voice messages",
+	contract.ConnectorMediaAudio:     "audio files",
+	contract.ConnectorMediaVideoNote: "video messages",
+	contract.ConnectorMediaDocument:  "files",
+}
+
+// sentNotAccepted is the one sentence for the files of a message that a
+// binding does not take, such as "This bot does not accept photos."
+func sentNotAccepted(kinds []string) string {
+	var nouns []string
+	for _, k := range kinds {
+		n := refusedNouns[k]
+		if n == "" {
+			n = "this kind of file"
+		}
+		if !slices.Contains(nouns, n) {
+			nouns = append(nouns, n)
+		}
+	}
+	return "This bot does not accept " + strings.Join(nouns, " or ") + "."
 }
 
 // transcribe makes a voice message text, through the same media service and

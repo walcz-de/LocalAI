@@ -4834,7 +4834,7 @@
                 }
             },
             "put": {
-                "description": "The body replaces every field except the token, which is kept unless the request has a new one, and send_files, which is kept when it is absent. A new token is checked with the platform: a token that the platform refuses is a 400 and nothing is saved.",
+                "description": "The body replaces every field except the token, which is kept unless the request has a new one, and send_files and inbound_media, which are kept when they are absent. A new token is checked with the platform: a token that the platform refuses is a 400 and nothing is saved.",
                 "tags": [
                     "chats"
                 ],
@@ -17857,6 +17857,13 @@
                 "id": {
                     "type": "string"
                 },
+                "inbound_media": {
+                    "description": "InboundMedia lists the kinds of file that the bot takes from senders:\nphoto, voice, audio, video_note, document. Empty takes every kind.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "kind": {
                     "type": "string"
                 },
@@ -18675,6 +18682,13 @@
                 "id": {
                     "type": "string"
                 },
+                "inbound_media": {
+                    "description": "InboundMedia lists the kinds of file that the bot takes from senders:\nphoto, voice, audio, video_note, document. Empty takes every kind.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "kind": {
                     "type": "string"
                 },
@@ -18817,6 +18831,13 @@
                 },
                 "enabled": {
                     "type": "boolean"
+                },
+                "inbound_media": {
+                    "description": "InboundMedia lists the kinds of file that the bot takes from senders\n(photo, voice, audio, video_note, document); a file of another kind is\nnever read, and the sender is told. Empty takes every kind. Absent\nmeans every kind for a new binding and unchanged for an update.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "kind": {
                     "description": "Kind is the platform, such as telegram. It is used to create a binding and\nignored by an update. Empty means telegram.",

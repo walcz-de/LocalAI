@@ -1185,6 +1185,9 @@ type ChatsConnector struct {
 	// SendFiles sends the files that a turn makes to the sender, after the
 	// answer.
 	SendFiles bool `json:"send_files"`
+	// InboundMedia lists the kinds of file that the bot takes from senders:
+	// photo, voice, audio, video_note, document. Empty takes every kind.
+	InboundMedia []string `json:"inbound_media"`
 	// Active is false when the add-on that serves the binding is not running. The
 	// binding is kept and works once the add-on is installed.
 	Active bool `json:"active"`
@@ -1235,6 +1238,11 @@ type ChatsConnectorWrite struct {
 	// SendFiles turns the sending of a turn's files on or off. Absent means
 	// on for a new binding and unchanged for an update.
 	SendFiles *bool `json:"send_files,omitempty"`
+	// InboundMedia lists the kinds of file that the bot takes from senders
+	// (photo, voice, audio, video_note, document); a file of another kind is
+	// never read, and the sender is told. Empty takes every kind. Absent
+	// means every kind for a new binding and unchanged for an update.
+	InboundMedia *[]string `json:"inbound_media,omitempty"`
 }
 
 // ChatsConnectorList is the response of the connector list endpoint.

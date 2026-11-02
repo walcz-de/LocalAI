@@ -37,6 +37,9 @@ type ConnectorInput struct {
 	// SendFiles sends the files a turn makes to the sender. Nil means on for
 	// a new binding and unchanged for an update.
 	SendFiles *bool
+	// InboundMedia is connectors.Binding.InboundMedia. Nil means none (every
+	// kind) for a new binding and unchanged for an update.
+	InboundMedia *[]string
 }
 
 // apply sets the fields of the input that an owner writes on a binding.
@@ -48,6 +51,12 @@ func (in ConnectorInput) apply(b *connectors.Binding) {
 	}
 	if in.SendFiles != nil {
 		b.FilesOff = !*in.SendFiles
+	}
+	if in.InboundMedia != nil {
+		b.InboundMedia = nil
+		if len(*in.InboundMedia) > 0 {
+			b.InboundMedia = append([]string(nil), *in.InboundMedia...)
+		}
 	}
 }
 

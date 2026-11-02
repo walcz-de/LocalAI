@@ -22,9 +22,14 @@ func connectorOut(i studiosvc.ConnectorInfo) schema.ChatsConnector {
 	if allow == nil {
 		allow = []string{}
 	}
+	inbound := i.InboundMedia
+	if inbound == nil {
+		inbound = []string{}
+	}
 	return schema.ChatsConnector{ID: i.ID, Name: i.Name, Kind: i.Kind, Addon: i.AddonID, Active: i.Active, Reason: i.Reason, AgentID: i.AgentID, Enabled: i.Enabled, AcceptAny: i.AcceptAny,
 		Allow: allow, NotifyChat: i.NotifyChat, HasToken: i.HasToken, Created: i.Created,
-		ReplyMode: i.ReplyMode(), Conversation: i.ConversationMode(), WindowMinutes: i.WindowMinutes, SendFiles: i.SendsFiles()}
+		ReplyMode: i.ReplyMode(), Conversation: i.ConversationMode(), WindowMinutes: i.WindowMinutes, SendFiles: i.SendsFiles(),
+		InboundMedia: inbound}
 }
 
 // acceptAnyConfirmation is what a request must say to turn on accept_any.
@@ -38,7 +43,8 @@ func failAcceptAny(c echo.Context) error {
 func connectorIn(req schema.ChatsConnectorWrite) studiosvc.ConnectorInput {
 	return studiosvc.ConnectorInput{Kind: req.Kind, Name: req.Name, Token: req.Token, AgentID: req.AgentID, Enabled: req.Enabled,
 		AcceptAny: req.AcceptAny, Allow: req.Allow, NotifyChat: req.NotifyChat,
-		Reply: req.ReplyMode, Conversation: req.Conversation, WindowMinutes: req.WindowMinutes, SendFiles: req.SendFiles}
+		Reply: req.ReplyMode, Conversation: req.Conversation, WindowMinutes: req.WindowMinutes, SendFiles: req.SendFiles,
+		InboundMedia: req.InboundMedia}
 }
 
 var connectorRules = []errRule{
@@ -151,7 +157,7 @@ func (h *Handlers) GetConnector(c echo.Context) error {
 
 // UpdateConnector replaces a binding.
 // @Summary Replace a connector binding.
-// @Description The body replaces every field except the token, which is kept unless the request has a new one, and send_files, which is kept when it is absent. A new token is checked with the platform: a token that the platform refuses is a 400 and nothing is saved.
+// @Description The body replaces every field except the token, which is kept unless the request has a new one, and send_files and inbound_media, which are kept when they are absent. A new token is checked with the platform: a token that the platform refuses is a 400 and nothing is saved.
 // @Tags chats
 // @Param id path string true "the binding's id"
 // @Param request body schema.ChatsConnectorWrite true "the binding"

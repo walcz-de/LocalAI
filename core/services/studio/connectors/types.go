@@ -13,9 +13,12 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/mudler/LocalAI/pkg/addons/contract"
 )
 
 // LegacyAddon is the add-on that serves the kinds core carried before
@@ -105,6 +108,11 @@ type Binding struct {
 	// zero value sends them, so a binding stored before the option sends
 	// them too.
 	FilesOff bool
+	// InboundMedia lists the kinds of file (contract.ConnectorMediaKinds)
+	// that the binding takes from senders. Empty takes every kind. A file of
+	// another kind is never read: the sender is told, and the text of the
+	// message still goes to the agent.
+	InboundMedia []string
 	// Token is the bot token. In a Store it is sealed bytes; the Store returns
 	// what it was given.
 	Token   []byte
@@ -185,6 +193,11 @@ func Validate(b Binding) error {
 	if b.NotifyChat != "" && !chatShape.MatchString(b.NotifyChat) {
 		return bad("the notification chat must be a chat ID")
 	}
+	for i, k := range b.InboundMedia {
+		if !slices.Contains(contract.ConnectorMediaKinds, k) || slices.Contains(b.InboundMedia[:i], k) {
+			return bad("%q is not a kind of file, or is repeated: the kinds are %s", k, strings.Join(contract.ConnectorMediaKinds, ", "))
+		}
+	}
 	switch b.Reply {
 	case "", ReplyOff, ReplyProgress, ReplyStream:
 	default:
@@ -219,6 +232,13 @@ func (b Binding) ConversationMode() string {
 	return b.Conversation
 }
 
+// Accepts tells whether the binding takes a file of a media kind from a
+// sender. A binding that lists no kinds takes every file; one that lists
+// some never takes a file of an unknown kind ("").
+func (b Binding) Accepts(kind string) bool {
+	return len(b.InboundMedia) == 0 || (kind != "" && slices.Contains(b.InboundMedia, kind))
+}
+
 // SendsFiles tells whether the files a turn makes go to the sender.
 func (b Binding) SendsFiles() bool { return !b.FilesOff }
 
@@ -245,6 +265,7 @@ func Normalize(b Binding) Binding {
 
 func (b Binding) clone() Binding {
 	b.Allow = append([]string(nil), b.Allow...)
+	b.InboundMedia = append([]string(nil), b.InboundMedia...)
 	b.Token = append([]byte(nil), b.Token...)
 	return b
 }

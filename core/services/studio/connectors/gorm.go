@@ -28,6 +28,7 @@ type bindingRow struct {
 	Conversation  string `gorm:"size:16"`
 	WindowMinutes int
 	FilesOff      bool
+	InboundMedia  string // JSON, like Allow; empty takes every kind
 	Token         []byte
 	Created       time.Time
 	Updated       time.Time
@@ -91,6 +92,11 @@ func (r bindingRow) binding() (Binding, error) {
 			return b, err
 		}
 	}
+	if r.InboundMedia != "" {
+		if err := json.Unmarshal([]byte(r.InboundMedia), &b.InboundMedia); err != nil {
+			return b, err
+		}
+	}
 	return Normalize(b), nil
 }
 
@@ -100,9 +106,14 @@ func (s *gormStore) PutBinding(ctx context.Context, b Binding) error {
 		raw, _ := json.Marshal(b.Allow)
 		allow = string(raw)
 	}
+	inbound := ""
+	if len(b.InboundMedia) > 0 {
+		raw, _ := json.Marshal(b.InboundMedia)
+		inbound = string(raw)
+	}
 	return s.db.WithContext(ctx).Save(&bindingRow{ID: b.ID, Owner: b.Owner, Kind: b.Kind, AddonID: b.AddonID, Name: b.Name, AgentID: b.AgentID, Enabled: b.Enabled,
 		AcceptAny: b.AcceptAny, Allow: allow, NotifyChat: b.NotifyChat, Reply: b.Reply, Conversation: b.Conversation, WindowMinutes: b.WindowMinutes,
-		FilesOff: b.FilesOff, Token: b.Token, Created: b.Created, Updated: b.Updated}).Error
+		FilesOff: b.FilesOff, InboundMedia: inbound, Token: b.Token, Created: b.Created, Updated: b.Updated}).Error
 }
 
 func (s *gormStore) GetBinding(ctx context.Context, id string) (Binding, error) {
