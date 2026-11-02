@@ -1250,6 +1250,8 @@ curl -s -X PUT localhost:8080/api/chats/$ID/builtins -d '{"off":["web","files"]}
 **Collections** the collections. A group that this chat cannot use now is
 listed as not usable with the reason, for example **Collections** for a user
 without the `collections` feature.
+A group that the chat's [saved agent switches off]({{%relref "features/chats-agents#built-in-tools-an-agent-switches-off" %}})
+is listed off and not usable with that reason, and the chat cannot switch it on.
 
 **Run commands** governs `bash` from both providers: switched off, the chat
 has no `bash`, and the add-on list says `"commands":"switched_off"`. The row

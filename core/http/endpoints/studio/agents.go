@@ -45,31 +45,35 @@ func agentOut(a agents.Agent) schema.ChatsAgent {
 	}
 	return schema.ChatsAgent{ID: a.ID, Name: a.Name, Description: a.Description, Instructions: a.Instructions, Model: a.Model,
 		MCPServers: nz(a.MCPServers), Addons: nz(a.Addons), Collections: nz(a.Collections), Skills: nz(a.Skills),
-		Network: networkOf(a.Network), Created: a.Created, Updated: a.Updated}
+		BuiltinsOff: nz(a.BuiltinsOff), Network: networkOf(a.Network), Created: a.Created, Updated: a.Updated}
 }
 
 // agentIn reads the body. A model the user may not use is refused here, so a
 // saved agent never names one the service would refuse at the first turn.
 // When ok is false the refusal is already written and err is the write result,
-// so the caller returns err without writing a second body.
-func (h *Handlers) agentIn(c echo.Context) (a agents.Agent, folder *studiosvc.AgentFolderWrite, ok bool, err error) {
+// so the caller returns err without writing a second body. keepBuiltins is
+// true when the body has no builtins_off: a replace keeps the stored groups.
+func (h *Handlers) agentIn(c echo.Context) (a agents.Agent, folder *studiosvc.AgentFolderWrite, keepBuiltins, ok bool, err error) {
 	var req schema.ChatsAgentWrite
 	if err := c.Bind(&req); err != nil {
-		return a, nil, false, fail(c, http.StatusBadRequest, "invalid_request_error", "the body is not valid JSON")
+		return a, nil, false, false, fail(c, http.StatusBadRequest, "invalid_request_error", "the body is not valid JSON")
 	}
 	if req.Model != "" && h.models != nil {
 		switch err := h.models.Check(c.Request().Context(), auth.GetUser(c), req.Model); {
 		case errors.Is(err, ErrUnknownModel):
-			return a, nil, false, fail(c, http.StatusBadRequest, "invalid_request_error", "unknown model")
+			return a, nil, false, false, fail(c, http.StatusBadRequest, "invalid_request_error", "unknown model")
 		case errors.Is(err, ErrModelNotAllowed):
-			return a, nil, false, fail(c, http.StatusForbidden, "authorization_error", "you may not use this model")
+			return a, nil, false, false, fail(c, http.StatusForbidden, "authorization_error", "you may not use this model")
 		case err != nil:
-			return a, nil, false, failFor(c, err)
+			return a, nil, false, false, failFor(c, err)
 		}
 	}
-	return agents.Agent{Name: req.Name, Description: req.Description, Instructions: req.Instructions, Model: req.Model,
-			MCPServers: req.MCPServers, Addons: req.Addons, Collections: req.Collections, Skills: req.Skills, Network: req.Network},
-		folderIn(req.Folder), true, nil
+	a = agents.Agent{Name: req.Name, Description: req.Description, Instructions: req.Instructions, Model: req.Model,
+		MCPServers: req.MCPServers, Addons: req.Addons, Collections: req.Collections, Skills: req.Skills, Network: req.Network}
+	if req.BuiltinsOff != nil {
+		a.BuiltinsOff = *req.BuiltinsOff
+	}
+	return a, folderIn(req.Folder), req.BuiltinsOff == nil, true, nil
 }
 
 // networkOf is the network preset of an agent as the API shows it: off when
@@ -104,14 +108,14 @@ func (h *Handlers) ListAgents(c echo.Context) error {
 
 // CreateAgent saves a new agent.
 // @Summary Save an agent.
-// @Description An agent is a definition: instructions and exact lists of the MCP servers, add-ons, collections and skills a chat with it may use. A chat gets what the lists name and you may use at that moment, never more. Start a chat with it by passing agent_id to POST /api/chats. folder {path, mode} gives the agent one folder of your files, read or write; without it the agent works on all your files.
+// @Description An agent is a definition: instructions and exact lists of the MCP servers, add-ons, collections and skills a chat with it may use. A chat gets what the lists name and you may use at that moment, never more. builtins_off names groups of built-in tools (as PUT /api/chats/{id}/builtins names them) that every chat with the agent has off and cannot switch on; an unknown group is refused. Start a chat with it by passing agent_id to POST /api/chats. folder {path, mode} gives the agent one folder of your files, read or write; without it the agent works on all your files.
 // @Tags chats
 // @Param request body schema.ChatsAgentWrite true "the agent"
 // @Success 201 {object} schema.ChatsAgent "The saved agent"
 // @Failure 400 {object} schema.ErrorResponse "The definition or the folder is not valid"
 // @Router /api/chats/agents [post]
 func (h *Handlers) CreateAgent(c echo.Context) error {
-	a, folder, ok, err := h.agentIn(c)
+	a, folder, _, ok, err := h.agentIn(c)
 	if !ok {
 		return err
 	}
@@ -139,7 +143,7 @@ func (h *Handlers) GetAgent(c echo.Context) error {
 
 // UpdateAgent replaces a saved agent.
 // @Summary Replace a saved agent.
-// @Description The body replaces every field but folder: a body without folder keeps the folder the agent has, so a client that does not know the field cannot widen the agent, and folder {path: ""} clears it. Chats that already run with the agent use the new definition from their next turn.
+// @Description The body replaces every field but folder and builtins_off: a body without folder keeps the folder the agent has, so a client that does not know the field cannot widen the agent, and folder {path: ""} clears it. builtins_off works the same way: absent keeps the groups, [] clears them. Chats that already run with the agent use the new definition from their next turn.
 // @Tags chats
 // @Param id path string true "the agent's id"
 // @Param request body schema.ChatsAgentWrite true "the agent"
@@ -148,11 +152,18 @@ func (h *Handlers) GetAgent(c echo.Context) error {
 // @Failure 404 {object} schema.ErrorResponse "No such conversation, or it is another user's"
 // @Router /api/chats/agents/{id} [put]
 func (h *Handlers) UpdateAgent(c echo.Context) error {
-	a, folder, ok, err := h.agentIn(c)
+	a, folder, keepBuiltins, ok, err := h.agentIn(c)
 	if !ok {
 		return err
 	}
 	a.ID = c.Param("id")
+	if keepBuiltins {
+		old, err := h.svc.Agent(c.Request().Context(), userID(c), a.ID)
+		if err != nil {
+			return failFor(c, err)
+		}
+		a.BuiltinsOff = old.BuiltinsOff
+	}
 	saved, err := h.svc.SaveAgentWithFolder(c.Request().Context(), userID(c), a, folder)
 	if err != nil {
 		return failFor(c, err)

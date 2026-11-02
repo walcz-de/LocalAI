@@ -118,6 +118,7 @@ var chatRules = []errRule{
 	verbatim(http.StatusBadRequest, typeInvalid, "studio: ", studiosvc.ErrNothingToRegenerate, studiosvc.ErrNotUserMessage,
 		studiosvc.ErrInvalidSettings, studiosvc.ErrBadImport, session.ErrInvalid),
 	verbatim(http.StatusBadRequest, typeInvalid, "", studiosvc.ErrBadSkillName, studiosvc.ErrBadAddonID, studiosvc.ErrBadMCPSwitch, studiosvc.ErrBadBuiltinGroup),
+	sentinelText(http.StatusBadRequest, typeInvalid, studiosvc.ErrAgentBuiltinOff),
 	verbatim(http.StatusConflict, typeFilesOff, "", files.ErrUnavailable),
 	fixed(http.StatusRequestEntityTooLarge, typeInvalid, "an attachment is too large", workspace.ErrTooLarge),
 	fixed(http.StatusConflict, typeConflict, "a sub-agent conversation takes no messages from you", studiosvc.ErrSubAgentReadOnly),
