@@ -55,7 +55,6 @@ require (
 	github.com/otiai10/openaigo v1.7.0
 	github.com/pdfcpu/pdfcpu v0.15.0
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
-	github.com/pkoukk/tiktoken-go v0.1.6
 	github.com/prometheus/client_golang v1.23.2
 	github.com/qdrant/go-client v1.17.1
 	github.com/russross/blackfriday v1.6.0
@@ -474,7 +473,7 @@ require (
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/whyrusleeping/go-keyspace v0.0.0-20160322163242-5b898ac5add1 // indirect
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
-	github.com/yuin/goldmark v1.7.13 // indirect
+	github.com/yuin/goldmark v1.7.13
 	github.com/yuin/goldmark-emoji v1.0.6 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.opencensus.io v0.24.0 // indirect
@@ -503,4 +502,4 @@ require (
 	lukechampine.com/blake3 v1.4.1 // indirect
 )
 
-replace github.com/mudler/cogito => github.com/walcz-de/cogito v0.11.1-0.20261101162527-cc58882a187d
+replace github.com/mudler/cogito => github.com/walcz-de/cogito v0.11.1-0.20261102113208-cc055c49c1a2
