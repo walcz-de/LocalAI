@@ -187,7 +187,9 @@ func (s *Service) chatTools(ctx context.Context, x session.Access) (session.Turn
 	// Today's date: a model knows only the date of its training data. It goes
 	// in the note, not the prompt, so the harness does not restart each day,
 	// and first, so the cut of a long note keeps it.
-	note = strings.TrimSpace(s.todayLine() + " " + note)
+	if line := s.todayLine(); line != "" {
+		note = strings.TrimSpace(line + " " + note)
+	}
 	// What the chat can run comes before the other blocks: the prompt is cut at
 	// its end, and this block must reach the model.
 	// What the chat can see follows it, for the same reason. Images reach a
@@ -231,7 +233,11 @@ func (s *Service) chatTools(ctx context.Context, x session.Access) (session.Turn
 
 // todayLine is the line of the turn note that tells the model the date, in
 // the zone of the clock: "Today is Monday, 2 November 2026 (Europe/Berlin)."
+// It is empty while the setting chats_date_note is off.
 func (s *Service) todayLine() string {
+	if s.d.DateNote == nil || !s.d.DateNote() {
+		return ""
+	}
 	now := s.now()
 	zone := now.Location().String()
 	if zone == "Local" {

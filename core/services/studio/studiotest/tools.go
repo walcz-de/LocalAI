@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/mudler/LocalAI/core/services/studio/session"
@@ -33,9 +32,7 @@ type ToolResult struct {
 // and per message. It calls the host tools the chat was started with, so a test
 // can drive tools such as spawn_agent and see what they returned.
 type ToolHarness struct {
-	// Script returns the steps of the turn for this chat and message. The
-	// text has no date line (see WithoutToday), so a script can match the
-	// user's words.
+	// Script returns the steps of the turn for this chat and message.
 	Script func(a workspace.Actor, text string) []ToolStep
 	// Compact, when set, makes the sessions compact on request
 	// (session.Compactor): it returns the sizes, and the session then exports
@@ -45,7 +42,6 @@ type ToolHarness struct {
 	mu      sync.Mutex
 	results []ToolResult
 	sent    map[string][]string
-	got     map[string][]string
 	tools   map[string][]string
 	prompts map[string]string
 	systems map[string]string
@@ -86,20 +82,11 @@ func (h *ToolHarness) ResultsFor(tool string) []ToolResult {
 	return out
 }
 
-// Sent returns the messages a chat's turns were given, without the date
-// line (see WithoutToday).
+// Sent returns the messages a chat's turns were given.
 func (h *ToolHarness) Sent(chat string) []string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return append([]string(nil), h.sent[chat]...)
-}
-
-// Received returns the messages a chat's turns were given, as the model got
-// them: with the date line.
-func (h *ToolHarness) Received(chat string) []string {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return append([]string(nil), h.got[chat]...)
 }
 
 // ToolNames returns the names of the tools the chat's session was last started with.
@@ -121,7 +108,7 @@ func (h *ToolHarness) TurnPrompt(chat string) string {
 func (h *ToolHarness) Start(_ context.Context, env session.HarnessEnv) (session.HarnessSession, error) {
 	h.mu.Lock()
 	if h.tools == nil {
-		h.tools, h.sent, h.got = map[string][]string{}, map[string][]string{}, map[string][]string{}
+		h.tools, h.sent = map[string][]string{}, map[string][]string{}
 	}
 	names := make([]string, len(env.Tools))
 	for i, t := range env.Tools {
@@ -181,8 +168,6 @@ func (s *toolSession) Send(ctx context.Context, text string) error {
 	defer cancel()
 	chat := s.env.Actor.ChatID
 	s.h.mu.Lock()
-	s.h.got[chat] = append(s.h.got[chat], text)
-	text = WithoutToday(text)
 	s.h.sent[chat] = append(s.h.sent[chat], text)
 	s.h.mu.Unlock()
 	for _, step := range s.h.Script(s.env.Actor, text) {
@@ -242,22 +227,3 @@ func (s *toolSession) Interrupt() error {
 
 func (s *toolSession) Export() ([]byte, error) { return []byte(`{}`), nil }
 func (s *toolSession) Close() error            { return s.Interrupt() }
-
-// WithoutToday is text without the date line that every turn note starts
-// with ("Today is Monday, 2 November 2026 (Europe/Berlin)."), and without the
-// note when the date was all of it.
-func WithoutToday(text string) string {
-	const head = "(System note: "
-	if !strings.HasPrefix(text, head+"Today is ") {
-		return text
-	}
-	end := strings.Index(text, ").")
-	if end < 0 {
-		return text
-	}
-	rest := text[end+2:]
-	if strings.HasPrefix(rest, ")\n\n") {
-		return rest[3:]
-	}
-	return head + strings.TrimPrefix(rest, " ")
-}

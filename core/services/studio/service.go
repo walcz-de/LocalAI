@@ -197,6 +197,9 @@ type Deps struct {
 	// name, a shortcut, a schedule) to a user who did not choose. Read at each
 	// turn, so a change applies at once. Nil: on.
 	SuggestionsDefault func() bool
+	// DateNote says whether the note of each turn starts with today's date.
+	// Read at each turn, so a change applies at once. Nil: off.
+	DateNote func() bool
 	// EgressSettings returns the administrator's limits of the Sandbox
 	// network (chats_egress_*), read at each check. Nil: the ceiling is off and
 	// no command reaches the network.
