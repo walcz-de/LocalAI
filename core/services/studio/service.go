@@ -214,7 +214,8 @@ type Deps struct {
 	// requests the goal's turns make, before the goal pauses. Read when a turn
 	// ends. Nil or a value below 1: DefaultGoalMaxTurns, DefaultGoalMaxSteps.
 	GoalLimits func() (turns, steps int)
-	// Clock is the time the offer limits use. Nil: time.Now. It is for tests.
+	// Clock is the time the offer limits and the date of the turn note use.
+	// Nil: time.Now. It is for tests.
 	Clock func() time.Time
 	// Harness replaces the nib harness. It is for tests.
 	Harness session.Harness

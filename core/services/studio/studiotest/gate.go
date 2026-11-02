@@ -40,7 +40,8 @@ func NewGateHarness() *GateHarness {
 	return &GateHarness{Gate: make(chan struct{}, 64)}
 }
 
-// Sent returns the texts of the turns, in order.
+// Sent returns the texts of the turns, in order, without the date line (see
+// WithoutToday).
 func (g *GateHarness) Sent() []string {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -95,6 +96,7 @@ func (s *gateSession) Send(ctx context.Context, text string) error {
 	s.mu.Unlock()
 	defer cancel()
 	g := s.g
+	text = WithoutToday(text)
 	g.mu.Lock()
 	g.sent = append(g.sent, text)
 	n := g.Requests

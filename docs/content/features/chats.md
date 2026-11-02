@@ -139,6 +139,11 @@ empty, because the turn's changes are already kept call by call.
 A chat is named after the first line of its first message, unless you gave it a
 title. To rename it, see [Settings, rename and model change](#settings-rename-and-model-change).
 
+Each turn tells the model today's date in the server's time zone, for example
+`Today is Monday, 2 November 2026 (Europe/Berlin).` The line is part of the
+note of the turn, not of the system prompt, so the prompt stays the same from
+one day to the next. Sub-agents and chats with an agent get it too.
+
 ### Start a chat with its switches
 
 A chat can start with tools, add-ons and skills already switched off, and with
