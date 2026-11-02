@@ -89,6 +89,13 @@ docker build -t localai .
 docker run localai
 ```
 
+The binary reports the version that `git describe` gives for the build context. A build of a patch release whose tag is
+not an ancestor of the checked-out commit (for example a release cut on a release branch) can set the name explicitly:
+
+```
+docker build --build-arg LOCALAI_VERSION=v4.12.1-276-gbfea960e8 -t localai .
+```
+
 ### Example: Build on mac
 
 Building on Mac (M1, M2 or M3) works, but you may need to install some prerequisites using `brew`. 
