@@ -374,9 +374,7 @@ COPY --from=react-ui-builder /app/dist ./core/http/react-ui/dist
 ## Build the binary
 ## If we're on arm64 AND using cublas/hipblas, skip some of the llama-compat backends to save space
 ## Otherwise just run the normal build
-## LOCALAI_VERSION sets the version the binary reports (internal.Version); empty keeps `git describe`.
-ARG LOCALAI_VERSION=""
-RUN if [ -n "${LOCALAI_VERSION}" ]; then make VERSION="${LOCALAI_VERSION}" build; else make build; fi
+RUN make build
 
 ###################################
 ###################################
