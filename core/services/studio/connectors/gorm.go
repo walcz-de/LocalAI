@@ -29,9 +29,14 @@ type bindingRow struct {
 	WindowMinutes int
 	FilesOff      bool
 	InboundMedia  string // JSON, like Allow; empty takes every kind
-	Token         []byte
-	Created       time.Time
-	Updated       time.Time
+	// ThreadContextOff is added by AutoMigrate; a row stored before it reads
+	// the thread.
+	ThreadContextOff bool
+	// Options is JSON, added by AutoMigrate.
+	Options string
+	Token   []byte
+	Created time.Time
+	Updated time.Time
 }
 
 func (bindingRow) TableName() string { return "studio_connectors" }
@@ -85,7 +90,7 @@ func NewGORM(db *gorm.DB) (Store, error) {
 
 func (r bindingRow) binding() (Binding, error) {
 	b := Binding{ID: r.ID, Owner: r.Owner, Kind: r.Kind, AddonID: r.AddonID, Name: r.Name, AgentID: r.AgentID, Enabled: r.Enabled, AcceptAny: r.AcceptAny,
-		NotifyChat: r.NotifyChat, Reply: r.Reply, Conversation: r.Conversation, WindowMinutes: r.WindowMinutes, FilesOff: r.FilesOff,
+		NotifyChat: r.NotifyChat, Reply: r.Reply, Conversation: r.Conversation, WindowMinutes: r.WindowMinutes, FilesOff: r.FilesOff, ThreadContextOff: r.ThreadContextOff,
 		Token: append([]byte(nil), r.Token...), Created: r.Created.UTC(), Updated: r.Updated.UTC()}
 	if r.Allow != "" {
 		if err := json.Unmarshal([]byte(r.Allow), &b.Allow); err != nil {
@@ -94,6 +99,11 @@ func (r bindingRow) binding() (Binding, error) {
 	}
 	if r.InboundMedia != "" {
 		if err := json.Unmarshal([]byte(r.InboundMedia), &b.InboundMedia); err != nil {
+			return b, err
+		}
+	}
+	if r.Options != "" {
+		if err := json.Unmarshal([]byte(r.Options), &b.Options); err != nil {
 			return b, err
 		}
 	}
@@ -111,9 +121,14 @@ func (s *gormStore) PutBinding(ctx context.Context, b Binding) error {
 		raw, _ := json.Marshal(b.InboundMedia)
 		inbound = string(raw)
 	}
+	options := ""
+	if len(b.Options) > 0 {
+		raw, _ := json.Marshal(b.Options)
+		options = string(raw)
+	}
 	return s.db.WithContext(ctx).Save(&bindingRow{ID: b.ID, Owner: b.Owner, Kind: b.Kind, AddonID: b.AddonID, Name: b.Name, AgentID: b.AgentID, Enabled: b.Enabled,
 		AcceptAny: b.AcceptAny, Allow: allow, NotifyChat: b.NotifyChat, Reply: b.Reply, Conversation: b.Conversation, WindowMinutes: b.WindowMinutes,
-		FilesOff: b.FilesOff, InboundMedia: inbound, Token: b.Token, Created: b.Created, Updated: b.Updated}).Error
+		FilesOff: b.FilesOff, InboundMedia: inbound, ThreadContextOff: b.ThreadContextOff, Options: options, Token: b.Token, Created: b.Created, Updated: b.Updated}).Error
 }
 
 func (s *gormStore) GetBinding(ctx context.Context, id string) (Binding, error) {

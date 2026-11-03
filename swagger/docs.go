@@ -18336,6 +18336,10 @@ const docTemplate = `{
                     "description": "SendFiles sends the files that a turn makes to the sender, after the\nanswer.",
                     "type": "boolean"
                 },
+                "thread_context": {
+                    "description": "ThreadContext lets the bot read the earlier messages of the thread in\nwhich it is mentioned. It has an effect only on a platform that can\ngive them.",
+                    "type": "boolean"
+                },
                 "window_minutes": {
                     "type": "integer"
                 }
@@ -19150,12 +19154,23 @@ const docTemplate = `{
                     "description": "Reason says in plain words why the binding is not active.",
                     "type": "string"
                 },
+                "options": {
+                    "description": "Options are the choices made for the options of the kind, by option id. An option that is absent has its default (see ChatsConnectorKind).",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
                 "reply_mode": {
                     "description": "ReplyMode is what a sender sees while a turn runs: off (typing, then\nthe answer), progress (a working message that names the tools as they\nstart) or stream (a working message that shows the answer as it is\nwritten). The answer replaces the working message.",
                     "type": "string"
                 },
                 "send_files": {
                     "description": "SendFiles sends the files that a turn makes to the sender, after the\nanswer.",
+                    "type": "boolean"
+                },
+                "thread_context": {
+                    "description": "ThreadContext lets the bot read the earlier messages of the thread in\nwhich it is mentioned. It has an effect only on a platform that can\ngive them.",
                     "type": "boolean"
                 },
                 "window_minutes": {
@@ -19175,11 +19190,56 @@ const docTemplate = `{
                 "kind": {
                     "type": "string"
                 },
+                "options": {
+                    "description": "Options are the choices the add-on lets each binding of this kind make.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnectorOption"
+                    }
+                },
                 "page": {
                     "description": "Page is the add-on page that adds and edits bindings of this kind.",
                     "type": "string"
                 },
                 "sender_hint": {
+                    "type": "string"
+                },
+                "thread_history": {
+                    "description": "ThreadHistory is true when the platform can give the earlier messages\nof a thread, so a binding of this kind has the thread_context option.",
+                    "type": "boolean"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "schema.ChatsConnectorOption": {
+            "type": "object",
+            "properties": {
+                "default": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "values": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnectorOptionValue"
+                    }
+                }
+            }
+        },
+        "schema.ChatsConnectorOptionValue": {
+            "type": "object",
+            "properties": {
+                "id": {
                     "type": "string"
                 },
                 "title": {
@@ -19297,12 +19357,23 @@ const docTemplate = `{
                 "notify_chat": {
                     "type": "string"
                 },
+                "options": {
+                    "description": "Options are the choices for the options of the kind, by option id. Absent means the defaults for a new binding and unchanged for an update.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
                 "reply_mode": {
                     "description": "ReplyMode is off, progress or stream; empty means progress.",
                     "type": "string"
                 },
                 "send_files": {
                     "description": "SendFiles turns the sending of a turn's files on or off. Absent means\non for a new binding and unchanged for an update.",
+                    "type": "boolean"
+                },
+                "thread_context": {
+                    "description": "ThreadContext turns the reading of the earlier messages of a thread on\nor off. Absent means on for a new binding and unchanged for an update.",
                     "type": "boolean"
                 },
                 "token": {

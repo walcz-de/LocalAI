@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -68,6 +69,8 @@ const (
 	MaxAllowRunes    = 64
 	MaxPerUser       = 10
 	MaxSendersKept   = 200
+	MaxOptions       = 8
+	MaxOptionRunes   = 32
 )
 
 // Errors.
@@ -113,6 +116,14 @@ type Binding struct {
 	// another kind is never read: the sender is told, and the text of the
 	// message still goes to the agent.
 	InboundMedia []string
+	// ThreadContextOff keeps the host from reading the earlier messages of
+	// a thread when the bot is mentioned in it. The zero value reads them,
+	// on a platform whose kind declares the ability.
+	ThreadContextOff bool
+	// Options are the choices the owner made for the options that the kind of
+	// the binding declares (contract.ConnectorKind.Options), by option ID. An
+	// option that is not here has its default.
+	Options map[string]string
 	// Token is the bot token. In a Store it is sealed bytes; the Store returns
 	// what it was given.
 	Token   []byte
@@ -212,6 +223,14 @@ func Validate(b Binding) error {
 	default:
 		return bad("the conversation mode must be %s, %s, %s or %s", ConversationSender, ConversationChat, ConversationWindow, ConversationThread)
 	}
+	if len(b.Options) > MaxOptions {
+		return bad("a binding has at most %d options", MaxOptions)
+	}
+	for k, v := range b.Options {
+		if k == "" || v == "" || utf8.RuneCountInString(k) > MaxOptionRunes || utf8.RuneCountInString(v) > MaxOptionRunes {
+			return bad("an option and its value have 1 to %d characters", MaxOptionRunes)
+		}
+	}
 	return nil
 }
 
@@ -242,6 +261,10 @@ func (b Binding) Accepts(kind string) bool {
 // SendsFiles tells whether the files a turn makes go to the sender.
 func (b Binding) SendsFiles() bool { return !b.FilesOff }
 
+// ReadsThread tells whether the earlier messages of a thread are read when
+// the bot is mentioned in it.
+func (b Binding) ReadsThread() bool { return !b.ThreadContextOff }
+
 // Allows tells whether a sender is on the allowlist. A match is by ID or, for an
 // @name entry, by username, ignoring case.
 func (b Binding) Allows(senderID, username string) bool {
@@ -267,5 +290,6 @@ func (b Binding) clone() Binding {
 	b.Allow = append([]string(nil), b.Allow...)
 	b.InboundMedia = append([]string(nil), b.InboundMedia...)
 	b.Token = append([]byte(nil), b.Token...)
+	b.Options = maps.Clone(b.Options)
 	return b
 }

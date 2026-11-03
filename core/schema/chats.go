@@ -1190,6 +1190,13 @@ type ChatsConnector struct {
 	// InboundMedia lists the kinds of file that the bot takes from senders:
 	// photo, voice, audio, video_note, document. Empty takes every kind.
 	InboundMedia []string `json:"inbound_media"`
+	// ThreadContext lets the bot read the earlier messages of the thread in
+	// which it is mentioned. It has an effect only on a platform that can
+	// give them.
+	ThreadContext bool `json:"thread_context"`
+	// Options are the choices made for the options of the kind, by option id.
+	// An option that is absent has its default (see ChatsConnectorKind).
+	Options map[string]string `json:"options,omitempty"`
 	// Active is false when the add-on that serves the binding is not running. The
 	// binding is kept and works once the add-on is installed.
 	Active bool `json:"active"`
@@ -1206,6 +1213,26 @@ type ChatsConnectorKind struct {
 	SenderHint  string `json:"sender_hint,omitempty"`
 	// Page is the add-on page that adds and edits bindings of this kind.
 	Page string `json:"page,omitempty"`
+	// ThreadHistory is true when the platform can give the earlier messages
+	// of a thread, so a binding of this kind has the thread_context option.
+	ThreadHistory bool `json:"thread_history,omitempty"`
+	// Options are the choices the add-on lets each binding of this kind make.
+	Options []ChatsConnectorOption `json:"options,omitempty"`
+}
+
+// ChatsConnectorOption is one choice of a connector kind.
+type ChatsConnectorOption struct {
+	ID          string                      `json:"id"`
+	Title       string                      `json:"title"`
+	Description string                      `json:"description,omitempty"`
+	Values      []ChatsConnectorOptionValue `json:"values"`
+	Default     string                      `json:"default"`
+}
+
+// ChatsConnectorOptionValue is one answer of a connector option.
+type ChatsConnectorOptionValue struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
 }
 
 // ChatsConnectorKindList lists the connector kinds of the add-ons that run now.
@@ -1245,6 +1272,12 @@ type ChatsConnectorWrite struct {
 	// never read, and the sender is told. Empty takes every kind. Absent
 	// means every kind for a new binding and unchanged for an update.
 	InboundMedia *[]string `json:"inbound_media,omitempty"`
+	// ThreadContext turns the reading of the earlier messages of a thread on
+	// or off. Absent means on for a new binding and unchanged for an update.
+	ThreadContext *bool `json:"thread_context,omitempty"`
+	// Options are the choices for the options of the kind, by option id. Absent
+	// means the defaults for a new binding and unchanged for an update.
+	Options map[string]string `json:"options,omitempty"`
 }
 
 // ChatsConnectorList is the response of the connector list endpoint.
@@ -1741,8 +1774,8 @@ type ChatsExecutionStatus struct {
 	Isolation   string `json:"isolation"`
 	Explanation string `json:"explanation,omitempty"`
 	// UnknownReason says why the status is unknown: owner_unreachable,
-	// not_reported, stale, invalid_status, not_selected, no_answer or
-	// reported_unknown. Absent when the status is known.
+	// not_reported, stale, invalid_status, not_selected, no_answer,
+	// reported_unknown or draft (the chat does not exist yet). Absent when the status is known.
 	UnknownReason string `json:"unknown_reason,omitempty" example:"owner_unreachable"`
 	Generation    string `json:"generation,omitempty"`
 	Incarnation   string `json:"incarnation,omitempty"`
