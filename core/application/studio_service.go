@@ -28,6 +28,7 @@ import (
 	"github.com/mudler/LocalAI/core/services/studio/nibharness"
 	"github.com/mudler/LocalAI/core/services/studio/notify"
 	"github.com/mudler/LocalAI/core/services/studio/pages"
+	"github.com/mudler/LocalAI/core/services/studio/proposals"
 	"github.com/mudler/LocalAI/core/services/studio/sharedfolders"
 	"github.com/mudler/LocalAI/core/services/studio/workspace"
 )
@@ -118,6 +119,7 @@ func (a *Application) initStudioService() {
 		RemoteModel:        a.studioRemoteModel,
 		PageConsents:       a.studioPageConsents(),
 		SharedFolderAudit:  a.studioSharedFolderAudit(),
+		Proposals:          a.studioProposalStore(),
 		EgressSettings:     a.studioEgressSettings,
 		EgressAudit:        a.studioEgressAudit(),
 		EgressAuditDays:    func() int { return a.applicationConfig.EffectiveChatsEgressAuditDays() },
@@ -498,7 +500,7 @@ func (a *Application) initStudioEgressLists() {
 	}, nil)
 }
 
-// studioEgressAudit opens the audit of the Sandbox network requests, beside
+// studioEgressAudit opens the audit of the command network requests, beside
 // the audit of the commands run on this machine.
 func (a *Application) studioEgressAudit() audit.Store {
 	var (
@@ -514,7 +516,7 @@ func (a *Application) studioEgressAudit() audit.Store {
 		st, err = audit.NewJSON("")
 	}
 	if err != nil {
-		xlog.Warn("Chats: the audit of the Sandbox network is kept in memory", "error", err)
+		xlog.Warn("Chats: the audit of the command network is kept in memory", "error", err)
 		st, _ = audit.NewJSON("")
 	}
 	return st
@@ -531,9 +533,9 @@ func (a *Application) startStudioEgressPrune(svc *studio.Service) {
 	prune := func() {
 		n, err := svc.PruneEgressAudit(ctx)
 		if err != nil {
-			xlog.Warn("Chats: could not prune the Sandbox network audit", "error", err)
+			xlog.Warn("Chats: could not prune the command network audit", "error", err)
 		} else if n > 0 {
-			xlog.Info("Chats: pruned the Sandbox network audit", "lines", n)
+			xlog.Info("Chats: pruned the command network audit", "lines", n)
 		}
 		n, err = svc.PruneHostExecAudit(ctx)
 		if err != nil {
@@ -579,6 +581,29 @@ func (a *Application) studioSharedFolderAudit() sharedfolders.AuditStore {
 	if err != nil {
 		xlog.Warn("Chats: the audit of the shared folders is kept in memory", "error", err)
 		st, _ = sharedfolders.NewJSONAudit("")
+	}
+	return st
+}
+
+// studioProposalStore opens the store of the change proposals beside the
+// chats: the auth database (shared by the frontends of a cluster), a file under
+// the data path, or memory.
+func (a *Application) studioProposalStore() proposals.Store {
+	var (
+		st  proposals.Store
+		err error
+	)
+	switch {
+	case a.authDB != nil:
+		st, err = proposals.NewGORM(a.authDB)
+	case a.applicationConfig.DataPath != "":
+		st, err = proposals.NewJSON(filepath.Join(a.applicationConfig.DataPath, "chats", "proposals"))
+	default:
+		st, err = proposals.NewJSON("")
+	}
+	if err != nil {
+		xlog.Warn("Chats: proposed changes are kept in memory", "error", err)
+		st, _ = proposals.NewJSON("")
 	}
 	return st
 }

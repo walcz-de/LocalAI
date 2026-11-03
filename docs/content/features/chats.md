@@ -970,7 +970,7 @@ shown when the Sandbox is already installed, or when add-ons are off.
   server log has one line per command with the prefix `[host-exec]`.
   Administrators read the audit with `GET /api/chats/admin/host-exec/events`
   or the assistant tool `list_host_exec_events`. Lines older than
-  `chats_egress_audit_days` (default 30, the retention of the Sandbox network
+  `chats_egress_audit_days` (default 30, the retention of the command network
   audit) are removed daily; in a cluster one frontend does it, under an
   advisory lock. The file store also keeps at most 10000 lines.
 
@@ -1242,6 +1242,7 @@ it off, so a chat that never touches the menu works as before:
 | **Sub-agents** | `subagents` | `spawn_agent` |
 | **Saved agents** | `saved_agents` | `list_agents` and the `agent` argument of `spawn_agent` (opt-in) |
 | **Triggers** | `triggers` | `propose_trigger`, `list_triggers`, `update_trigger` and `delete_trigger` |
+| **Proposed changes** | `changes` | `propose_change` and `revert_change`: a model asks to change your memory or an agent profile, and you confirm (see [change proposals](/features/addons/#change-proposals-from-chats)) |
 
 ```bash
 curl -s -X PUT localhost:8080/api/chats/$ID/builtins -d '{"off":["web","files"]}'
@@ -1499,6 +1500,21 @@ answers `404`. Requests made on the user's behalf go through the same
 model access rules and quotas as a direct request to `/v1/chat/completions`.
 
 With authentication off, chats belong to one anonymous owner.
+
+## Memory settings
+
+Your settings page (Account) has a **Memory** tab. It lists the notes that the host
+puts in the prompt of your chats: your own index and its topic files, the notes of
+each saved agent and of each connector conversation, and the agent profiles. Each
+index shows its size against the caps (at most 40 lines and 2 KiB for an index,
+4 KiB for a profile, 6 KiB of notes in one turn). You can open a file, edit it,
+delete it (it goes to the Trash) or clear all of them. An index cannot be saved
+over its cap. A model changes these files only through a confirmed
+[change proposal](/features/addons/#change-proposals-from-chats).
+
+`GET /api/chats/context-files` returns the list for the page: `limits`, and
+`groups` of `{source, scope, key, max_bytes, max_lines, files[]}`. It only reads.
+The page edits and deletes with the Files API.
 
 ## Your files
 

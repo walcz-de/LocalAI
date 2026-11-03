@@ -627,6 +627,122 @@ definitions:
       name:
         type: string
     type: object
+  contextfiles.Scope:
+    enum:
+    - user
+    - agent
+    - channel
+    type: string
+    x-enum-varnames:
+    - ScopeUser
+    - ScopeAgent
+    - ScopeChannel
+  contract.ChangeKind:
+    enum:
+    - memory
+    - profile
+    - skill
+    - page
+    - dashboard
+    type: string
+    x-enum-varnames:
+    - ChangeMemory
+    - ChangeProfile
+    - ChangeSkill
+    - ChangePage
+    - ChangeDashboard
+  contract.ChangeProposal:
+    properties:
+      agent:
+        type: string
+      answered:
+        type: string
+      base_hash:
+        type: string
+      content:
+        type: string
+      created:
+        type: string
+      expires:
+        type: string
+      id:
+        type: string
+      kind:
+        $ref: '#/definitions/contract.ChangeKind'
+      owner:
+        type: string
+      rev:
+        description: |-
+          Rev is the workspace change set that applying wrote; RevertRev the one
+          that reverting wrote. Zero until then.
+        type: integer
+      revert_rev:
+        type: integer
+      scope:
+        $ref: '#/definitions/contract.ChangeScope'
+      source:
+        $ref: '#/definitions/contract.ChangeSource'
+      status:
+        $ref: '#/definitions/contract.ProposalStatus'
+      summary:
+        type: string
+      target:
+        type: string
+      v:
+        type: integer
+    type: object
+  contract.ChangeScope:
+    enum:
+    - user
+    - agent
+    - channel
+    type: string
+    x-enum-varnames:
+    - ScopeUser
+    - ScopeAgent
+    - ScopeChannel
+  contract.ChangeSource:
+    properties:
+      chat:
+        type: string
+      id:
+        type: string
+      kind:
+        type: string
+      thread:
+        type: string
+    type: object
+  contract.ExecutionDescriptor:
+    properties:
+      class:
+        description: Class is ExecutionClassCommands.
+        type: string
+      note:
+        description: |-
+          Note is one plain sentence for the model when the provider reports
+          isolated execution, such as the programs its environment has.
+        type: string
+      skills:
+        allOf:
+        - $ref: '#/definitions/contract.ExecutionSkills'
+        description: Skills says which skills run on this provider.
+      title:
+        description: |-
+          Title names the provider in the text the host shows the person and the
+          model, for example "Sandbox". It falls back to the add-on's title.
+        type: string
+    type: object
+  contract.ExecutionSkills:
+    properties:
+      providesRuntimeFor:
+        description: |-
+          ProvidesRuntimeFor lists skill kinds (SkillKindDocuments). The host
+          offers the add-on's skills of those kinds only while the provider
+          reports isolated execution.
+        items:
+          type: string
+        type: array
+    type: object
   contract.OutputDescription:
     properties:
       handle:
@@ -638,6 +754,22 @@ definitions:
       size:
         type: integer
     type: object
+  contract.ProposalStatus:
+    enum:
+    - pending
+    - applied
+    - dismissed
+    - expired
+    - reverted
+    - stale
+    type: string
+    x-enum-varnames:
+    - ProposalPending
+    - ProposalApplied
+    - ProposalDismissed
+    - ProposalExpired
+    - ProposalReverted
+    - ProposalStale
   contract.Receipt:
     properties:
       operationId:
@@ -724,6 +856,13 @@ definitions:
       description:
         description: Description is plain text for the model.
         type: string
+      execution:
+        allOf:
+        - $ref: '#/definitions/contract.ExecutionDescriptor'
+        description: |-
+          Execution declares that this tool runs commands and what the host may
+          say about the provider. Only a tool that shadows bash may declare it, and
+          the manifest must then accept API 2 (see MinExecutionAPI).
       inputSchema:
         description: |-
           InputSchema is the JSON schema of the arguments object. It is an
@@ -2124,6 +2263,33 @@ definitions:
         description: staging, loading, loaded, unloading, idle
         type: string
       updated_at:
+        type: string
+    type: object
+  proposals.Event:
+    properties:
+      action:
+        type: string
+      agent:
+        type: string
+      at:
+        type: string
+      detail:
+        type: string
+      hash:
+        type: string
+      kind:
+        $ref: '#/definitions/contract.ChangeKind'
+      owner:
+        type: string
+      proposal:
+        type: string
+      rev:
+        type: integer
+      scope:
+        $ref: '#/definitions/contract.ChangeScope'
+      source:
+        $ref: '#/definitions/contract.ChangeSource'
+      target:
         type: string
     type: object
   proto.MemoryUsageData:
@@ -9009,6 +9175,62 @@ definitions:
           which a client sends back (Last-Event-ID or ?after=) to resume.
         type: integer
     type: object
+  studio.ContextFile:
+    properties:
+      index:
+        type: boolean
+      lines:
+        type: integer
+      modified:
+        type: string
+      name:
+        type: string
+      path:
+        description: Path is the path inside the user's home.
+        type: string
+      size:
+        type: integer
+    type: object
+  studio.ContextFiles:
+    properties:
+      groups:
+        items:
+          $ref: '#/definitions/studio.ContextGroup'
+        type: array
+      limits:
+        $ref: '#/definitions/studio.ContextLimits'
+    type: object
+  studio.ContextGroup:
+    properties:
+      files:
+        items:
+          $ref: '#/definitions/studio.ContextFile'
+        type: array
+      key:
+        type: string
+      max_bytes:
+        description: |-
+          MaxBytes and MaxLines are the caps of the index. MaxLines is zero when
+          the file has no line cap.
+        type: integer
+      max_lines:
+        type: integer
+      scope:
+        $ref: '#/definitions/contextfiles.Scope'
+      source:
+        type: string
+    type: object
+  studio.ContextLimits:
+    properties:
+      index_bytes:
+        type: integer
+      index_lines:
+        type: integer
+      profile_bytes:
+        type: integer
+      turn_bytes:
+        type: integer
+    type: object
   updates.State:
     enum:
     - unknown
@@ -14177,6 +14399,148 @@ paths:
       summary: Save a starter agent as your own.
       tags:
       - chats
+  /api/chats/changes:
+    get:
+      description: A model proposes a change to your memory or an agent profile with
+        the propose_change tool, from a Studio chat or a connector chat. Nothing is
+        written until you confirm. A proposal expires after 24 hours. Newest first;
+        status keeps only one status.
+      parameters:
+      - description: pending, applied, dismissed, expired, reverted or stale
+        in: query
+        name: status
+        type: string
+      responses:
+        "200":
+          description: Your proposals
+          schema:
+            items:
+              $ref: '#/definitions/contract.ChangeProposal'
+            type: array
+        "400":
+          description: The status is not known
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: List the changes that a chat proposed.
+      tags:
+      - chats
+  /api/chats/changes/{id}:
+    get:
+      parameters:
+      - description: the proposal
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: The proposal, with the text it would write
+          schema:
+            $ref: '#/definitions/contract.ChangeProposal'
+        "404":
+          description: Not yours or unknown
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Get a proposed change.
+      tags:
+      - chats
+  /api/chats/changes/{id}/confirm:
+    post:
+      description: 'Writes the change to your files as one change set that Undo can
+        take back. A JSON body {"content": "..."} writes your own text in place of
+        the proposed one; it has the same size limit. It is refused with 409 when
+        the file changed since the proposal, or when the proposal expired or was answered.'
+      parameters:
+      - description: the proposal
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: The applied proposal
+          schema:
+            $ref: '#/definitions/contract.ChangeProposal'
+        "404":
+          description: Not yours or unknown
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "409":
+          description: Stale, expired or answered
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Confirm a proposed change.
+      tags:
+      - chats
+  /api/chats/changes/{id}/dismiss:
+    post:
+      parameters:
+      - description: the proposal
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: The dismissed proposal
+          schema:
+            $ref: '#/definitions/contract.ChangeProposal'
+        "404":
+          description: Not yours or unknown
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "409":
+          description: Not waiting
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Dismiss a proposed change.
+      tags:
+      - chats
+  /api/chats/changes/{id}/undo:
+    post:
+      description: Restores the file with the change set the confirmation wrote. It
+        is refused with 409 when the file was edited since.
+      parameters:
+      - description: the proposal
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: The reverted proposal
+          schema:
+            $ref: '#/definitions/contract.ChangeProposal'
+        "404":
+          description: Not yours or unknown
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "409":
+          description: Not applied, or edited since
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Undo an applied change.
+      tags:
+      - chats
+  /api/chats/changes/audit:
+    get:
+      description: Who proposed, confirmed, dismissed or reverted what, from which
+        source, newest first. It holds a hash of the text, never the text.
+      parameters:
+      - description: most lines (default 50, at most 200)
+        in: query
+        name: limit
+        type: integer
+      responses:
+        "200":
+          description: Your audit lines
+          schema:
+            items:
+              $ref: '#/definitions/proposals.Event'
+            type: array
+      summary: List the audit of proposed changes.
+      tags:
+      - chats
   /api/chats/connectors:
     get:
       description: 'A binding connects a bot of a messaging platform (served by a
@@ -14384,6 +14748,20 @@ paths:
           schema:
             $ref: '#/definitions/schema.ChatsConnectorKindList'
       summary: List the connector kinds you can bind.
+      tags:
+      - chats
+  /api/chats/context-files:
+    get:
+      description: The short index files that the host loads into every chat (your
+        memory, an agent's notes, a conversation's notes), with the topic files next
+        to them, the agent profiles and the caps that keep a turn small. It only reads;
+        change a file on the Files page or confirm a proposal.
+      responses:
+        "200":
+          description: Your context files
+          schema:
+            $ref: '#/definitions/studio.ContextFiles'
+      summary: List your context files.
       tags:
       - chats
   /api/chats/conversion:

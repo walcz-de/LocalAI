@@ -270,24 +270,23 @@
     "commands": {
       "title": "Perintah tidak bisa dijalankan di sini",
       "none": "Tidak ada add-on yang menjalankan kode, jadi asisten bisa menulis file tetapi tidak bisa menjalankan skrip atau perintah.",
-      "off": "Add-on Sandbox dimatikan untuk chat ini. Nyalakan di menu Alat agar asisten bisa menjalankan kode.",
-      "unavailable": "Add-on Sandbox terpasang, tetapi tidak bisa menjalankan perintah di server ini.",
-      "unavailableWhy": "Add-on Sandbox tidak bisa menjalankan perintah di server ini: {{reason}}",
-      "install": "Pasang Sandbox",
-      "openSandbox": "Buka add-on Sandbox",
-      "askInstall": "Minta administrator memasang add-on Sandbox.",
       "askFix": "Minta administrator memperbaikinya.",
       "hide": "Sembunyikan",
       "hideLabel": "Sembunyikan pemberitahuan ini",
       "chipTitle": "Chat ini tidak bisa menjalankan kode atau perintah. Pilih untuk detail.",
       "hostTitle": "Perintah berjalan di mesin ini",
-      "host": "Perintah berjalan di mesin ini, dengan berkas dan jaringannya, tanpa isolasi. Pasang Sandbox untuk isolasi.",
-      "hostOff": "Sandbox mati untuk chat ini, jadi perintah berjalan di mesin ini, dengan berkas dan jaringannya, tanpa isolasi. Nyalakan Sandbox di menu ini untuk mengisolasinya.",
-      "hostUnavailable": "Sandbox tidak bisa berjalan di sini, jadi perintah berjalan di mesin ini, dengan berkas dan jaringannya, tanpa isolasi.",
-      "hostUnavailableWhy": "Sandbox tidak bisa berjalan di sini ({{reason}}), jadi perintah berjalan di mesin ini, dengan berkas dan jaringannya, tanpa isolasi.",
       "hostChipTitle": "Perintah di chat ini berjalan di mesin ini, tanpa isolasi. Pilih untuk detail.",
       "providerHost": "Perintah dijalankan di server tanpa isolasi.",
       "unknown": "Kesiapan atau isolasi eksekusi tidak diketahui.",
+      "unknownBy": {
+        "owner_unreachable": "Kesiapan atau isolasi eksekusi tidak diketahui: pemilik add-on tidak dapat dihubungi.",
+        "not_reported": "Kesiapan atau isolasi eksekusi tidak diketahui: add-on belum melaporkan status eksekusinya.",
+        "stale": "Kesiapan atau isolasi eksekusi tidak diketahui: status tidak cocok dengan versi add-on saat ini.",
+        "invalid_status": "Kesiapan atau isolasi eksekusi tidak diketahui: add-on mengirim status yang tidak dapat diterima host.",
+        "not_selected": "Kesiapan atau isolasi eksekusi tidak diketahui: add-on bukan yang menjalankan perintah chat ini.",
+        "no_answer": "Kesiapan atau isolasi eksekusi tidak diketahui: add-on tidak menjawab tepat waktu.",
+        "reported_unknown": "Kesiapan atau isolasi eksekusi tidak diketahui: add-on melaporkan bahwa ia tidak dapat mengetahuinya."
+      },
       "providerUnavailable": "Penyedia eksekusi yang dipilih tidak tersedia.",
       "disabled": "Eksekusi perintah dinonaktifkan untuk percakapan ini."
     },
@@ -302,7 +301,6 @@
       "expired": "Tidak dijawab: giliran yang meminta sudah selesai, jadi perintah tidak dijalankan."
     },
     "provider": {
-      "sandbox": "Sandbox",
       "addon": "Add-on {{name}}",
       "host": "Mesin ini, tanpa isolasi",
       "hostOnce": "Mesin ini, diizinkan sekali",
@@ -326,9 +324,6 @@
     "servedBy": "Dilayani oleh add-on {{provider}}",
     "servedByTool": "{{tool}}: {{provider}}",
     "servedByBuiltin": "bawaan",
-    "sandbox": {
-      "starting": "Sandbox sedang dimulai. LocalAI memeriksa lagi dalam {{seconds}} dtk."
-    },
     "fallbackBuiltin": "{{addon}} menggantikan {{tool}} tetapi saat ini tidak bisa melayani chat ini (berhenti, dimatikan di sini, atau tidak diizinkan): {{tool}} bawaan yang dipakai.",
     "fallbackNone": "{{addon}} menggantikan {{tool}} tetapi saat ini tidak bisa melayani chat ini, dan {{tool}} bawaan mati: chat ini tidak punya {{tool}}.",
     "shell": {
@@ -348,13 +343,13 @@
       "all": "Semua situs publik"
     },
     "presetHint": {
-      "off": "Perintah di Sandbox tidak menjangkau jaringan apa pun.",
+      "off": "Perintah tidak menjangkau jaringan apa pun.",
       "registries": "Perintah hanya menjangkau registri paket (PyPI, npm, Go, crates.io, RubyGems, Maven Central, rilis GitHub).",
       "all": "Perintah menjangkau semua situs publik."
     },
     "limited": "Dibatasi oleh administrator Anda",
     "limitedBy": "Administrator Anda mengizinkan paling banyak: {{limit}}.",
-    "hostNetwork": "Perintah berjalan di mesin ini dan memakai jaringannya. Batas jaringan memerlukan add-on Sandbox.",
+    "hostNetwork": "Perintah berjalan di mesin ini dan memakai jaringannya. Batas jaringan memerlukan add-on yang mengisolasi perintah.",
     "panel": "Aturan dan permintaan ({{count}})",
     "rules": "Aturan chat ini",
     "cards": "Permintaan chat ini",
@@ -386,8 +381,8 @@
     "blocked": {
       "titleOff": "Akses jaringan dimatikan",
       "titleCapped": "Akses jaringan dibatasi",
-      "bodyOff": "Akses jaringan Sandbox dimatikan di server ini. Sebuah perintah meminta menjangkau",
-      "bodyCapped": "Server ini hanya mengizinkan {{limit}} untuk jaringan Sandbox. Sebuah perintah meminta menjangkau",
+      "bodyOff": "Akses jaringan untuk perintah dimatikan di server ini. Sebuah perintah meminta menjangkau",
+      "bodyCapped": "Server ini hanya mengizinkan {{limit}} untuk jaringan perintah. Sebuah perintah meminta menjangkau",
       "adminOff": "Administrator dapat menyalakannya di pengaturan {{name}}.",
       "adminCapped": "Administrator dapat menaikkan batasnya di pengaturan {{name}}.",
       "adminLink": "Buka pengaturan {{name}}",
@@ -454,7 +449,10 @@
     "itemUnread": "{{title}}, belum dibaca",
     "arrived": "Notifikasi baru: {{title}}",
     "arrivedMany_one": "{{count}} notifikasi baru",
-    "arrivedMany_other": "{{count}} notifikasi baru"
+    "arrivedMany_other": "{{count}} notifikasi baru",
+    "proposalsWaiting_one": "{{count}} perubahan menunggu Anda",
+    "proposalsWaiting_other": "{{count}} perubahan menunggu Anda",
+    "proposalsBody": "Model mengusulkan perubahan. Tidak ada yang disimpan sampai Anda menjawab."
   },
   "change": {
     "loading": "Membaca perubahan pemicu...",
@@ -583,5 +581,123 @@
       "stopped_one": "{{count}} perulangan dihentikan.",
       "stopped_other": "{{count}} perulangan dihentikan."
     }
+  },
+  "changes": {
+    "loading": "Membaca perubahan yang diusulkan...",
+    "unread": "Perubahan yang diusulkan tidak dapat dibaca: {{message}}",
+    "removed": "Usulan ini sudah tidak ada.",
+    "kind": {
+      "memory": "Memori",
+      "profile": "Profil",
+      "skill": "Skill",
+      "page": "Halaman",
+      "dashboard": "Dasbor"
+    },
+    "scope": {
+      "user": "Semua obrolan Anda",
+      "agent": "Agen {{agent}}",
+      "agentAny": "Satu agen",
+      "channel": "Percakapan ini"
+    },
+    "help": "Tidak ada yang disimpan sampai Anda mengonfirmasi.",
+    "row": {
+      "kind": "Jenis",
+      "target": "Berkas",
+      "source": "Dari",
+      "expires": "Kedaluwarsa dalam"
+    },
+    "source": {
+      "chat": "Obrolan",
+      "connector": "Konektor {{name}}",
+      "connectorFrom": "Konektor {{name}}, dari {{sender}}"
+    },
+    "expiresHours": "{{hours}} j {{minutes}} mnt",
+    "expiresMinutes": "{{minutes}} mnt",
+    "diff": {
+      "label": "Perubahan pada {{target}}",
+      "newFile": "Berkas baru",
+      "added_one": "{{count}} baris ditambahkan",
+      "added_other": "{{count}} baris ditambahkan",
+      "removed_one": "{{count}} baris dihapus",
+      "removed_other": "{{count}} baris dihapus",
+      "same": "Tidak ada perbedaan dari teks saat ini.",
+      "gap_one": "{{count}} baris tidak berubah",
+      "gap_other": "{{count}} baris tidak berubah",
+      "more_one": "{{count}} baris lagi tidak ditampilkan",
+      "more_other": "{{count}} baris lagi tidak ditampilkan",
+      "srAdded": "Ditambahkan:",
+      "srRemoved": "Dihapus:"
+    },
+    "unreadFile": "Berkas saat ini tidak dapat dibaca, jadi seluruh teks dianggap baru.",
+    "confirm": "Konfirmasi",
+    "edit": "Edit lalu konfirmasi",
+    "confirmEdited": "Konfirmasi dengan teks saya",
+    "editLabel": "Teks yang disimpan di {{target}}",
+    "failed": "Perubahan tidak dapat disimpan: {{message}}. Masih menunggu Anda.",
+    "receipt": {
+      "applied": "Diterapkan:",
+      "reverted": "Dibatalkan:",
+      "dismissed": "Ditolak:",
+      "expired": "Kedaluwarsa:",
+      "stale": "Tidak diterapkan:"
+    },
+    "why": {
+      "expired": "Menunggu lebih dari sehari. Tidak ada yang disimpan.",
+      "stale": "Berkas berubah setelah usulan dibuat, jadi tidak ada yang disimpan."
+    },
+    "askAgain": "Minta lagi",
+    "askAgainText": "Tolong usulkan perubahan ini lagi, berkas sudah berubah sejak itu: {{summary}} ({{target}})",
+    "announce": {
+      "applied": "Perubahan diterapkan.",
+      "dismissed": "Perubahan ditolak.",
+      "undone": "Perubahan dibatalkan.",
+      "asked": "Asisten diminta mengusulkannya lagi."
+    }
+  },
+  "proposalsPage": {
+    "title": "Usulan",
+    "supporting": "Perubahan yang diminta model dan menunggu jawaban Anda.",
+    "emptyTitle": "Tidak ada yang menunggu",
+    "emptyBody": "Saat model mengusulkan perubahan pada memori Anda atau profil agen, usulan itu tampil di sini sampai Anda menjawab.",
+    "loadError": "Usulan tidak dapat dimuat."
+  },
+  "memoryPage": {
+    "lede": "Catatan yang dimasukkan LocalAI ke prompt obrolan Anda. Model hanya mengubahnya setelah Anda mengonfirmasi usulan. Di sini Anda dapat membaca, mengedit, dan menghapusnya.",
+    "limits": "Batas: indeks maksimal {{lines}} baris dan {{index}}, profil {{profile}}, dan satu giliran membawa maksimal {{turn}} catatan.",
+    "proposalsLink": "Lihat perubahan yang menunggu",
+    "emptyTitle": "Belum ada catatan",
+    "emptyBody": "Saat Anda meminta asisten mengingat sesuatu dan mengonfirmasinya, catatan muncul di sini.",
+    "loadError": "Catatan Anda tidak dapat dimuat.",
+    "use": "{{size}} dari {{max}} · {{lines}} dari {{maxLines}} baris",
+    "useBytes": "{{size}} dari {{max}}",
+    "useLabel": "Ukuran indeks terhadap batasnya",
+    "over": "Melebihi batas: bagian akhir tidak dikirim ke model.",
+    "index": "Indeks",
+    "group": {
+      "user": "Catatan Anda",
+      "agent": "Catatan agen {{key}}",
+      "channel": "Catatan percakapan {{key}}",
+      "profile": "Profil agen {{key}}"
+    },
+    "edit": "Edit",
+    "save": "Simpan",
+    "editLabel": "Teks {{name}}",
+    "editSizeIndex": "{{size}} dari {{max}} · {{lines}} dari {{maxLines}} baris",
+    "editSize": "{{size}} dari {{max}}",
+    "tooBig": "Terlalu panjang: persingkat untuk menyimpan.",
+    "saveFailed": "Tidak dapat menyimpan: {{message}}",
+    "saved": "{{name}} disimpan.",
+    "emptyFile": "(kosong)",
+    "delete": "Hapus {{name}}",
+    "deleteYes": "Hapus",
+    "confirmDelete": "Hapus {{name}}?",
+    "deleted": "{{name}} dipindahkan ke Tempat Sampah.",
+    "clear": "Hapus semua catatan",
+    "clearAsk_one": "Hapus {{count}} berkas? Berkas dipindahkan ke Tempat Sampah dan dapat dipulihkan dari Berkas.",
+    "clearAsk_other": "Hapus {{count}} berkas? Berkas dipindahkan ke Tempat Sampah dan dapat dipulihkan dari Berkas.",
+    "clearYes_one": "Hapus {{count}} berkas",
+    "clearYes_other": "Hapus {{count}} berkas",
+    "cleared_one": "{{count}} berkas dipindahkan ke Tempat Sampah.",
+    "cleared_other": "{{count}} berkas dipindahkan ke Tempat Sampah."
   }
 }

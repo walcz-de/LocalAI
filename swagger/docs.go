@@ -4746,6 +4746,212 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/chats/changes": {
+            "get": {
+                "description": "A model proposes a change to your memory or an agent profile with the propose_change tool, from a Studio chat or a connector chat. Nothing is written until you confirm. A proposal expires after 24 hours. Newest first; status keeps only one status.",
+                "tags": [
+                    "chats"
+                ],
+                "summary": "List the changes that a chat proposed.",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "pending, applied, dismissed, expired, reverted or stale",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Your proposals",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/contract.ChangeProposal"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "The status is not known",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/chats/changes/audit": {
+            "get": {
+                "description": "Who proposed, confirmed, dismissed or reverted what, from which source, newest first. It holds a hash of the text, never the text.",
+                "tags": [
+                    "chats"
+                ],
+                "summary": "List the audit of proposed changes.",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "most lines (default 50, at most 200)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Your audit lines",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/proposals.Event"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/chats/changes/{id}": {
+            "get": {
+                "tags": [
+                    "chats"
+                ],
+                "summary": "Get a proposed change.",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the proposal",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The proposal, with the text it would write",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ChangeProposal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not yours or unknown",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/chats/changes/{id}/confirm": {
+            "post": {
+                "description": "Writes the change to your files as one change set that Undo can take back. A JSON body {\"content\": \"...\"} writes your own text in place of the proposed one; it has the same size limit. It is refused with 409 when the file changed since the proposal, or when the proposal expired or was answered.",
+                "tags": [
+                    "chats"
+                ],
+                "summary": "Confirm a proposed change.",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the proposal",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The applied proposal",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ChangeProposal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not yours or unknown",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Stale, expired or answered",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/chats/changes/{id}/dismiss": {
+            "post": {
+                "tags": [
+                    "chats"
+                ],
+                "summary": "Dismiss a proposed change.",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the proposal",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The dismissed proposal",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ChangeProposal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not yours or unknown",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Not waiting",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/chats/changes/{id}/undo": {
+            "post": {
+                "description": "Restores the file with the change set the confirmation wrote. It is refused with 409 when the file was edited since.",
+                "tags": [
+                    "chats"
+                ],
+                "summary": "Undo an applied change.",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the proposal",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The reverted proposal",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ChangeProposal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not yours or unknown",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Not applied, or edited since",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/chats/connectors": {
             "get": {
                 "description": "A binding connects a bot of a messaging platform (served by a connector add-on, such as Telegram) to one of your saved agents. A person who messages the bot talks to that agent, in a conversation of their own, as you: your quota, your model allowlist and only the agent's grants apply.",
@@ -5027,6 +5233,23 @@ const docTemplate = `{
                         "description": "The bot",
                         "schema": {
                             "$ref": "#/definitions/schema.ChatsConnectorTest"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/chats/context-files": {
+            "get": {
+                "description": "The short index files that the host loads into every chat (your memory, an agent's notes, a conversation's notes), with the topic files next to them, the agent profiles and the caps that keep a turn small. It only reads; change a file on the Files page or confirm a proposal.",
+                "tags": [
+                    "chats"
+                ],
+                "summary": "List your context files.",
+                "responses": {
+                    "200": {
+                        "description": "Your context files",
+                        "schema": {
+                            "$ref": "#/definitions/studio.ContextFiles"
                         }
                     }
                 }
@@ -15140,6 +15363,160 @@ const docTemplate = `{
                 }
             }
         },
+        "contextfiles.Scope": {
+            "type": "string",
+            "enum": [
+                "user",
+                "agent",
+                "channel"
+            ],
+            "x-enum-varnames": [
+                "ScopeUser",
+                "ScopeAgent",
+                "ScopeChannel"
+            ]
+        },
+        "contract.ChangeKind": {
+            "type": "string",
+            "enum": [
+                "memory",
+                "profile",
+                "skill",
+                "page",
+                "dashboard"
+            ],
+            "x-enum-varnames": [
+                "ChangeMemory",
+                "ChangeProfile",
+                "ChangeSkill",
+                "ChangePage",
+                "ChangeDashboard"
+            ]
+        },
+        "contract.ChangeProposal": {
+            "type": "object",
+            "properties": {
+                "agent": {
+                    "type": "string"
+                },
+                "answered": {
+                    "type": "string"
+                },
+                "base_hash": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "created": {
+                    "type": "string"
+                },
+                "expires": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "$ref": "#/definitions/contract.ChangeKind"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "rev": {
+                    "description": "Rev is the workspace change set that applying wrote; RevertRev the one\nthat reverting wrote. Zero until then.",
+                    "type": "integer"
+                },
+                "revert_rev": {
+                    "type": "integer"
+                },
+                "scope": {
+                    "$ref": "#/definitions/contract.ChangeScope"
+                },
+                "source": {
+                    "$ref": "#/definitions/contract.ChangeSource"
+                },
+                "status": {
+                    "$ref": "#/definitions/contract.ProposalStatus"
+                },
+                "summary": {
+                    "type": "string"
+                },
+                "target": {
+                    "type": "string"
+                },
+                "v": {
+                    "type": "integer"
+                }
+            }
+        },
+        "contract.ChangeScope": {
+            "type": "string",
+            "enum": [
+                "user",
+                "agent",
+                "channel"
+            ],
+            "x-enum-varnames": [
+                "ScopeUser",
+                "ScopeAgent",
+                "ScopeChannel"
+            ]
+        },
+        "contract.ChangeSource": {
+            "type": "object",
+            "properties": {
+                "chat": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "thread": {
+                    "type": "string"
+                }
+            }
+        },
+        "contract.ExecutionDescriptor": {
+            "type": "object",
+            "properties": {
+                "class": {
+                    "description": "Class is ExecutionClassCommands.",
+                    "type": "string"
+                },
+                "note": {
+                    "description": "Note is one plain sentence for the model when the provider reports\nisolated execution, such as the programs its environment has.",
+                    "type": "string"
+                },
+                "skills": {
+                    "description": "Skills says which skills run on this provider.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/contract.ExecutionSkills"
+                        }
+                    ]
+                },
+                "title": {
+                    "description": "Title names the provider in the text the host shows the person and the\nmodel, for example \"Sandbox\". It falls back to the add-on's title.",
+                    "type": "string"
+                }
+            }
+        },
+        "contract.ExecutionSkills": {
+            "type": "object",
+            "properties": {
+                "providesRuntimeFor": {
+                    "description": "ProvidesRuntimeFor lists skill kinds (SkillKindDocuments). The host\noffers the add-on's skills of those kinds only while the provider\nreports isolated execution.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "contract.OutputDescription": {
             "type": "object",
             "properties": {
@@ -15156,6 +15533,25 @@ const docTemplate = `{
                     "type": "integer"
                 }
             }
+        },
+        "contract.ProposalStatus": {
+            "type": "string",
+            "enum": [
+                "pending",
+                "applied",
+                "dismissed",
+                "expired",
+                "reverted",
+                "stale"
+            ],
+            "x-enum-varnames": [
+                "ProposalPending",
+                "ProposalApplied",
+                "ProposalDismissed",
+                "ProposalExpired",
+                "ProposalReverted",
+                "ProposalStale"
+            ]
         },
         "contract.Receipt": {
             "type": "object",
@@ -15270,6 +15666,14 @@ const docTemplate = `{
                 "description": {
                     "description": "Description is plain text for the model.",
                     "type": "string"
+                },
+                "execution": {
+                    "description": "Execution declares that this tool runs commands and what the host may\nsay about the provider. Only a tool that shadows bash may declare it, and\nthe manifest must then accept API 2 (see MinExecutionAPI).",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/contract.ExecutionDescriptor"
+                        }
+                    ]
                 },
                 "inputSchema": {
                     "description": "InputSchema is the JSON schema of the arguments object. It is an\nobject schema with explicit properties, additionalProperties false at\nthe top level and the keywords the host allows only.",
@@ -17112,6 +17516,47 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "proposals.Event": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "agent": {
+                    "type": "string"
+                },
+                "at": {
+                    "type": "string"
+                },
+                "detail": {
+                    "type": "string"
+                },
+                "hash": {
+                    "type": "string"
+                },
+                "kind": {
+                    "$ref": "#/definitions/contract.ChangeKind"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "proposal": {
+                    "type": "string"
+                },
+                "rev": {
+                    "type": "integer"
+                },
+                "scope": {
+                    "$ref": "#/definitions/contract.ChangeScope"
+                },
+                "source": {
+                    "$ref": "#/definitions/contract.ChangeSource"
+                },
+                "target": {
                     "type": "string"
                 }
             }
@@ -26531,6 +26976,88 @@ const docTemplate = `{
                 },
                 "revision": {
                     "description": "Revision is the newest revision of the changes; it is also the event id,\nwhich a client sends back (Last-Event-ID or ?after=) to resume.",
+                    "type": "integer"
+                }
+            }
+        },
+        "studio.ContextFile": {
+            "type": "object",
+            "properties": {
+                "index": {
+                    "type": "boolean"
+                },
+                "lines": {
+                    "type": "integer"
+                },
+                "modified": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "path": {
+                    "description": "Path is the path inside the user's home.",
+                    "type": "string"
+                },
+                "size": {
+                    "type": "integer"
+                }
+            }
+        },
+        "studio.ContextFiles": {
+            "type": "object",
+            "properties": {
+                "groups": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/studio.ContextGroup"
+                    }
+                },
+                "limits": {
+                    "$ref": "#/definitions/studio.ContextLimits"
+                }
+            }
+        },
+        "studio.ContextGroup": {
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/studio.ContextFile"
+                    }
+                },
+                "key": {
+                    "type": "string"
+                },
+                "max_bytes": {
+                    "description": "MaxBytes and MaxLines are the caps of the index. MaxLines is zero when\nthe file has no line cap.",
+                    "type": "integer"
+                },
+                "max_lines": {
+                    "type": "integer"
+                },
+                "scope": {
+                    "$ref": "#/definitions/contextfiles.Scope"
+                },
+                "source": {
+                    "type": "string"
+                }
+            }
+        },
+        "studio.ContextLimits": {
+            "type": "object",
+            "properties": {
+                "index_bytes": {
+                    "type": "integer"
+                },
+                "index_lines": {
+                    "type": "integer"
+                },
+                "profile_bytes": {
+                    "type": "integer"
+                },
+                "turn_bytes": {
                     "type": "integer"
                 }
             }

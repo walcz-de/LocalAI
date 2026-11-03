@@ -113,6 +113,10 @@ type ToolDefinition struct {
 	// contract.ToolDefinition.Shadows), or empty. Only the chat consumer acts
 	// on it; every other consumer keeps the namespaced Name.
 	Shadows string `json:"shadows,omitempty"`
+	// Execution is what the add-on declares about a tool that shadows bash. It
+	// is never nil on such a tool: a manifest without a descriptor gets one
+	// with the add-on's title.
+	Execution *contract.ExecutionDescriptor `json:"execution,omitempty"`
 	// InstalledAt is when the add-on was first installed (RFC 3339, UTC), or
 	// empty. The chat consumer ranks the add-ons that shadow one name by it.
 	InstalledAt string `json:"installedAt,omitempty"`
@@ -365,8 +369,8 @@ func (t *ToolAdapter) visible(ctx context.Context, actor contract.Actor) ([]apps
 	}
 	var out []apps.App
 	for _, a := range list.Apps {
-		if a.Enabled && a.State == "running" && a.Generation > 0 && (len(a.ToolDefinitions) > 0 || (a.ID == "tables" && t.hasResourceLister())) {
-			if err := validateTablesListing(a); err != nil {
+		if a.Enabled && a.State == "running" && a.Generation > 0 && (len(a.ToolDefinitions) > 0 || t.hasListing(a)) {
+			if err := validateListing(a); err != nil {
 				return nil, err
 			}
 			out = append(out, a)
@@ -394,12 +398,33 @@ func (t *ToolAdapter) Controls(ctx context.Context, actor contract.Actor, addonI
 	return nil, nil
 }
 
+// Network returns the network an add-on declares, when the actor can see the
+// add-on and the apps list draws its network-policy control.
+func (t *ToolAdapter) Network(ctx context.Context, actor contract.Actor, addonID string) (apps.NetworkView, bool, error) {
+	if err := checkActor(actor); err != nil {
+		return apps.NetworkView{}, false, err
+	}
+	list, err := t.backend.Apps(ctx, actor)
+	if err != nil {
+		return apps.NetworkView{}, false, gateway.ClassifyCheck(err)
+	}
+	for _, a := range list.Apps {
+		if a.ID == addonID && a.Network != nil {
+			return *a.Network, true, nil
+		}
+	}
+	return apps.NetworkView{}, false, nil
+}
+
 // AddonSkills is the skills of one add-on the actor can see.
 type AddonSkills struct {
 	AddonID, Title string
 	// InstalledAt is when the add-on was first installed, or empty.
 	InstalledAt string
 	Skills      []contract.SkillDefinition
+	// Isolated are the skills that need the add-on's own commands tool to
+	// report isolated execution (see contract.IsolatedSkills).
+	Isolated []string
 	// Running is true when the add-on may serve now: enabled and running, as
 	// Discover requires for tools.
 	Running bool
@@ -423,7 +448,8 @@ func (t *ToolAdapter) Skills(ctx context.Context, actor contract.Actor) ([]Addon
 			continue
 		}
 		running := a.Enabled && a.State == "running" && a.Generation > 0
-		out = append(out, AddonSkills{AddonID: a.ID, Title: a.Title, InstalledAt: a.InstalledAt, Skills: slices.Clone(a.Skills), Running: running})
+		out = append(out, AddonSkills{AddonID: a.ID, Title: a.Title, InstalledAt: a.InstalledAt, Skills: slices.Clone(a.Skills),
+			Isolated: contract.IsolatedSkills(a.ToolDefinitions, a.Skills), Running: running})
 	}
 	slices.SortFunc(out, func(x, y AddonSkills) int { return strings.Compare(x.AddonID, y.AddonID) })
 	return out, nil
@@ -496,8 +522,25 @@ func definition(a apps.App, d contract.ToolDefinition) (ToolDefinition, bool) {
 	// shadows it.
 	if d.Shadows != "" && contract.ValidateShadow(d) == nil {
 		def.Shadows = d.Shadows
+		if d.Shadows == "bash" {
+			def.Execution = executionOf(a, d)
+		}
 	}
 	return def, true
+}
+
+// executionOf is the descriptor of a commands tool as the chat consumer sees
+// it. A manifest that declares none behaves as a provider of commands under the
+// add-on's title.
+func executionOf(a apps.App, d contract.ToolDefinition) *contract.ExecutionDescriptor {
+	e := contract.ExecutionDescriptor{Class: contract.ExecutionClassCommands}
+	if d.Execution != nil {
+		e = *d.Execution
+	}
+	if e.Title == "" {
+		e.Title = a.Title
+	}
+	return &e
 }
 
 // Discover returns the tools the actor may offer a model now, in a stable
@@ -509,8 +552,8 @@ func (t *ToolAdapter) Discover(ctx context.Context, actor contract.Actor) ([]Too
 	}
 	var out []ToolDefinition
 	for _, a := range list {
-		if a.ID == "tables" && t.hasResourceLister() && len(out) < MaxTools {
-			out = append(out, databaseListingDefinition())
+		if l, ok := t.listingOf(a); ok && len(out) < MaxTools {
+			out = append(out, resourceListingDefinition(a, l))
 		}
 		for _, d := range a.ToolDefinitions {
 			if d.Kind == contract.ToolKindAction && !t.actions {
@@ -589,8 +632,8 @@ func (t *ToolAdapter) execute(ctx context.Context, actor contract.Actor, convers
 		if a.ID != addonID {
 			continue
 		}
-		if addonID == "tables" && tool == "databases-list" && t.hasResourceLister() {
-			return t.listDatabases(ctx, actor, name, arguments)
+		if l, ok := t.listingOf(a); ok && l.Tool == tool {
+			return t.listResources(ctx, actor, a, l, name, arguments)
 		}
 		for _, d := range a.ToolDefinitions {
 			if d.Name != tool {

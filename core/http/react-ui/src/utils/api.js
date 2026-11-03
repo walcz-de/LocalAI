@@ -403,7 +403,7 @@ export const chatHostExecApi = {
   consent: (chat, id, decision) => fetchJSON(`/api/chats/${enc2(chat)}/host-exec/consent`, { method: 'POST', body: JSON.stringify({ id, decision }) }),
 }
 
-// The network of a chat's Sandbox commands: its preset, rules and cards, for
+// The network of a chat's isolated commands: its preset, rules and cards, for
 // the chat's owner; the settings and the audit, for administrators.
 export const chatEgressApi = {
   get: (chat) => fetchJSON(`/api/chats/${enc2(chat)}/egress`),
@@ -531,6 +531,18 @@ export const chatTriggersApi = {
   applyChange: (id) => postJSON(`/api/chats/triggers/changes/${enc2(id)}/apply`, {}),
   undoChange: (id) => postJSON(`/api/chats/triggers/changes/${enc2(id)}/undo`, {}),
   dismissChange: (id) => fetchJSON(`/api/chats/triggers/changes/${enc2(id)}`, { method: 'DELETE' }),
+}
+
+// The changes a model proposed to your memory, profile and other files, and
+// the notes the host puts in the prompt. confirm may carry the person's own
+// text, which is written in place of the proposed one.
+export const chatChangesApi = {
+  list: (status) => fetchJSON(`/api/chats/changes${q({ status })}`),
+  get: (id) => fetchJSON(`/api/chats/changes/${enc2(id)}`),
+  confirm: (id, content) => postJSON(`/api/chats/changes/${enc2(id)}/confirm`, content === undefined ? {} : { content }),
+  dismiss: (id) => postJSON(`/api/chats/changes/${enc2(id)}/dismiss`, {}),
+  undo: (id) => postJSON(`/api/chats/changes/${enc2(id)}/undo`, {}),
+  contextFiles: () => fetchJSON('/api/chats/context-files'),
 }
 
 // The inbox: what ended while the user was elsewhere.

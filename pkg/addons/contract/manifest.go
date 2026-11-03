@@ -58,9 +58,25 @@ func (r VersionRange) accepts(v uint64) bool {
 	return r.Min > 0 && r.Max >= r.Min && v >= r.Min && v <= r.Max
 }
 
+// HostAPIVersion is the manifest API version this host speaks. Version 2 adds
+// the execution descriptor of a tool. The host still accepts add-ons that
+// declare only version 1 (HostAPIMin), because every change since is optional.
+const (
+	HostAPIVersion uint64 = 2
+	HostAPIMin     uint64 = 1
+)
+
+// overlaps reports whether the range holds a version from lo to hi.
+func (r VersionRange) overlaps(lo, hi uint64) bool {
+	return r.Min > 0 && r.Max >= r.Min && r.Min <= hi && r.Max >= lo
+}
+
 type HostCompatibility struct {
-	Host       uint64 `json:"host"`
-	API        uint64 `json:"api"`
+	Host uint64 `json:"host"`
+	API  uint64 `json:"api"`
+	// APIMin is the oldest manifest API the host still accepts. Zero means API
+	// only.
+	APIMin     uint64 `json:"apiMin,omitempty"`
 	Protocol   uint64 `json:"protocol"`
 	SDK        uint64 `json:"sdk"`
 	DataFormat uint64 `json:"dataFormat"`
@@ -115,6 +131,9 @@ type Capabilities struct {
 	UI                *UI                `json:"ui,omitempty"`
 	ExecutionProvider *ExecutionProvider `json:"executionProvider,omitempty"`
 	HostOperations    *HostOperations    `json:"hostOperations,omitempty"`
+	// Network declares the network policy of the commands the add-on runs
+	// (see network.go). It attaches the network-policy host control.
+	Network *NetworkCapability `json:"network,omitempty"`
 }
 
 // ResourceTools maps the host's UI-only resource management operations to
@@ -135,6 +154,9 @@ type ResourceTools struct {
 	// Delete is a tool of AdminTools that removes the resource and its
 	// backing data. It is reachable only from the UI-only delete endpoint.
 	Delete string `json:"delete,omitempty"`
+	// List asks the host for a read tool that lists the resources the caller
+	// may use (see ResourceList). It needs manifest API 2.
+	List *ResourceList `json:"list,omitempty"`
 }
 
 // MaxAdminTools bounds capabilities.adminTools.
@@ -170,7 +192,7 @@ func validateResourceTools(c Capabilities) error {
 		}
 		return nil
 	}
-	if r.Create == "" && r.Rename == "" && r.Inspect == "" && r.Delete == "" {
+	if r.Create == "" && r.Rename == "" && r.Inspect == "" && r.Delete == "" && r.List == nil {
 		return fmt.Errorf("empty resources mapping")
 	}
 	if r.Noun != "" && !plainText(r.Noun, 40) {
@@ -347,7 +369,11 @@ func ValidateManifest(m Manifest, h HostCompatibility) error {
 	if !namespace.MatchString(m.OS) || !namespace.MatchString(m.Arch) || m.OS != h.OS || m.Arch != h.Arch {
 		return fmt.Errorf("incompatible platform")
 	}
-	if !m.Host.accepts(h.Host) || !m.API.accepts(h.API) || !m.Protocol.accepts(h.Protocol) || !m.DataFormat.accepts(h.DataFormat) {
+	apiMin := h.APIMin
+	if apiMin == 0 || apiMin > h.API {
+		apiMin = h.API
+	}
+	if !m.Host.accepts(h.Host) || !m.API.overlaps(apiMin, h.API) || !m.Protocol.accepts(h.Protocol) || !m.DataFormat.accepts(h.DataFormat) {
 		return fmt.Errorf("incompatible host, API, protocol or data format")
 	}
 	c := m.Capabilities
@@ -355,6 +381,9 @@ func ValidateManifest(m Manifest, h HostCompatibility) error {
 		return fmt.Errorf("invalid capabilities")
 	}
 	for _, d := range c.ToolDefinitions {
+		if d.Execution != nil && m.API.Max < MinExecutionAPI {
+			return fmt.Errorf("tool %s declares an execution descriptor, which needs api %d", d.Name, MinExecutionAPI)
+		}
 		if d.Kind == ToolKindAction && !c.Actions {
 			return fmt.Errorf("tool %s is an action tool but the add-on does not declare actions", d.Name)
 		}
@@ -365,7 +394,13 @@ func ValidateManifest(m Manifest, h HostCompatibility) error {
 	if e := validateExtensions(c); e != nil {
 		return e
 	}
+	if e := c.Network.validate(m); e != nil {
+		return e
+	}
 	if e := validateResourceTools(c); e != nil {
+		return e
+	}
+	if e := validateResourceList(c, m.API); e != nil {
 		return e
 	}
 	if e := validateConnector(c.Connector, c.UI); e != nil {

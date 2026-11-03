@@ -116,6 +116,9 @@ type App struct {
 	// the argument schema and the kind of each tool. The host serves them to
 	// chat from the verified manifest; the add-on process is never asked.
 	ToolDefinitions []contract.ToolDefinition `json:"toolDefinitions,omitempty"`
+	// Resources is the resource mapping of the manifest, with the listing
+	// declaration the host acts on. It is not part of the apps API.
+	Resources *contract.ResourceTools `json:"-"`
 	// Skills are the skills the package ships, from the verified manifest.
 	// The owner copies their files into the chats' skill layer.
 	Skills []contract.SkillDefinition `json:"skills,omitempty"`
@@ -124,8 +127,22 @@ type App struct {
 	// UI describes what the shell loads for this app. It is present only for
 	// an enabled addon with a UI whose installed package has a sha256 digest.
 	UI *UIView `json:"ui,omitempty"`
+	// Network is the network policy the add-on declares, present only while
+	// the host draws its network-policy control (see contract.EntitledControls).
+	Network *NetworkView `json:"network,omitempty"`
 	// Admin is present only for administrators.
 	Admin *AdminView `json:"admin,omitempty"`
+}
+
+// NetworkView is the network of the commands an add-on runs, as the host
+// names it in the text it shows.
+type NetworkView struct {
+	// Kind is the declared kind of network policy.
+	Kind string `json:"kind" enums:"egress-check" example:"egress-check"`
+	// Title names the network in text: the declared title, else the add-on's.
+	Title string `json:"title" example:"Sandbox"`
+	// Presets are the titles the add-on gives the host's network presets.
+	Presets []contract.NetworkPreset `json:"presets,omitempty"`
 }
 
 // UIView is the registry entry of an addon UI: the same-origin URLs of its
@@ -246,6 +263,7 @@ func build(s Snapshot, admin bool) App {
 		d.InputSchema = slices.Clone(d.InputSchema)
 		a.ToolDefinitions = append(a.ToolDefinitions, d)
 	}
+	a.Resources = resourceTools(m)
 	a.Skills = slices.Clone(m.Capabilities.SkillDefinitions)
 	a.SkillShadows = contract.ShadowedSkills(m.Capabilities.SkillDefinitions)
 	if u := m.Capabilities.UI; u != nil {
@@ -269,6 +287,7 @@ func build(s Snapshot, admin bool) App {
 			a.UI = uiView(id, s.Receipt.Digest, u)
 			if a.UI != nil {
 				a.UI.Controls = contract.EntitledControls(m, s.HostOps)
+				a.Network = networkView(a.Title, m.Capabilities.Network, a.UI.Controls)
 			}
 		}
 	}
@@ -279,6 +298,18 @@ func build(s Snapshot, admin bool) App {
 		a.Admin = &AdminView{CanStart: !s.Enabled && !s.Unavailable, HostOperations: s.HostOperations, CanStop: s.Enabled, ManagementURL: "/app/addons?manage=" + url.QueryEscape(id)}
 	}
 	return a
+}
+
+// networkView is the declared network of an add-on whose network-policy
+// control the host draws, or nil.
+func networkView(title string, n *contract.NetworkCapability, controls []string) *NetworkView {
+	if n == nil || !slices.Contains(controls, contract.ControlNetworkPolicy) {
+		return nil
+	}
+	if n.Title != "" {
+		title = n.Title
+	}
+	return &NetworkView{Kind: n.Kind, Title: title, Presets: slices.Clone(n.Presets)}
 }
 
 // state never claims more than was observed: a disabled addon is stopped, and
@@ -376,4 +407,20 @@ func contributions(u *contract.UI) ([]ChatActionView, []SlotView, []contract.Ren
 		slots = append(slots, SlotView{ID: s.ID, Slot: s.Slot, Component: s.Component, Extensions: slices.Clone(s.Extensions)})
 	}
 	return actions, slots, slices.Clone(u.Renderers)
+}
+
+// resourceTools copies the resource mapping of the manifest and fills the
+// listing declaration an older manifest implied (see legacyResourceList).
+func resourceTools(m contract.Manifest) *contract.ResourceTools {
+	if m.Capabilities.Resources == nil {
+		return nil
+	}
+	r := *m.Capabilities.Resources
+	if r.List != nil {
+		l := *r.List
+		r.List = &l
+	} else {
+		r.List = legacyResourceList(m)
+	}
+	return &r
 }

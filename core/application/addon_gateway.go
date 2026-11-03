@@ -608,6 +608,14 @@ func (l lateStudioAddons) Controls(ctx context.Context, user, addonID string) []
 	return nil
 }
 
+// Network forwards to the broker when it knows the network the add-ons declare.
+func (l lateStudioAddons) Network(ctx context.Context, user, addonID string) (studio.AddonNetwork, bool) {
+	if g, ok := l.a.StudioAddonTools().(studio.AddonNetworks); ok {
+		return g.Network(ctx, user, addonID)
+	}
+	return studio.AddonNetwork{}, false
+}
+
 func (l lateStudioAddons) Call(ctx context.Context, user, conv, name string, args json.RawMessage) (string, error) {
 	b := l.a.StudioAddonTools()
 	if b == nil {
@@ -717,6 +725,20 @@ func (s *studioAddons) Controls(ctx context.Context, user, addonID string) []str
 	return out
 }
 
+// Network returns the network the add-on declares while the apps list draws
+// its network-policy control, as the user reads the list.
+func (s *studioAddons) Network(ctx context.Context, user, addonID string) (studio.AddonNetwork, bool) {
+	actor, err := s.actor(user)
+	if err != nil {
+		return studio.AddonNetwork{}, false
+	}
+	v, ok, err := s.adapter.Network(ctx, actor, addonID)
+	if err != nil || !ok {
+		return studio.AddonNetwork{}, false
+	}
+	return studio.AddonNetwork{Title: v.Title, Presets: v.Presets}, true
+}
+
 func (s *studioAddons) actor(user string) (contract.Actor, error) {
 	switch s.mode {
 	case auth.AddonModeLocalOwner:
@@ -751,7 +773,7 @@ func (s *studioAddons) Tools(ctx context.Context, user string) ([]studio.AddonTo
 			continue
 		}
 		out = append(out, studio.AddonTool{Name: d.Name, AddonID: d.AddonID, Description: d.Description, Schema: raw, Action: d.Kind != contract.ToolKindRead,
-			Shadows: d.Shadows, InstalledAt: d.InstalledAt})
+			Shadows: d.Shadows, Execution: d.Execution, InstalledAt: d.InstalledAt})
 	}
 	return filterByFeature(out, s.hostOps, s.has, actor), nil
 }
@@ -777,7 +799,7 @@ func (s *studioAddons) AddonSkills(ctx context.Context, user string) ([]studio.A
 		if denied[a.AddonID] {
 			continue
 		}
-		out = append(out, studio.AddonSkillSet{AddonID: a.AddonID, Title: a.Title, InstalledAt: a.InstalledAt, Skills: contract.SkillNames(a.Skills),
+		out = append(out, studio.AddonSkillSet{AddonID: a.AddonID, Title: a.Title, InstalledAt: a.InstalledAt, Skills: contract.SkillNames(a.Skills), Isolated: a.Isolated,
 			Shadows: contract.ShadowedSkills(a.Skills), Running: a.Running})
 	}
 	return out, nil

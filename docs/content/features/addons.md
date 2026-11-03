@@ -139,7 +139,8 @@ and reconciling the operation before further use.
 ## Optional typed manifest extensions
 
 These declarations extend the strict manifest contract. They keep
-`schemaVersion: 1`, host/API/protocol/data-format level 1 and UI SDK 2.
+`schemaVersion: 1`, host/protocol/data-format level 1 and UI SDK 2. The manifest
+`api` range is 1 to 2: the execution descriptor, the resource listing and the network capability below need 2.
 The Go contract parser is authoritative; there is no separate JSON Schema.
 The fragments below merge into an otherwise valid manifest, not a complete
 installable package. Existing executable, identity, compatibility and UI
@@ -287,6 +288,112 @@ list and rejects its pending responses, even before effect cleanup. A new list
 request can populate the refreshed session. These in-memory scopes contain no
 credentials.
 
+### Execution descriptor of a commands tool
+
+Needs manifest `api` 2. On the definition of a tool that shadows `bash`:
+
+```json
+{
+  "name": "bash",
+  "kind": "action",
+  "shadows": "bash",
+  "description": "...",
+  "inputSchema": { "...": "..." },
+  "execution": {
+    "class": "commands",
+    "title": "Runbox",
+    "note": "The environment has python3, jq and sqlite3.",
+    "skills": { "providesRuntimeFor": ["documents"] }
+  }
+}
+```
+
+The descriptor says what the add-on is, so that the host can write about it
+without knowing its ID. It grants no authority. Whether commands are ready and
+isolated stays what the provider reports in its execution status (see above);
+the host decides from that report.
+
+| Field | Meaning |
+|---|---|
+| `class` | Required. `commands`: the tool runs shell commands and code. |
+| `title` | Optional, at most 40 characters of plain text. The host calls the provider by this name in the prompt and in the Tools menu text ("Runbox runs commands in an isolated environment", "switch the Runbox add-on on"). Without it, the host uses the add-on's own title. |
+| `note` | Optional, at most 600 characters of plain text. One sentence for the model, such as the programs the environment has. The host adds it to the Commands block only while the provider reports `isolated`. |
+| `skills.providesRuntimeFor` | Optional list of skill kinds. `documents` means the add-on's document skills (`xlsx`, `docx`, `pptx`, `pdf`) run on this provider. |
+
+The host offers the document skills of an add-on only while that add-on serves
+the chat's commands and its status reports `isolated`. When the status is
+`host` or unknown, or another provider serves the commands, the skills are left
+out and the chat says why. A tool descriptor may leave `providesRuntimeFor`
+out to opt out of that check, because its skills do not need its commands.
+
+The field is optional and does not change the protocol. A manifest that
+declares a descriptor must accept API 2 (`"api": {"min": 1, "max": 2}`). The
+host speaks API 2 and still accepts add-ons that declare `{1,1}`. An add-on
+whose commands tool declares no descriptor works as before: the host treats it
+as a provider of commands under the add-on's own title, with no note, and keeps
+the isolation check for its document skills. The host never compares the add-on
+ID with a fixed name for any of this, so a second add-on that runs commands gets
+the same behavior with its own title.
+
+The same holds for the rest of the interface. Settings, the Tools menu, the
+network card of a chat and the model prompt describe the provider by its
+declared title, or by generic words ("the add-on that runs commands") when none
+is installed. Core text never names a shipped add-on, so the title you declare
+is the only name your users see for it. A test reads `addons/*/manifest.json`
+and fails when a locale string, a Settings label or a Go string of core names an
+add-on that provides a role.
+
+### Network capability
+
+Needs manifest `api` 2. Inside `capabilities`:
+
+```json
+{
+  "network": {
+    "kind": "egress-check",
+    "title": "Runbox",
+    "presets": [
+      { "id": "off", "title": "Closed" },
+      { "id": "all", "title": "Open web" }
+    ]
+  },
+  "hostOperations": { "optional": ["egress.check"] },
+  "ui": { "controls": ["network-policy"] }
+}
+```
+
+The declaration says that the add-on runs commands behind a proxy that asks the
+host about each connection. The host attaches the `network-policy` control to
+it, and writes about the network from it, without knowing the add-on ID. It
+grants no authority: the host enforces the administrator's limit and the chat's
+rules, and it answers `egress.check` only for an add-on whose host setting
+grants that operation. The tool that runs commands does not have to shadow
+`bash` for the control to attach.
+
+| Field | Meaning |
+|---|---|
+| `kind` | Required. `egress-check`: the add-on's proxy calls the host operation `egress.check` for each connection, and the add-on blocks what the host refuses. The manifest must list `egress.check` in `hostOperations`. |
+| `title` | Optional, at most 40 characters of plain text. The host names the network by it in the text the model reads ("The server's setting for the Runbox network") and in the `network` object of the API. Without it, the host uses the title of the commands tool, then the add-on's own title. |
+| `presets` | Optional, at most three entries of `id` (`off`, `registries` or `all`, no repeats) and `title` (at most 40 characters). The chat Tools menu and the network cards show these titles for the host's presets (here "Closed" for `off` and "Open web" for `all`). A preset you leave out keeps the host's title. |
+
+The apps list and the chat's network view carry the result in a `network`
+object (`title` and `presets`). The settings keys do not change. The host keeps
+the names `chats_egress_ceiling`, `chats_egress_default`, `chats_egress_ports`,
+`chats_egress_extra_registries`, `chats_egress_allowed_hosts`,
+`chats_egress_allow_private` and `chats_egress_audit_days`, with the values
+and the API they have today, so a running instance needs no migration. They are
+host settings, not settings of one add-on. The setting `chats_host_exec`, which
+lets the host run commands when no add-on provides `bash`, is also a host
+setting and names no add-on.
+
+A manifest that declares no `network` works as before. The host attaches the
+control to an add-on that asks for `network-policy` in `ui.controls`, is granted
+`egress.check` and declares a tool that replaces `bash`; it names the network
+by the title of that tool. This is the shape of the manifests written before
+this field existed. The field is optional and does not change the protocol: the
+manifest must accept API 2 (`"api": {"min": 1, "max": 2}`), and the host still
+accepts add-ons that declare `{1,1}`.
+
 ### Requested host operations are not grants
 
 Inside `capabilities`:
@@ -349,6 +456,42 @@ eligibility before staging. SDK 2 does not signal support for these manifest
 extensions. If older hosts need support, release maintainers must decide whether
 and how long to publish separate legacy packages. These declarations alone do
 not install packages, grant operations or activate runtime/UI integrations.
+
+### Resource listing
+
+An add-on that keeps resources can ask the host for a read tool that lists the
+resources the caller may use, so a model finds the `resourceId` that its other
+tools take. The add-on writes no code for it: the host builds the tool from its
+own record of the grants.
+
+```json
+{
+  "api": {"min": 1, "max": 2},
+  "capabilities": {
+    "resources": {
+      "noun": "board",
+      "inspect": "boards-inspect",
+      "list": {"tool": "boards-list", "items": "boards"}
+    }
+  }
+}
+```
+
+- `list.tool` is the tool name. The model sees it as `addon__<id>__<tool>`. It
+  must not be the name of a tool, an admin tool or a tool definition of the
+  manifest; the host refuses such a manifest.
+- `list.items` is the key of the result array. It defaults to `resources`.
+- The manifest `api` range must reach 2. A manifest that declares a listing with
+  `api.max` 1 is refused.
+- The tool is a read tool that takes exactly `{}`. The result lists at most 100
+  entries, ordered by resource ID, with `resourceId`, an optional `name` and the
+  caller's `role`. `truncated` is true when the list is incomplete. There is no
+  pagination.
+- The tool is offered only to actor-bound consumers, only while the add-on is
+  enabled and running, and only for resources the caller owns or that were shared
+  with the caller. Existing chat opt-ins, hidden add-ons and allowlists apply.
+- An add-on that declares no `list` gets no listing tool, whatever else it
+  declares.
 
 ## Singleton owner and its limits
 
@@ -2167,6 +2310,93 @@ A frontend that does not own the add-ons runs no loop.
 connectors became add-ons) belongs to the add-on `telegram`. While that add-on does not
 run, the binding is listed as not running with the reason "install the Telegram add-on".
 
+## Change proposals from chats
+
+A model can ask to change what lasts: a note in the person's memory, or the
+profile of a saved agent. The host stores the request as a change proposal and
+writes nothing until the owner confirms. The mechanism belongs to the host and
+knows no chat platform, so every surface that runs a model uses it the same
+way: a Studio chat, the chats of any connector add-on and a chat started from an
+add-on page. An add-on needs no code and no manifest field for it.
+
+How it works for an add-on author:
+
+- The model calls the built-in tool `propose_change` (kind, scope, target,
+  content, summary) in the tool group `changes`. A connector add-on carries the
+  chat like any other: the tool result tells the model that nothing is saved
+  yet, and the model says so in the platform.
+- The proposal records its source as `{kind, id, chat, thread}`. `kind` is the
+  origin of the chat (empty for a chat a person watches, `connector` for a
+  messaging app), `id` is the binding, `chat` is the host chat. These names
+  come from the host, never from the platform.
+- The owner confirms in Studio. The host then writes the file as the owner in
+  one workspace change set, so Files history and `revert_change` can undo it.
+- `revert_change {id?}` undoes an applied change at once, because it only
+  restores the earlier text. Without an id it undoes the last applied change of
+  the same agent. A file edited since cannot be reverted.
+
+The record is `contract.ChangeProposal` in `pkg/addons/contract` and is
+versioned (`v`: 1). Readers ignore fields they do not know. The kinds are
+`memory`, `profile`, `skill`, `page` and `dashboard`; this host offers `memory`
+and `profile` and other features register theirs. A memory change writes under
+`Memory/` (`Memory/<file>.md` for scope `user`, `Memory/agents/<agent>/` for
+`agent`, `Memory/channels/<binding>-<hash>/` for `channel`). A profile writes
+`LocalAI/agents/<agent>/profile.md` and is at most 4 KiB. Other contents are at
+most 16 KiB. A target that is not a plain lower-case file name is refused, so a
+proposal cannot leave `Memory/`.
+
+Limits and safety:
+
+| Rule | Value |
+|---|---|
+| A proposal waits | 24 hours, then it expires |
+| Pending proposals of one person | 10 |
+| Proposals of one agent (or of plain chats) in an hour | 5 |
+| Target changed after the proposal | the confirmation is refused (409) |
+| Run started by a trigger, a job or a page, and sub-agents | never offered the tools |
+| Chat that runs a saved agent | refused until a grant allows it |
+
+A grant plugs in as a `proposals.Gate` in the host: it is asked with the
+action (`propose` or `revert`), the agent, the kind, the scope and the source
+before a tool call acts. The default gate allows a plain chat and refuses a chat
+that runs a saved agent, so an agent has no right until the owner gives it.
+
+Every step is audited (propose, refuse, confirm, dismiss, expire, stale,
+revert) with the source and a SHA-256 of the text, never the text.
+
+REST, under the chats feature:
+
+| Route | Does |
+|---|---|
+| `GET /api/chats/changes?status=` | list your proposals |
+| `GET /api/chats/changes/{id}` | read one |
+| `POST /api/chats/changes/{id}/confirm` | write it; a JSON body `{"content": "..."}` writes the owner's own text in place of the proposed one, with the same size limit |
+| `POST /api/chats/changes/{id}/dismiss` | answer no |
+| `POST /api/chats/changes/{id}/undo` | restore the file |
+| `GET /api/chats/changes/audit` | read the audit |
+
+Studio draws every proposal the same way, for any kind and any source. In a chat
+the tool line of `propose_change` carries a card `{kind: "change_proposal", id}`
+and the thread shows it under the message: the kind, the file and the scope, the
+source (a chat, or a connector with its binding), the time left, and a line diff
+against the file as it is now. The owner can Confirm, Edit then confirm (the text
+the owner writes is saved in place of the model's) or Dismiss. After a
+confirmation the card is a receipt with Undo. A proposal that waited a day shows
+as expired, and one whose file changed since shows as stale; both offer to ask
+the assistant again, and nothing was written. A write that fails leaves the
+proposal waiting and says why. A kind the card has no wording for is shown by its
+name. The changes that wait are also counted on the inbox button of the chat
+header, and the Proposals page (`/app/chats/proposals`) lists them with the same
+card.
+
+In a cluster the proposals and the audit live in the shared database (the auth
+database), so any frontend can confirm what another one stored. The limits are
+checked in the same transaction as the insert. A race between two frontends can
+let a limit be passed by the number of frontends that insert at the same moment,
+never more. Without a database they live in a file under the data path, or in
+memory when there is no data path.
+
+
 ## Context files
 
 A context file is a short index in the user's home folder that the host puts in the
@@ -2282,7 +2512,7 @@ Two more optional capability fields describe the UI-only resource management (se
 | `capabilities.undo` | Boolean. The add-on keeps a change set for the writes a chat makes at once and answers the host's undo calls (see [Undoing a change a chat made](#undoing-a-change-a-chat-made)). It changes no tool and offers nothing to a model. |
 | `capabilities.adminTools` | At most 4 tool names that only the host's own UI-only endpoints may run. An admin tool is never in `tools`, never has a tool definition, is never offered to a model and is refused by every model, proposal and typed-read path: the declared-tool rule of those paths reads `tools` only. |
 | `capabilities.connector` | Optional. 1 to 4 `kinds` of messaging binding the add-on serves, each with an `id`, a `title`, a `delivery` (`pull` or `push`) and optional texts and a `page`. See [Connector add-ons](#connector-add-ons). |
-| `capabilities.resources` | Maps the management operations to tools: `create` (a declared tool of kind `create`), `rename` (a declared tool of kind `schema`), `inspect` (a declared tool of kind `read` whose result is an object with a `name` and a `revision`), `delete` (the one admin tool) and a plain-text singular `noun`. Every field is optional. An admin tool must be the `delete` of the mapping, and a mapping must name tools that exist with the kind it needs. A mapping with `create` or `delete` must also declare the read tool `resource-exists` in `tools`, because the host settles interrupted creations and deletions only on its explicit answer. |
+| `capabilities.resources` | Maps the management operations to tools: `create` (a declared tool of kind `create`), `rename` (a declared tool of kind `schema`), `inspect` (a declared tool of kind `read` whose result is an object with a `name` and a `revision`), `delete` (the one admin tool) and a plain-text singular `noun`. Every field is optional. An admin tool must be the `delete` of the mapping, and a mapping must name tools that exist with the kind it needs. A mapping with `create` or `delete` must also declare the read tool `resource-exists` in `tools`, because the host settles interrupted creations and deletions only on its explicit answer. `list` asks the host for a listing tool; see [Resource listing](#resource-listing). |
 
 A tool definition names the resource it works on with a required `resourceId`
 argument, with two exceptions. A `create` tool has no `resourceId`: the host
@@ -4262,7 +4492,7 @@ the add-on's ID to decide.
 
 | Control | Where the host draws it | The add-on must |
 |---|---|---|
-| `network-policy` | On the add-on's **Settings** tab: the network of the commands it runs (limit, preset of a new chat, ports, extra registries, always allowed hosts, private networks, and the audit; see [Network access](#network-access)). In the chat's Tools menu: the **Network** row, while the add-on runs the chat's commands, with a link to the add-on's Settings tab for an administrator. On a network card: the same link. | Be granted a host operation that covers `egress.check` (for example `devbox=egress.` in `LOCALAI_ADDON_HOST_OPS`) and declare a tool that replaces `bash`. |
+| `network-policy` | On the add-on's **Settings** tab: the network of the commands it runs (limit, preset of a new chat, ports, extra registries, always allowed hosts, private networks, and the audit; see [Network access](#network-access)). In the chat's Tools menu: the **Network** row, while the add-on runs the chat's commands, with a link to the add-on's Settings tab for an administrator. On a network card: the same link. | Be granted a host operation that covers `egress.check` (for example `devbox=egress.` in `LOCALAI_ADDON_HOST_OPS`) and declare [`capabilities.network`](#network-capability). A manifest written before that field existed and declares a tool that replaces `bash` keeps the control. |
 | `tool-providers` | On the add-on's **Settings** tab: the rows of Settings > Tools for the built-in tools it replaces (who serves the tool, the choice when several add-ons replace it, and the switch of the built-in tool). | Declare at least one tool that replaces a built-in tool (`shadows`). |
 
 The network controls read the durable policy from the add-on owner, not the
@@ -4293,7 +4523,8 @@ work the same with or without it. A manifest without `ui.controls` is valid, and
 with a control has a **Settings** tab even when it declares no `settings.sections`.
 
 A second add-on that runs commands through the same proxy gets the same block, row and
-link with one manifest line and one grant, and no change to LocalAI:
+link with one manifest line, a [`network` declaration](#network-capability) and one grant,
+and no change to LocalAI:
 
 ```json
 "ui": { "entry": "ui/devbox.js", "sdk": { "min": 2, "max": 2 }, "controls": ["network-policy", "tool-providers"] }
