@@ -501,5 +501,3 @@ require (
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9 // indirect
 	lukechampine.com/blake3 v1.4.1 // indirect
 )
-
-replace github.com/mudler/cogito => github.com/walcz-de/cogito v0.11.1-0.20261103054337-16500c28934e
