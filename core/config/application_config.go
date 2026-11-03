@@ -89,6 +89,7 @@ func WithAddons(c AddonConfig) AppOption {
 }
 
 type ApplicationConfig struct {
+	chatSelection *chatSelectionState
 	// OfficialLibraries is the switch for the shipped default library sources
 	// of every kind. On by default; off keeps them listed but unread.
 	OfficialLibraries bool
@@ -568,6 +569,7 @@ func NewApplicationConfig(o ...AppOption) *ApplicationConfig {
 		oo(opt)
 	}
 	opt.SetMaxConcurrentBackendOperations(opt.MaxConcurrentBackendOperations)
+	opt.selectionState()
 	return opt
 }
 
@@ -1429,7 +1431,7 @@ func WithChatsDateNote(on bool) AppOption {
 
 func WithChatsHostExec(mode string) AppOption {
 	return func(o *ApplicationConfig) {
-		o.ChatsHostExec = mode
+		o.SetChatsHostExec(mode)
 	}
 }
 
