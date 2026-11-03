@@ -6,12 +6,13 @@ import { CAP_CHAT } from '../../utils/capabilities'
 import { seesImages } from '../../utils/chatVision'
 import { connectorRef } from '../../utils/chatMCP'
 import { networkMode } from '../../utils/chatEgress'
+import { unknownTextKey } from '../../utils/chatCommands'
 import { gbLabel, gbNumber } from '../../utils/modelLedger'
 import { useModelFit } from '../../hooks/useModelFit'
 import { useCommandsNotice } from '../../hooks/useCommandsNotice'
 import { fillStyle, hostMemory, memoryFigure } from '../home/memory'
 import HomeComposer from '../home/HomeComposer'
-import HomeModelPicker from '../home/HomeModelPicker'
+import ModelPicker from '../ModelPicker'
 import AddonSlot from '../../addons/AddonSlot'
 import AgentPicker from './AgentPicker'
 import SkillsMenu from './SkillsMenu'
@@ -122,7 +123,7 @@ export default function ChatComposer({
     if (!by || selected.provider !== by) return { chip, note: tc('tools.commands.unknown') }
     if (['host', 'host-off', 'host-unavailable', 'provider-host'].includes(selected.state)) return { chip, note: tc('tools.commands.providerHost'), warn: true }
     if (selected.state === 'available') return { chip, note: tc('tools.shell.isolated') }
-    return { chip, note: tc('tools.commands.unknown') }
+    return { chip, note: tc(`tools.commands.${unknownTextKey(selected.code)}`) }
   }
 
   // What a row of the model list says: whether it is loaded, what it can do
@@ -145,7 +146,7 @@ export default function ChatComposer({
   const memory = hostMemory(modelFit.resources)
   const memoryNumbers = memory ? memoryFigure(memory.used, memory.total) : null
   const picker = (
-    <HomeModelPicker
+    <ModelPicker
       ref={pickerRef}
       value={effectiveModel}
       onChange={chatId && onPickModel ? onPickModel : setDraftModel}

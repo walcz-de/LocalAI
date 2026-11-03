@@ -902,7 +902,7 @@ The routes, for the chat's owner (another user's chat is 404):
 
 | Route | What it does |
 |---|---|
-| `GET /api/chats/{id}/egress` | `{preset, ceiling, effective, applies, applies_reason, addon, registries, allowed_hosts, rules, cards}`. `applies` is false when commands run on this machine (`applies_reason` `host`) or no Sandbox serves `bash` (`none`). `addon` is the add-on that runs the commands and draws the network controls of the chat (it has the `network-policy` [host control]({{%relref "features/addons#host-controls" %}})); it is absent when `applies` is false or that add-on has no such control, and the chat then shows no Network row. A rule the ceiling no longer admits has `above_limit`. |
+| `GET /api/chats/{id}/egress` | `{preset, ceiling, effective, applies, applies_reason, addon, registries, allowed_hosts, rules, cards}`. `applies` is true when the add-on that serves `bash` reports, in its typed execution status, that it enforces the network policy and the status is available and isolated (the Sandbox does, except on the host backend). It is false when commands run on this machine (`applies_reason` `host`), no Sandbox serves `bash`, or the add-on does not report enforcement (`none`). `addon` is the add-on that runs the commands and draws the network controls of the chat (it has the `network-policy` [host control]({{%relref "features/addons#host-controls" %}})); it is absent when no add-on runs the commands or that add-on has no such control. The chat shows the Network row only when `applies` is true and `addon` is set; otherwise it shows a line that says why the settings do not apply. A rule the ceiling no longer admits has `above_limit`. |
 | `PUT /api/chats/{id}/egress {preset}` | Sets the preset: `off`, `registries` or `all`. Above the ceiling it is 400 `egress_above_ceiling`. |
 | `DELETE /api/chats/{id}/egress/rules/{host}/{port}` | Removes an allow or deny rule. |
 | `POST /api/chats/{id}/egress/consent {id, decision}` | Answers a card: `once`, `chat` or `deny`. Allowing a host inside your network needs an administrator (403). The same answer sent twice is one answer (204, nothing changes). Another answer to a card already answered is 409 `already_answered`. A host the ceiling does not admit refuses the card and gives 400 `egress_above_ceiling` on this answer and on every later one, so a stale card never ends in a conflict loop. In `GET /api/chats/{id}/egress` such a card has `above_ceiling`: no answer can make it work. |
@@ -1703,7 +1703,8 @@ example sets it up with Garage. Without S3, Files uses the existing
 `DataPath/chats/blobs` directly. All Files participants must then mount the same
 backing data directory and use the same PostgreSQL metadata database. See
 [Shared filesystem for Files](#shared-filesystem-for-files) for the operator
-contract; startup does not verify shared volume identity.
+contract. With PostgreSQL, startup checks that every node sees the same blob
+folder and stops with an error when it does not.
 
 ## Storage
 
@@ -1956,8 +1957,11 @@ live in the selected backend. Per-instance caches and scratch are disposable.
 For filesystem storage, every Files consumer must mount the same existing data
 directory/backing storage and use the same PostgreSQL database: frontends, the
 add-on owner and optional chat workers. Inference-only nodes need no Files mount.
-Equal path strings do not prove shared volume identity, and startup does not
-verify shared storage or datastore identity. No local probe certifies a deployment.
+Equal path strings do not prove shared volume identity. With PostgreSQL, the
+first node to start writes a random `.volume-id` file in `DataPath/chats/blobs`
+and records the same id in the database; every node compares the two at startup
+and refuses to start on a mismatch or when the file is missing. This catches a
+volume that is not shared. It does not prove that the storage is coherent.
 Other data-path contents do not thereby become cluster-safe.
 
 Keep the canonical backing directory service-controlled, with compatible UID/GID

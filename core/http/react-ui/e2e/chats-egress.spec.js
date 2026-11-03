@@ -30,7 +30,7 @@ const DETAIL = {
   id: 'c1', title: 'Packages', model: 'qwen3-8b', kind: 'chat', created: '2026-10-30T10:00:00Z', updated: '2026-10-30T10:00:00Z',
   running: false, last_turn: 'done', pending: [],
 }
-const sandbox = { addons: [{ id: 'sandbox', tools: 2, off: false }], commands: 'available', commands_provider: 'sandbox', commands_isolation: 'isolated' }
+const sandbox = { addons: [{ id: 'sandbox', tools: 2, off: false }], commands: 'available', commands_provider: 'sandbox', commands_isolation: 'isolated', execution_status: { readiness: 'available', isolation: 'isolated' } }
 const view = (over = {}) => ({
   preset: 'off', ceiling: 'registries', effective: 'off', applies: true, applies_reason: '', addon: 'sandbox',
   registries: [{ id: 'pypi', title: 'Python (PyPI)', hosts: ['pypi.org', 'files.pythonhosted.org'] }], allowed_hosts: [], rules: [], cards: [], ...over,
@@ -152,6 +152,17 @@ test.describe('Network of the Sandbox commands', () => {
     await page.getByTestId('chat-tools-button').click()
     await expect(page.getByTestId('chat-network-unenforced')).toContainText('Commands run on this machine and use its network.')
     await expect(page.getByTestId('chat-network')).toHaveCount(0)
+  })
+
+  test('a runner that does not report enforcement shows the not-enforced line and no switcher', async ({ page }) => {
+    // What the server sends when the isolated provider's status has no
+    // network-policy enforcement report.
+    await stubChat(page, { egress: view({ applies: false, applies_reason: 'none' }) })
+    await page.goto('/app/chats/c1')
+    await page.getByTestId('chat-tools-button').click()
+    await expect(page.getByTestId('chat-network-unenforced')).toContainText('Network-policy enforcement is not verified')
+    await expect(page.getByTestId('chat-network')).toHaveCount(0)
+    await shot(page, 'network-not-enforced')
   })
 
   test('with no add-on that draws the network controls, the Tools menu has no Network row', async ({ page }) => {
@@ -360,12 +371,13 @@ test.describe('The network of the commands on the add-on page', () => {
     expect(settings.log.dispatch.filter(r => r.action === 'host-settings-update')).toHaveLength(0)
     await page.getByTestId('settings-egress-private-phrase').fill('I understand that commands can reach my private network')
     await page.getByRole('button', { name: 'Apply' }).click()
-    // The phrase is checked in the page; the owner patch carries policy fields only.
-    await expect.poll(() => settings.log.hostSettings).toEqual([{ chats_egress_allow_private: true }])
+    // The owner checks the phrase too, so the patch carries it.
+    const phrase = 'I understand that commands can reach my private network'
+    await expect.poll(() => settings.log.hostSettings).toEqual([{ chats_egress_allow_private: true, chats_egress_private_confirm: phrase }])
     const writes = settings.log.dispatch.filter(r => r.action === 'host-settings-update')
     expect(writes).toHaveLength(1)
     expect(writes[0].operationId).toBeTruthy()
-    expect(writes[0].arguments).toEqual({ expectedRevision: 1, patch: { chats_egress_allow_private: true } })
+    expect(writes[0].arguments).toEqual({ expectedRevision: 1, patch: { chats_egress_allow_private: true, chats_egress_private_confirm: phrase } })
     await expect(page.getByTestId('settings-pending')).toHaveCount(0)
   })
 

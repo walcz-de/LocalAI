@@ -689,6 +689,12 @@ func (c *Chat) send(ctx context.Context, msg Message, logged bool) error {
 			c.mu.Unlock()
 			return fmt.Errorf("%w: the turn is stopping", ErrTurnRunning)
 		}
+		if c.pendingFullLocked(len(msg.Text) + len(msg.Note)) {
+			// Refused before the message reaches the transcript, so a retry
+			// does not log it twice.
+			c.mu.Unlock()
+			return fmt.Errorf("%w: too many messages are waiting for the turn", ErrTurnRunning)
+		}
 		hs, turn, swapping := c.hs, c.turn, c.swapping
 		if hs == nil || swapping {
 			// The harness is being swapped: queue the message for the next
@@ -701,7 +707,7 @@ func (c *Chat) send(ctx context.Context, msg Message, logged bool) error {
 				entry.Turn = turn
 				c.appendEntry(ctx, entry)
 			}
-			return c.queuePending(ctx, msg, withDirective(msg.Directive, c.modelText(entry)))
+			return c.queueLogged(ctx, msg, withDirective(msg.Directive, c.modelText(entry)))
 		}
 		// Taken under mu, so a swap that starts later waits for this inject.
 		c.injectMu.RLock()
@@ -721,20 +727,12 @@ func (c *Chat) send(ctx context.Context, msg Message, logged bool) error {
 		}
 		// The turn is ending. Queue the message for the next one, or start
 		// it here when the turn has ended meanwhile.
-		c.mu.Lock()
-		if c.running {
-			if c.stopped {
-				c.mu.Unlock()
-				return fmt.Errorf("%w: the turn is stopping", ErrTurnRunning)
-			}
-			c.pending = append(c.pending, withDirective(msg.Directive, c.modelText(entry)))
-			c.mu.Unlock()
-			return nil
-		}
-		c.mu.Unlock()
-		return c.send(ctx, msg, true)
+		return c.queueLogged(ctx, msg, withDirective(msg.Directive, c.modelText(entry)))
 	}
-	// Reserve the turn, then store the files without the lock.
+	// Reserve the turn, then store the files without the lock. Messages that a
+	// stopped turn left queued go first.
+	carried := c.pending
+	c.pending = nil
 	c.running, c.stopped = true, false
 	c.done = make(chan struct{})
 	done := c.done
@@ -744,6 +742,7 @@ func (c *Chat) send(ctx context.Context, msg Message, logged bool) error {
 	if err != nil {
 		c.mu.Lock()
 		c.endLoopLocked(done)
+		c.pending = append(carried, c.pending...)
 		c.mu.Unlock()
 		return err
 	}
@@ -753,7 +752,7 @@ func (c *Chat) send(ctx context.Context, msg Message, logged bool) error {
 	// The transcript keeps the words and the files apart; the model gets
 	// them together, as it always has.
 	entry.Attachments = append(slices.Clip(entry.Attachments), saved...)
-	full := withDirective(msg.Directive, c.modelText(entry))
+	full := strings.Join(append(carried, withDirective(msg.Directive, c.modelText(entry))), "\n\n")
 	if !logged {
 		entry.Turn = c.turnNow() + 1
 		c.appendEntry(ctx, entry)
@@ -763,21 +762,51 @@ func (c *Chat) send(ctx context.Context, msg Message, logged bool) error {
 	return nil
 }
 
-// queuePending queues text for the next turn of the running loop, or starts
-// it when the turn has ended meanwhile. The message is in the transcript.
-func (c *Chat) queuePending(ctx context.Context, msg Message, text string) error {
-	c.mu.Lock()
-	if c.running {
-		if c.stopped {
-			c.mu.Unlock()
-			return fmt.Errorf("%w: the turn is stopping", ErrTurnRunning)
-		}
-		c.pending = append(c.pending, text)
-		c.mu.Unlock()
-		return nil
+// Limits of the queue of messages that wait for the next turn. The queue only
+// fills while a turn ends or the harness swaps, so a full one means a client
+// that sends faster than the chat can take.
+const (
+	maxPendingMessages = 32
+	maxPendingBytes    = 256 << 10
+)
+
+// pendingFullLocked says whether a message of n more bytes does not fit in the
+// queue. The caller holds c.mu.
+func (c *Chat) pendingFullLocked(n int) bool {
+	if len(c.pending) >= maxPendingMessages {
+		return true
 	}
+	total := n
+	for _, p := range c.pending {
+		total += len(p)
+	}
+	return total > maxPendingBytes
+}
+
+// queueLogged queues text, which is in the transcript already, for the next
+// turn of the running loop, or starts it when the turn has ended meanwhile.
+// When the turn was stopped, or the queue filled up since Send checked it, the
+// message waits for the turn to end and starts the next one: it was accepted
+// into the transcript, so it must not be refused any more.
+func (c *Chat) queueLogged(ctx context.Context, msg Message, text string) error {
+	c.mu.Lock()
+	if !c.running {
+		c.mu.Unlock()
+		return c.send(ctx, msg, true)
+	}
+	if c.stopped || c.pendingFullLocked(len(text)) {
+		done := c.done
+		c.mu.Unlock()
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		return c.send(ctx, msg, true)
+	}
+	c.pending = append(c.pending, text)
 	c.mu.Unlock()
-	return c.send(ctx, msg, true)
+	return nil
 }
 
 // Attach stores files in the chat folder and returns them as attachments of
@@ -803,7 +832,7 @@ func (c *Chat) turnNow() int {
 
 // endLoopLocked ends the running state. The caller holds c.mu.
 func (c *Chat) endLoopLocked(done chan struct{}) {
-	c.running, c.cancel, c.pending = false, nil, nil
+	c.running, c.cancel = false, nil
 	close(done)
 }
 
@@ -967,14 +996,15 @@ func (c *Chat) checkpoint(n int, text string) ChangeEvent {
 
 // Stop interrupts the running turn and waits until it has ended. The turn
 // still checkpoints, so partial work is kept and can be undone. Messages that
-// are queued for the next turn are dropped.
+// are queued for the next turn are in the transcript, so they stay queued and
+// go to the model with the next message.
 func (c *Chat) Stop(ctx context.Context) error {
 	c.mu.Lock()
 	if !c.running {
 		c.mu.Unlock()
 		return nil
 	}
-	c.stopped, c.pending = true, nil
+	c.stopped = true
 	cancel, done, hs := c.cancel, c.done, c.hs
 	c.mu.Unlock()
 	if cancel != nil {

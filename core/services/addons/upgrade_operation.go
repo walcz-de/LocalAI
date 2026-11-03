@@ -6,9 +6,13 @@ import (
 	"errors"
 	"github.com/mudler/LocalAI/pkg/addons/contract"
 	"github.com/mudler/xlog"
+	"slices"
 )
 
 type upgradeExecutionKey struct{}
+
+// maxFinishedUpgradeViews bounds the views kept for finished upgrades.
+const maxFinishedUpgradeViews = 256
 
 type upgradeSnapshot struct {
 	Command LifecycleCommand
@@ -42,7 +46,7 @@ func (m *Manager) SubmitUpgrade(ctx context.Context, actor contract.Actor, cmd L
 	// Identify the same pinned transition from immutable projections even
 	// while execution owns mu; callers receive the same typed conflict then.
 	for _, old := range m.upgradeViews {
-		if cmd.ExpectedDigest != "" && old.Command.Action == "upgrade" && old.Command.AddonID == cmd.AddonID && old.Command.ExpectedDigest == cmd.ExpectedDigest && old.Command.CandidateDigest == cmd.CandidateDigest && old.Status.Phase != string(lifecycleFailed) {
+		if cmd.ExpectedDigest != "" && sameTransition(cmd, old.Command, old.Status) {
 			return OperationStatus{}, ErrTransitionConflict
 		}
 	}
@@ -69,10 +73,10 @@ func (m *Manager) SubmitUpgrade(ctx context.Context, actor contract.Actor, cmd L
 		return OperationStatus{}, ErrConflict
 	}
 	for _, op := range m.journal.Operations {
-		if cmd.ExpectedDigest != "" && op.Command.Action == "upgrade" && op.Command.AddonID == cmd.AddonID && op.Command.ExpectedDigest == cmd.ExpectedDigest && op.Command.CandidateDigest == cmd.CandidateDigest && op.Status.Phase != string(lifecycleFailed) {
+		if cmd.ExpectedDigest != "" && sameTransition(cmd, op.Command, op.Status) {
 			return OperationStatus{}, ErrTransitionConflict
 		}
-		if op.Command.AddonID == cmd.AddonID && op.Status.Phase != string(lifecycleCompleted) && op.Status.Phase != string(lifecycleFailed) {
+		if op.Command.AddonID == cmd.AddonID && isActive(op.Status.Phase) {
 			return OperationStatus{}, ErrConflict
 		}
 	}
@@ -98,9 +102,8 @@ func (m *Manager) SubmitUpgrade(ctx context.Context, actor contract.Actor, cmd L
 		_, err := m.submit(context.WithValue(m.upgradeCtx, upgradeExecutionKey{}, m), actor, cmd, true)
 		m.mu.Lock()
 		current := m.journal.Operations[cmd.OperationID]
-		if err != nil && current.Status.Phase != string(lifecycleCompleted) && current.Status.Phase != string(lifecycleFailed) && !m.uncertain {
-			phase, _ := upgradeTransition(lifecycleRunning, upgradeFail)
-			current.Status.Phase = string(phase)
+		if err != nil && isActive(current.Status.Phase) && !m.uncertain {
+			current.Status.Phase = string(lifecycleFailed)
 			current.Status.FailureCode = "upgrade_failed"
 			if errors.Is(err, context.Canceled) {
 				current.Status.FailureCode = "interrupted"
@@ -124,17 +127,39 @@ func (m *Manager) SubmitUpgrade(ctx context.Context, actor contract.Actor, cmd L
 
 // refreshUpgradeViews is called only while mu is held. Values contain no
 // mutable slices or pointers and may be returned without the execution lock.
-func (m *Manager) refreshUpgradeViews() {
+//
+// Finished operations keep a view only while they are among the newest
+// maxFinishedUpgradeViews; the journal still answers for older ones.
+func (m *Manager) refreshUpgradeViews() { m.syncUpgradeViews(false) }
+
+// syncUpgradeViews projects the journal. At start (loadFinished) the finished
+// operations of earlier processes get a view too, so a status read keeps its
+// failure code; afterwards only operations that already have one do.
+func (m *Manager) syncUpgradeViews(loadFinished bool) {
 	m.upgradeMu.Lock()
 	defer m.upgradeMu.Unlock()
 	for id, op := range m.journal.Operations {
-		if op.Async {
-			status := op.Status
-			if m.uncertain || m.runtimeRecoveryRequired {
-				status.RuntimeState = string(lifecycleRecovery)
-			}
-			m.upgradeViews[id] = upgradeSnapshot{op.Command, op.Actor, status}
+		if !op.Async {
+			continue
 		}
+		_, viewed := m.upgradeViews[id]
+		if !isActive(op.Status.Phase) {
+			if !viewed && !loadFinished {
+				continue
+			}
+			if !slices.Contains(m.finishedUpgrades, id) {
+				m.finishedUpgrades = append(m.finishedUpgrades, id)
+			}
+		}
+		status := op.Status
+		if m.uncertain || m.runtimeRecoveryRequired {
+			status.RuntimeState = string(lifecycleRecovery)
+		}
+		m.upgradeViews[id] = upgradeSnapshot{op.Command, op.Actor, status}
+	}
+	for len(m.finishedUpgrades) > maxFinishedUpgradeViews {
+		delete(m.upgradeViews, m.finishedUpgrades[0])
+		m.finishedUpgrades = m.finishedUpgrades[1:]
 	}
 }
 

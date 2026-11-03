@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/mudler/LocalAI/core/services/studio/agents"
@@ -107,7 +108,10 @@ func (s *Service) chatTools(ctx context.Context, x session.Access) (session.Turn
 	}
 	fa := fx.Actor()
 	nudge := s.newRulesNudge(ctx, x, rec)
-	tools = append(tools, nudge.wrap(s.fileNudgeTools(fx, s.announceFileChanges(fa, s.skillHintTools(fa, dropHidden(s.d.Files.Tools(fx), hidden)))))...)
+	tools = append(tools, nudge.wrap(s.fileNudgeTools(fx, s.announceFileChanges(fa, s.skillHintTools(fa, s.binaryHintTools(fa, cmds.State == CommandsAvailable, dropHidden(s.d.Files.Tools(fx), hidden))))))...)
+	if !sub {
+		tools = append(tools, s.attachTools(ctx, fx, rec)...)
+	}
 	if s.d.Media != nil {
 		tools = append(tools, s.skillHintTools(fa, dropHidden(s.d.Media.Tools(s.d.Files, x, rec.Model), hidden))...)
 	}
@@ -130,8 +134,16 @@ func (s *Service) chatTools(ctx context.Context, x session.Access) (session.Turn
 	if !sub {
 		persona, personaKey = s.WellKnown().TurnPrompt(ctx, a.Principal)
 	}
-	if persona != "" {
-		prompt = strings.TrimSpace(persona + "\n\n" + prompt)
+	// The agent's profile and the index of the user's notes follow the persona.
+	// The first is the user's standing rules for this agent; the second points
+	// the model at memory_read.
+	var notes, notesKey string
+	if !sub {
+		notes, notesKey = s.contextTurn(ctx, rec)
+		tools = append(tools, s.contextTools(rec)...)
+	}
+	if lead := joinBlocks(persona, notes); lead != "" {
+		prompt = strings.TrimSpace(lead + "\n\n" + prompt)
 	}
 	if sc != nil {
 		// Granted skills the user lacks come back from skillTurn as a note of
@@ -216,7 +228,7 @@ func (s *Service) chatTools(ctx context.Context, x session.Access) (session.Turn
 		// at its end, and the model must not lose the goal.
 		goal = goalBlock(rec.Goal)
 	}
-	prompt = joinBlocks(head, goal, webBlock(tools), prompt)
+	prompt = joinBlocks(head, goal, s.connectorBlock(ctx, rec, canWrite), webBlock(tools), prompt)
 	if sp := strings.TrimSpace(rec.Settings.SystemPrompt); sp != "" {
 		// The chat's own instructions come first: the prompt is cut at its end.
 		prompt = strings.TrimSpace(sp + "\n\n" + prompt)
@@ -239,7 +251,7 @@ func (s *Service) chatTools(ctx context.Context, x session.Access) (session.Turn
 	// load_skill learns from the final list whether the chat can read a
 	// skill's files and run what a skill needs.
 	tools = s.fitLoadSkill(a, tools)
-	return session.TurnTools{Tools: tools, Prompt: prompt, Note: note, WorkFolder: work, RefreshKey: key + "\x00" + rec.Settings.SystemPrompt + "\x00" + personaKey}, nil
+	return session.TurnTools{Tools: tools, Prompt: prompt, Note: note, WorkFolder: work, RefreshKey: key + "\x00" + rec.Settings.SystemPrompt + "\x00" + personaKey + "\x00" + notesKey}, nil
 }
 
 // todayLine is the line of the turn note that tells the model the date, in
@@ -566,11 +578,9 @@ func (s *Service) forgetWaiter(k string, ch <-chan store.TurnStatus) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ws := s.waiters[k]
-	for i, w := range ws {
-		if (<-chan store.TurnStatus)(w) == ch {
-			s.waiters[k] = append(ws[:i:i], ws[i+1:]...)
-			break
-		}
+	if i := slices.IndexFunc(ws, func(w chan store.TurnStatus) bool { return (<-chan store.TurnStatus)(w) == ch }); i >= 0 {
+		// A copy: notifyWaiters may hold the old slice.
+		s.waiters[k] = slices.Delete(slices.Clone(ws), i, i+1)
 	}
 	if len(s.waiters[k]) == 0 {
 		delete(s.waiters, k)
@@ -669,15 +679,10 @@ func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	return session.CapText(s, n) + "…"
 }
 
 // hasTool says whether the list has a tool of that name.
 func hasTool(tools []session.Tool, name string) bool {
-	for _, t := range tools {
-		if t.Name == name {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(tools, func(t session.Tool) bool { return t.Name == name })
 }

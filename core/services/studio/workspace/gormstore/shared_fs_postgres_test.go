@@ -39,6 +39,35 @@ func (b *gateBlob) IsFilesystem() bool {
 	return ok && fs.IsFilesystem()
 }
 
+// Stage gates publication, the point where the blob is visible and the
+// revision lock is held but the row that refers to it is not written yet.
+func (b *gateBlob) Stage(ctx context.Context, r io.Reader, max int64) (blob.Staged, error) {
+	st, err := b.Store.(blob.Stager).Stage(ctx, r, max)
+	if err != nil {
+		return nil, err
+	}
+	return &gateStaged{Staged: st, b: b}, nil
+}
+
+type gateStaged struct {
+	blob.Staged
+	b *gateBlob
+}
+
+func (g *gateStaged) Publish(ctx context.Context) error {
+	if err := g.Staged.Publish(ctx); err != nil {
+		return err
+	}
+	g.b.mu.Lock()
+	entered, resume := g.b.uploaded, g.b.resume
+	g.b.mu.Unlock()
+	if entered != nil {
+		close(entered)
+		<-resume
+	}
+	return nil
+}
+
 func (b *gateBlob) Put(ctx context.Context, r io.Reader, max int64) (string, int64, error) {
 	sha, n, err := b.Store.Put(ctx, r, max)
 	b.mu.Lock()
@@ -116,7 +145,7 @@ var _ = Describe("PostgreSQL shared filesystem", func() {
 		cleanup, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 		defer cancel()
 		done := make(chan struct{})
-		go func() { b.removePGBlobsNow(cleanup, []string{sha}, bb); close(done) }()
+		go func() { b.removeBlobs(cleanup, []string{sha}); close(done) }()
 		waitSharedLock(ba.pool)
 		Eventually(done, 2*time.Second).Should(BeClosed())
 		Eventually(func() int { return bb.pool.Stats().InUse }, time.Second).Should(BeZero())
@@ -131,7 +160,7 @@ var _ = Describe("PostgreSQL shared filesystem", func() {
 		Expect(err).NotTo(HaveOccurred())
 		caller, cancel := context.WithCancel(ctx)
 		cancel()
-		b.removePGBlobs(caller, []string{sha})
+		b.removeBlobs(caller, []string{sha})
 		exists, err := bb.Store.Exists(ctx, sha)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exists).To(BeTrue())
@@ -145,7 +174,7 @@ var _ = Describe("PostgreSQL shared filesystem", func() {
 		b.grace = 20 * time.Millisecond
 		caller, cancel := context.WithCancel(ctx)
 		cancel()
-		b.removePGBlobs(caller, []string{sha})
+		b.removeBlobs(caller, []string{sha})
 		Eventually(func() bool {
 			exists, err := bb.Store.Exists(ctx, sha)
 			Expect(err).NotTo(HaveOccurred())
@@ -275,26 +304,24 @@ var _ = Describe("PostgreSQL shared filesystem", func() {
 		}
 	})
 
-	It("cancels slow shared ingest and releases the revision lock", func() {
-		a, b, ba, _ := sharedPG()
+	It("leaves the revision lock free while a slow upload is read", func() {
+		a, b, _, _ := sharedPG()
 		request, cancel := context.WithCancel(ctx)
 		defer cancel()
 		reader := &cancelUpload{ctx: request, entered: make(chan struct{})}
 		done := make(chan error, 1)
 		go func() { _, err := a.Put(request, actor, "/slow", reader, workspace.PutOptions{}); done <- err }()
 		<-reader.entered
-		waiter := make(chan error, 1)
-		go func() { _, err := b.Mkdir(ctx, actor, "/after"); waiter <- err }()
-		waitSharedLock(ba.pool)
+		_, err := b.Mkdir(ctx, actor, "/after")
+		Expect(err).NotTo(HaveOccurred(), "a slow upload must not block other writers")
 		cancel()
 		Expect(<-done).To(MatchError(context.Canceled))
-		Expect(<-waiter).To(Succeed())
-		_, err := b.Stat(ctx, actor, "/slow")
+		_, err = b.Stat(ctx, actor, "/slow")
 		Expect(err).To(MatchError(workspace.ErrNotFound))
 	})
 
 	for _, kind := range []string{"Put", "CommitUpper"} {
-		It("automatically coordinates default PostgreSQL direct-FS ingest for "+kind, func() {
+		It("holds the revision lock from publication to metadata for "+kind, func() {
 			a, b, ba, _ := sharedPG()
 			ba.uploaded = make(chan struct{})
 			ba.resume = make(chan struct{})

@@ -102,6 +102,7 @@ type Manager struct {
 	mu                            sync.Mutex
 	upgradeMu                     sync.Mutex
 	upgradeViews                  map[string]upgradeSnapshot
+	finishedUpgrades              []string // oldest first; guarded by upgradeMu
 	upgradeCtx                    context.Context
 	upgradeCancel                 context.CancelFunc
 	upgradeWG                     sync.WaitGroup
@@ -260,7 +261,7 @@ func NewManager(ctx context.Context, cfg OwnerConfig, c catalog.Catalog, i *pack
 		_ = release()
 		return nil, e
 	}
-	m.refreshUpgradeViews()
+	m.syncUpgradeViews(true)
 	return m, nil
 }
 func (m *Manager) Close() error {
@@ -332,7 +333,7 @@ func (m *Manager) Status(ctx context.Context, id string) (Status, error) {
 		s.ObservedHealth = "unavailable"
 	}
 	for _, op := range m.journal.Operations {
-		if op.Command.AddonID == id && op.Status.Phase != string(lifecycleCompleted) && op.Status.Phase != string(lifecycleFailed) {
+		if op.Command.AddonID == id && isActive(op.Status.Phase) {
 			s.StartEligible = false
 		}
 	}
@@ -419,14 +420,14 @@ func (m *Manager) submit(ctx context.Context, actor contract.Actor, cmd Lifecycl
 		// leaves the transition open for a new one.
 		for id, other := range m.journal.Operations {
 			c := other.Command
-			if id != cmd.OperationID && c.Action == "upgrade" && c.AddonID == cmd.AddonID && c.ExpectedDigest == cmd.ExpectedDigest && c.CandidateDigest == cmd.CandidateDigest && other.Status.Phase != string(lifecycleFailed) {
+			if id != cmd.OperationID && sameTransition(cmd, c, other.Status) {
 				return OperationStatus{}, ErrTransitionConflict
 			}
 		}
 	}
 	if !resumed && !accepted {
 		for _, other := range m.journal.Operations {
-			if other.Command.AddonID == cmd.AddonID && other.Status.Phase != string(lifecycleCompleted) && other.Status.Phase != string(lifecycleFailed) {
+			if other.Command.AddonID == cmd.AddonID && isActive(other.Status.Phase) {
 				return OperationStatus{}, ErrRecoveryRequired
 			}
 		}
@@ -465,7 +466,19 @@ func (m *Manager) submit(ctx context.Context, actor contract.Actor, cmd Lifecycl
 		return OperationStatus{}, ErrConflict
 	}
 	if accepted {
-		phase, _ := upgradeTransition(lifecyclePhase(op.Status.Phase), upgradeStart)
+		phase, _, err := upgradeTransition(lifecyclePhase(op.Status.Phase), upgradeStart)
+		if err != nil {
+			// A phase the reducer does not know cannot be run. End the
+			// operation as failed instead of leaving it half-owned.
+			xlog.Warn("Addon operation has an unknown phase", "operationId", cmd.OperationID, "phase", op.Status.Phase)
+			op.Status.Phase = string(lifecycleFailed)
+			op.Status.FailureCode = "upgrade_failed"
+			m.journal.Operations[cmd.OperationID] = op
+			if e := m.persist(string(lifecycleFailed)); e != nil {
+				return op.Status, e
+			}
+			return op.Status, ErrOperationFailed
+		}
 		op.Status.Phase = string(phase)
 		m.journal.Operations[cmd.OperationID] = op
 		if e := m.persist(string(lifecycleRunning)); e != nil {

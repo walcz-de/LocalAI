@@ -111,6 +111,14 @@ func NewJSON(dir string) (Store, error) {
 				c.Pending[i].Delivered, c.Pending[i].Unconfirmed = false, false
 			}
 		}
+		if off, changed := normalizeDocumentSkillsOff(c.Rec.SkillsOff); changed {
+			// The legacy markers of the document skills become their add-on names.
+			// The next write stores them if this save fails.
+			c.Rec.SkillsOff = off
+			if err := s.save(&c); err != nil {
+				xlog.Warn("studio store: could not rewrite the legacy skill markers", "chat", c.Rec.ID, "error", err)
+			}
+		}
 		if err := s.loadEntries(&c); err != nil {
 			xlog.Warn("studio store: skipping chat with unreadable transcript", "chat", c.Rec.ID, "error", err)
 			continue
@@ -449,15 +457,11 @@ func (s *jsonStore) GetChat(_ context.Context, principal, id string) (session.Ch
 		return session.ChatRecord{}, err
 	}
 	defer unlock()
-	next := c.chatState
-	if off, changed := normalizeDocumentSkillsOff(next.Rec.SkillsOff); changed {
-		next.Rec.SkillsOff = off
-		if err := s.save(&next); err != nil {
-			return session.ChatRecord{}, err
-		}
-		c.chatState = next
-	}
-	return cloneRec(c.Rec), nil
+	rec := cloneRec(c.Rec)
+	// A read never writes. The store rewrites the legacy markers when it loads;
+	// this covers a record that was created with them since.
+	rec.SkillsOff, _ = normalizeDocumentSkillsOff(rec.SkillsOff)
+	return rec, nil
 }
 
 func cloneRec(r session.ChatRecord) session.ChatRecord {
@@ -999,7 +1003,8 @@ func (s *jsonStore) TouchTurn(_ context.Context, principal, id, runID string) er
 	return nil
 }
 
-func (s *jsonStore) ReapTurns(_ context.Context, olderThan time.Time) ([]ReapedTurn, error) {
+func (s *jsonStore) ReapTurns(_ context.Context, idle time.Duration) ([]ReapedTurn, error) {
+	olderThan := time.Now().UTC().Add(-idle)
 	var out []ReapedTurn
 	for _, c := range s.slots() {
 		reaped, err := s.reapTurn(c, olderThan)

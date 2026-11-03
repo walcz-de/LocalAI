@@ -200,10 +200,21 @@ func (a *Application) initStudioService() {
 		return
 	}
 	a.startStudioConnectors(svc)
-	a.startStudioTriggers(svc)
-	a.startStudioLoops(svc)
-	a.startStudioJobs(svc)
+	if a.ownsAddonsOnly() {
+		xlog.Info("Chats: this is the add-on owner; connectors, triggers, loops and agent jobs run on the frontends")
+	} else {
+		a.startStudioTriggers(svc)
+		a.startStudioLoops(svc)
+		a.startStudioJobs(svc)
+	}
 	a.prepareStudioConversion(svc)
+}
+
+// ownsAddonsOnly says whether this process is a dedicated add-on owner
+// (--addons-role=owner). It hosts the add-ons and has no models, so the
+// background work that starts chat turns belongs to the frontends.
+func (a *Application) ownsAddonsOnly() bool {
+	return a.applicationConfig.Addons.DedicatedOwner
 }
 
 // errStudioStarting is the error of a command hook called before the chat
@@ -218,31 +229,43 @@ const (
 )
 
 // startStudioReaper frees the chats whose turn was left running by a process
-// that died. A standalone process runs once at startup with no grace: every
-// claim then belongs to a process that no longer exists. In a cluster the other
-// frontends are alive, so only turns that stopped beating are reaped, by the one
-// frontend that holds the advisory lock at each tick.
+// that died. Only turns that stopped beating are reaped: the database may be
+// shared with another live process, whose turns must go on. A process that
+// died leaves a claim that goes stale within studioTurnTimeout, and the next
+// tick frees it. In a cluster one frontend does this at each tick, the one that
+// holds the advisory lock.
 func (a *Application) startStudioReaper(svc *studio.Service) {
 	ctx := a.backgroundContext()
-	reap := func(olderThan time.Duration) {
-		n, err := svc.ReapStale(ctx, olderThan)
+	reap := func() {
+		n, err := svc.ReapStale(ctx, studioTurnTimeout)
 		if err != nil {
 			xlog.Warn("Chats: could not reap stale turns", "error", err)
 		} else if n > 0 {
 			xlog.Info("Chats: ended turns whose frontend stopped", "turns", n)
 		}
 	}
-	if a.Distributed() == nil {
-		if a.authDB != nil {
-			// The JSON store settles its own claims when it loads; a database does not.
-			reap(0)
-		}
-		return
-	}
 	if a.authDB == nil {
+		// The JSON store settles its own claims when it loads.
 		return
 	}
-	go advisorylock.RunLeaderLoop(ctx, a.authDB, advisorylock.KeyChatsReaper, studioReapEvery, func() { reap(studioTurnTimeout) })
+	if a.Distributed() != nil {
+		go advisorylock.RunLeaderLoop(ctx, a.authDB, advisorylock.KeyChatsReaper, studioReapEvery, reap)
+		return
+	}
+	// The conditional update of a reap is safe to race with another process.
+	reap()
+	go func() {
+		tick := time.NewTicker(studioReapEvery)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+				reap()
+			}
+		}
+	}()
 }
 
 // studioUsers returns the user lookup, or nil when auth is off.

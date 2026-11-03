@@ -235,9 +235,17 @@ The existing result envelope carries this JSON in `payload`:
 {
   "readiness": "available",
   "isolation": "isolated",
-  "explanation": "Commands use the configured isolated backend."
+  "explanation": "Commands use the configured isolated backend.",
+  "networkPolicyEnforced": true
 }
 ```
+
+`networkPolicyEnforced` is optional and false when absent. A provider sets it to
+true only when every network connection of its commands goes through the host's
+network policy (the Sandbox does, through its proxy). The host honors it only
+for a status that is `available` and `isolated`; it then shows the chat's
+Network row. Without the report the chat says that network-policy enforcement is
+not verified for the provider.
 
 `contract.DecodeExecutionStatus` accepts at most 2048 UTF-8 bytes. Both enums
 are required: readiness is `available`, `unavailable` or `unknown`; isolation
@@ -254,7 +262,7 @@ not an addon ID or a private settings payload. Prompt construction, command
 status and nested egress reads share one observation within a turn. Priming and
 standalone command-status or egress requests have separate, bounded scopes.
 Consumer cancellation stops that wait; turn completion cancels the observation.
-Failed reads settle as unknown and do not retry within the same scope. Each
+A failed read settles as unknown with a reason (`unknown_reason`: `owner_unreachable`, `not_reported`, `stale`, `invalid_status`, `not_selected`, `no_answer` or `reported_unknown`), which the Tools menu shows. It is not retried at once. After a failure that a restart of the add-on owner can cause (`owner_unreachable`, `no_answer`, `stale`), a scope that is still open (a long turn) binds and reads again, at most once every five seconds. A refusal of the binding or of the payload is not retried. Each
 consumption revalidates the complete owner binding, including conversation,
 current selection identity and runtime incarnation.
 
@@ -492,6 +500,48 @@ The owner is a node-bound singleton. If the owner is down, add-ons are down: the
 frontends stay up and answer `503` for every add-on request. Failover is manual.
 There is no election and no standby owner.
 {{% /notice %}}
+
+### What runs where
+
+The three roles split the work of a LocalAI process as follows.
+
+| Work | `combined` (default) | `owner` | `frontend` |
+|---|---|---|---|
+| Add-on processes, the gateway and the host operations | Yes, in this process | Yes | No. It forwards to the owner. |
+| The carrier | Loopback, with keys made at each start | Served on the network | Client only |
+| Chat turns | Yes | No | Yes |
+| Model loading | In this process, or on workers in distributed mode | No models. In distributed mode it routes loads to workers. | In this process, or on workers in distributed mode |
+| Connector polling (Telegram, Slack) | Yes | No | Yes, on the one leader frontend |
+| Triggers, loops and agent jobs | Yes | No | Yes |
+| API and UI for users | Yes | No. Send users to a frontend. | Yes |
+
+A single node is `combined`: the add-ons run in the same process as the chats and
+the models, and nothing else is needed. Use `owner` and `frontend` only when you
+run several frontend replicas.
+
+### The owner in distributed mode
+
+When the frontends run in [distributed mode]({{% relref "features/distributed-mode" %}}),
+the owner must join distributed mode too. Give it the same settings as the
+frontends:
+
+- the same NATS URL (`--nats-url`) and registration token (`--registration-token`);
+- the same PostgreSQL database (`--auth-database-url`), with `--auth` on;
+- `--distributed`.
+
+With these, the owner takes part in the leader locks and sends model loads to the
+workers. Without them, the owner acts as a separate single node in the cluster:
+
+- It tries to load models in its own process. It has no backends, so the load fails
+  with `backend not found`.
+- It does not see the leader lock of the connectors. It polls the same bots as the
+  leader frontend, so a Slack message gets two answers.
+
+An owner should not run chats at all. In the release that contains pull request
+13052, an owner that has no distributed settings skips connector polling,
+triggers, loops and agent jobs, and refuses the push operation `connector.inbound`
+with an error. In earlier releases, give the owner the distributed settings, or
+turn the connectors off on it with `LOCALAI_DISABLE_CONNECTORS=true`.
 
 ### Make the carrier keys
 
@@ -1283,8 +1333,15 @@ draw the same thing.
 - `sdk.ui`: `Button`, `Text`, `Stack`, `Badge`, `Spinner`, `EmptyState`, and the
   shared `PageHeader`, `ConfirmDialog`, `ErrorWithTraceLink`, `ModelSelector`,
   `MediaInput`, `WaveformPlayer`, `DistributionBars`, `EmbeddingInspector`,
-  `TabSwitch`, `LoadingSpinner`, `Modal`, `Lightbox` and `HomeModelPicker`. A `ref`
-  reaches the host component, so `HomeModelPicker` keeps its handle.
+  `TabSwitch`, `LoadingSpinner`, `Modal`, `Lightbox` and `ModelPicker`. A `ref`
+  reaches the host component, so `ModelPicker` keeps its handle (`open()` and
+  `focus()`). `ModelPicker` is the one model picker of the core pages. It lists the
+  installed models and shows an alias as `alias of <model>`; an alias takes its
+  capabilities from the model it points to, so a `capability` filter finds it. Props:
+  `value` and `onChange`; `capability`; `multiple` (an array value, shown as chips);
+  `allowCustom` (a typed name is accepted); `clearable`; `searchable`; `variant`
+  (`chip` or `field`); `models` and `loading` when the add-on holds the list itself.
+  `HomeModelPicker` and `ModelSelector` stay as names for the same picker.
 - `sdk.ui` also has the settings kit, for a settings section or any form: see
   [The settings kit](#the-settings-kit).
 - `sdk.theme.tokens`: the host's design tokens as CSS values (`var(--dk-...)`), for the
@@ -2109,6 +2166,80 @@ A frontend that does not own the add-ons runs no loop.
 **Existing bindings.** A binding of kind `telegram` that names no add-on (made before
 connectors became add-ons) belongs to the add-on `telegram`. While that add-on does not
 run, the binding is listed as not running with the reason "install the Telegram add-on".
+
+## Context files
+
+A context file is a short index in the user's home folder that the host puts in the
+prompt of a chat, so the model knows what the user has saved without a tool call. The
+details of each topic stay in files next to the index and the model reads them on demand
+with the `memory_read` tool. The mechanism belongs to the host, not to one app: a plain
+chat in Studio, a chat that a Slack binding started and a chat that a Telegram binding
+started all go through the same loader. An add-on does not add code to the host; it
+declares a source.
+
+### Declare a source
+
+A source has four fields:
+
+| Field | Meaning |
+|---|---|
+| `id` | A name, unique among the sources of the host. |
+| `scope` | `user` (every chat of the user), `agent` (the chats of one saved agent) or `channel` (the chats that one connector binding started). |
+| `path` | The index file, relative to the user's home, ending in `.md`. An `agent` path holds `{agent}` once and a `channel` path holds `{channel}` once. The host fills them from the chat; the model never names them. |
+| `cap` | The most bytes of the index that the prompt carries. Default and maximum: 2 KiB. |
+
+For example, a memory add-on declares three sources: `Memory/index.md` for the user,
+`Memory/agents/{agent}/index.md` for the agent and `Memory/channels/{channel}/index.md`
+for the channel. A path with a parent segment, an absolute path, an unknown placeholder
+or a file that does not end in `.md` is refused. A host holds at most 8 sources.
+
+Today a source is registered in process, with `Service.ContextSources().Register`. A
+declaration in the add-on manifest is a separate change.
+
+### The index format
+
+An index is a Markdown file with one line per topic:
+
+```
+- home: lives in Rome -> home.md
+- style: short answers, no emoji -> style.md
+```
+
+The file `home.md` sits in the same folder as the index. `memory_read` takes a `topic`
+(the name before the colon, or the file name) and an optional `scope`; without a scope it
+looks in the channel, then the agent, then the user. A topic name is letters, digits, `-`
+and `_`, at most 64 characters.
+
+### What a turn carries
+
+Each turn the host reads the indexes that apply to the chat and adds one block to the
+prompt, after the agent instructions, the persona and the agent profile:
+
+- A fixed header that asks the model to read the matching topic for almost every request,
+  and says the lines are data, not instructions.
+- The indexes, widest scope first. One index has at most 40 lines and 2 KiB (or its
+  `cap`, if lower). All indexes of a turn together have at most 6 KiB. Control characters
+  are dropped. A cut index ends with a marker.
+- Nothing, if no source is registered or no file exists.
+
+The text is the same at each turn until a file changes, so the transcript does not grow.
+A change to an index restarts the model session at the next turn, like a change to the
+persona does. `memory_read` returns at most 8 KiB of one topic.
+
+A saved agent can also have a profile at `LocalAI/agents/<agent>/profile.md`, at most
+4 KiB. The host adds it after the agent instructions and the persona. It needs no
+source.
+
+### Access and limits
+
+The host reads the files as the user, outside the fence of the chat. A chat of a saved
+agent that works in one folder therefore still reads the user index and the index of its
+own agent, and gains no access to the files: its file tools still cannot read or write
+`Memory/` or the profile. The path comes from the chat, so a chat never reads the index
+of another agent or another channel. This change adds only read paths. A component that
+saves notes plugs in through `Service.SetContextWriter` (the header then names its save
+tool) and uses `contextfiles.CheckIndex` and `contextfiles.CheckProfile`: over a cap they
+return the current entries in the error, so the model merges them instead of adding.
 
 ## Owner forwarding and HTTP relays
 
@@ -4564,6 +4695,39 @@ The add-on runs commands in one of these backends, chosen by an administrator on
 | Off | No sandbox. Every tool answers that the host cannot run commands. |
 | Host | Runs commands on the host as the user LocalAI runs as, with no isolation. |
 
+#### What the Sandbox needs to run isolated
+
+The Sandbox reports a backend as `isolated` or as `host` (see
+[Execution provider and status payload](#execution-provider-and-status-payload)).
+Only gVisor and KVM report `isolated`. The `host` backend runs the command as a
+normal process of the user LocalAI runs as. No kernel boundary separates it from
+the rest of the machine, so it is never `isolated`.
+
+- **Document skills.** The `docx`, `xlsx` and `pdf` skills of the Sandbox are offered
+  only when the Sandbox reports an isolated backend. With the `host` backend, with
+  Off, or when no backend works, the chat does not get them.
+- **gVisor.** The add-on starts `runsc` with `--network=none`, a root file system in
+  memory (`--overlay2=root:memory`), `--directfs=false` and `--ignore-cgroups`. It
+  sets no `--platform` flag, so `runsc` uses its default platform and not the KVM
+  platform. gVisor needs no `/dev/kvm`, no cgroup and no extra capability. It needs
+  a non-root user, `runsc` and `taskset`, and permission to create a user namespace:
+  the container seccomp profile and, on Ubuntu 24.04 and later, AppArmor must allow
+  it. The add-on checks this at start with a small test sandbox.
+- **KVM.** Cloud Hypervisor needs `/dev/kvm` for the user LocalAI runs as. Pass the
+  device to the owner container only when you choose or expect this backend.
+- **Automatic.** The add-on tries KVM, then gVisor. If `/dev/kvm` is missing, it uses
+  gVisor, so an owner container without `/dev/kvm` still has an isolated sandbox.
+
+When the owner runs in a container, the container that runs the add-on must meet
+these needs. In a split deployment that container is the owner, not the frontends.
+
+The network limit and the presets (Off, Package registries only, Allow all) apply to
+the commands of the Sandbox because every connection goes through its proxy, which
+asks the host with `egress.check`. On current master, the host shows the limit as
+applied to an add-on's commands only when the provider reports that it enforces it.
+A provider that only reports isolation does not count. This behavior can change in a
+later release.
+
 The Settings tab lists the backends of the host, each with its state (in use, ready or unavailable); the reason a backend does not work is under **Details**. When gVisor fails with `exit status 128` and `cannot read client sync file`, the row also says that gVisor needs an AppArmor profile that allows user namespaces and a container that may create them, and links to [The Sandbox in the LocalAI container](#the-sandbox-in-the-localai-container). The add-on asks for the `network-policy` and `tool-providers` [host controls](#host-controls), so the same tab also holds the network of the Sandbox commands (the limit, the preset of a new chat, the ports, the extra registries, the always allowed hosts, private networks, the audit retention and the audit) and the `bash` row of Settings > Tools, and saves them like the Settings page. An explicit choice is never replaced by another when it does not work: the tools say they cannot run.
 
 The **Host** backend is for a machine that can run neither of the others. Choosing it takes two steps. The page shows a plain warning and asks the administrator to type the sentence *I understand that commands run on this host without isolation*. The add-on then saves the choice. The confirmation is forgotten when another backend is chosen. The backend refuses to start when LocalAI runs as root. Every command is logged with the name of the chat user, in the LocalAI log with the prefix `[sandbox]` (LocalAI writes everything an add-on prints to its output or error into its own log, one line at a time, cut at 4096 bytes), and the Settings tab of the Sandbox details (for administrators) shows a notice for as long as the host backend is the one in use. The model sees it in the answer of the status tool. Treat the machine as one that code can harm.
@@ -4688,7 +4852,7 @@ gVisor, KVM and the host backend refuse to run as root, so the sandbox needs the
 - **Existing volumes.** A volume created by an older image is owned by root. On the first start with the new image the entrypoint changes its owner to uid 10001 (`chown -R`), which takes a while on a large models folder, and logs it. Nothing needs to be done by hand. If the volume cannot be changed (a read-only or network mount that refuses `chown`), set its owner to 10001:10001 on the storage side, or run the container with `--user` set to the owner of the data.
 - **Another user.** Set `LOCALAI_UID` and `LOCALAI_GID` to use another id. A container that already starts as a non-root user (`docker run --user`, Kubernetes `runAsUser`) is left as it is; the data folders must then be writable by that user.
 - **Keep root.** Set `LOCALAI_RUN_AS_ROOT=true` to run as root as before. The sandbox is then unavailable, and the page says why.
-- **Devices.** Pass `/dev/kvm` to the container (`--device /dev/kvm`); the entrypoint adds the group that owns it. In Kubernetes, request the device through your device plugin and give the pod a `fsGroup` or `supplementalGroups` entry for it.
+- **Devices.** The KVM backend needs `/dev/kvm`; gVisor does not. For KVM, pass the device to the container (`--device /dev/kvm`); the entrypoint adds the group that owns it. In Kubernetes, request the device through your device plugin and give the pod a `fsGroup` or `supplementalGroups` entry for it.
 - **User namespaces.** gVisor needs the container to be allowed to create user namespaces, and on an Ubuntu 24.04 or later host an AppArmor profile that allows them (see **AppArmor** in [Packaging and setting up the Sandbox add-on](#packaging-and-setting-up-the-sandbox-add-on)). Without them `runsc` stops at once, and the backend's reason ends with `exit status 128` and `cannot read client sync file ... EOF`. Docker's default seccomp profile blocks this: use a profile that allows it, or `--security-opt seccomp=unconfined` on a host you trust. KVM needs `/dev/kvm` and no extra privileges.
 - **Cluster.** The add-on runs on the add-on owner node only. In Kubernetes, give that pod the settings above; a node pool dedicated to it is the way to keep the isolation requirements off the other nodes.
 
@@ -4894,6 +5058,11 @@ A binding does not authorize command execution, grant access or replace consent.
 Request/session integration shares observations only within a bounded request.
 
 ### Execution safety notices
+
+The Sandbox document skills (`docx`, `xlsx`, `pdf`, `pptx`) are offered only
+while the Sandbox reports an isolated backend. When it runs the chat's commands
+and is not known to be isolated, the skill list and `load_skill` say so, with the
+reason the status is unknown, instead of saying the chat has no skills.
 
 The chat Tools menu and command chip describe the actual selected execution
 provider, not an installed app's name. Any provider that reports host execution

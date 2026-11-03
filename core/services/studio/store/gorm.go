@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/mudler/xlog"
 	"gorm.io/gorm"
 
 	"github.com/mudler/LocalAI/core/services/studio/egress"
@@ -143,7 +144,43 @@ func NewGORM(db *gorm.DB) (Store, error) {
 	if err := db.AutoMigrate(&chatRow{}, &entryRow{}, &pendingRow{}); err != nil {
 		return nil, fmt.Errorf("studio store: migrate: %w", err)
 	}
-	return &gormStore{db: db}, nil
+	s := &gormStore{db: db}
+	if err := s.migrateDocumentSkillsOff(); err != nil {
+		// Reads normalize the markers in memory, so the store works anyway.
+		xlog.Warn("studio store: could not rewrite the legacy skill markers", "error", err)
+	}
+	return s, nil
+}
+
+// migrateDocumentSkillsOff rewrites the legacy OFF markers of the document
+// skills (builtin:docx and the like) to their add-on names. It is idempotent.
+// Each row changes only if it still holds the value that was read, so it cannot
+// undo a concurrent explicit re-enable.
+func (s *gormStore) migrateDocumentSkillsOff() error {
+	var rows []chatRow
+	if err := s.db.Select("id", "skills_off").Where("skills_off LIKE ?", "%builtin:%").Find(&rows).Error; err != nil {
+		return err
+	}
+	var errs []error
+	for _, r := range rows {
+		var off []string
+		if json.Unmarshal([]byte(r.SkillsOff), &off) != nil {
+			continue
+		}
+		clean, changed := normalizeDocumentSkillsOff(off)
+		if !changed {
+			continue
+		}
+		raw, err := json.Marshal(clean)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if err := s.db.Model(&chatRow{}).Where("id = ? AND skills_off = ?", r.ID, r.SkillsOff).Update("skills_off", string(raw)).Error; err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (r chatRow) record() (session.ChatRecord, error) {
@@ -280,39 +317,22 @@ func (s *gormStore) CreateChat(ctx context.Context, rec session.ChatRecord) erro
 }
 
 func (s *gormStore) GetChat(ctx context.Context, principal, id string) (session.ChatRecord, error) {
-	var rec session.ChatRecord
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Lock before reading so a concurrent explicit re-enable cannot be
-		// overwritten by normalization of a stale snapshot. This also works
-		// with SQLite, which has no SELECT FOR UPDATE.
-		res := tx.Model(&chatRow{}).Where("id = ? AND principal = ?", id, principal).
-			UpdateColumn("skills_off", gorm.Expr("skills_off"))
-		if res.Error != nil {
-			return res.Error
-		}
-		if res.RowsAffected == 0 {
-			return session.ErrNotFound
-		}
-		var row chatRow
-		if err := tx.Where("id = ? AND principal = ?", id, principal).Take(&row).Error; err != nil {
-			return err
-		}
-		var err error
-		rec, err = row.record()
-		if err != nil {
-			return err
-		}
-		if off, changed := normalizeDocumentSkillsOff(rec.SkillsOff); changed {
-			if err := setListDB(tx, "skills_off", principal, id, off); err != nil {
-				return err
-			}
-			rec.SkillsOff = off
-		}
-		return nil
-	})
+	var row chatRow
+	err := s.db.WithContext(ctx).Where("id = ? AND principal = ?", id, principal).Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return session.ChatRecord{}, session.ErrNotFound
+	}
 	if err != nil {
 		return session.ChatRecord{}, err
 	}
+	rec, err := row.record()
+	if err != nil {
+		return session.ChatRecord{}, err
+	}
+	// A read never writes. Rows written before the document skills moved to
+	// add-ons are rewritten when the store opens; this covers a row that an
+	// older process wrote since.
+	rec.SkillsOff, _ = normalizeDocumentSkillsOff(rec.SkillsOff)
 	return rec, nil
 }
 
@@ -894,10 +914,35 @@ func (s *gormStore) ConfirmPending(ctx context.Context, principal, id string, id
 	})
 }
 
+// now returns the time of the database server. A turn's beat is written by the
+// frontend that runs it and read by the one that reaps, so both use this one
+// clock: a skew between the machines must not end a live turn.
+func (s *gormStore) now(ctx context.Context) (time.Time, error) {
+	switch s.db.Dialector.Name() {
+	case "sqlite":
+		var v string
+		if err := s.db.WithContext(ctx).Raw("SELECT strftime('%Y-%m-%d %H:%M:%f', 'now')").Scan(&v).Error; err != nil {
+			return time.Time{}, err
+		}
+		return time.ParseInLocation("2006-01-02 15:04:05.000", v, time.UTC)
+	case "postgres":
+		var t time.Time
+		if err := s.db.WithContext(ctx).Raw("SELECT now()").Scan(&t).Error; err != nil {
+			return time.Time{}, err
+		}
+		return t.UTC(), nil
+	}
+	return time.Now().UTC(), nil
+}
+
 func (s *gormStore) ClaimTurn(ctx context.Context, principal, id, runID string) error {
+	now, err := s.now(ctx)
+	if err != nil {
+		return err
+	}
 	db := s.db.WithContext(ctx)
 	res := db.Model(&chatRow{}).Where("id = ? AND principal = ? AND (run_id = ? OR run_id IS NULL)", id, principal, "").
-		Updates(map[string]any{"run_id": runID, "run_since": time.Now().UTC(), "run_beat": time.Now().UTC()})
+		Updates(map[string]any{"run_id": runID, "run_since": now, "run_beat": now})
 	if res.Error != nil {
 		return res.Error
 	}
@@ -939,9 +984,13 @@ func (s *gormStore) Turn(ctx context.Context, principal, id string) (TurnInfo, e
 }
 
 func (s *gormStore) TouchTurn(ctx context.Context, principal, id, runID string) error {
+	now, err := s.now(ctx)
+	if err != nil {
+		return err
+	}
 	db := s.db.WithContext(ctx)
 	res := db.Model(&chatRow{}).Where("id = ? AND principal = ? AND run_id = ?", id, principal, runID).
-		Update("run_beat", time.Now().UTC())
+		Update("run_beat", now)
 	if res.Error != nil {
 		return res.Error
 	}
@@ -954,13 +1003,14 @@ func (s *gormStore) TouchTurn(ctx context.Context, principal, id, runID string) 
 	return ErrNotClaimed
 }
 
-func (s *gormStore) ReapTurns(ctx context.Context, olderThan time.Time) ([]ReapedTurn, error) {
-	// run_beat is written in UTC. SQLite compares the stored times as text,
-	// so a cut-off in another zone (a server running in CET) would reap
-	// turns that are still beating.
-	olderThan = olderThan.UTC()
+func (s *gormStore) ReapTurns(ctx context.Context, idle time.Duration) ([]ReapedTurn, error) {
+	now, err := s.now(ctx)
+	if err != nil {
+		return nil, err
+	}
+	olderThan := now.Add(-idle)
 	var rows []chatRow
-	err := s.db.WithContext(ctx).
+	err = s.db.WithContext(ctx).
 		Where("run_id <> ? AND run_id IS NOT NULL AND run_beat < ?", "", olderThan).
 		Find(&rows).Error
 	if err != nil {

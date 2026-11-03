@@ -20,6 +20,7 @@ import (
 	mcpendpoint "github.com/mudler/LocalAI/core/http/endpoints/mcp"
 	"github.com/mudler/LocalAI/core/services/studio/agents"
 	"github.com/mudler/LocalAI/core/services/studio/builtins"
+	"github.com/mudler/LocalAI/core/services/studio/contextfiles"
 	"github.com/mudler/LocalAI/core/services/studio/egress"
 	"github.com/mudler/LocalAI/core/services/studio/egress/audit"
 	"github.com/mudler/LocalAI/core/services/studio/files"
@@ -312,10 +313,11 @@ type Service struct {
 	admit sync.Mutex
 
 	// Sub-agents; see subagent.go.
-	triggers   *Triggers        // set once by SetTriggers
-	loops      *Loops           // set once by SetLoops
-	jobs       *Jobs            // set once by SetJobs
-	connectors *Connectors      // set once by SetConnectors
+	triggers   *Triggers   // set once by SetTriggers
+	loops      *Loops      // set once by SetLoops
+	jobs       *Jobs       // set once by SetJobs
+	connectors *Connectors // set once by SetConnectors
+	ctxfiles   *contextfiles.Loader
 	conversion ConversionSource // set once by SetConversion
 
 	videos   map[string][]string                // videos for the next model request of a turn, by conversation
@@ -425,6 +427,7 @@ func New(d Deps) (*Service, error) {
 	if err := s.registerToolGroups(); err != nil {
 		return nil, err
 	}
+	s.ctxfiles = contextfiles.NewLoader(contextfiles.NewRegistry(), homeReader{f: d.Files}, log)
 	s.shared = sharedfolders.New(sharedfolders.Options{Files: d.Files, Consents: d.PageConsents, Audit: d.SharedFolderAudit, Users: s.folderUsers()})
 	// A chat mounts the shared folders of its owner at /workspace/shared-<name>.
 	mgr, err := session.New(session.Options{Store: d.Store, Workspace: d.Files.Store(), Harness: h, StateDir: d.StateDir, Inputs: s.inputs, ChatTools: s.chatTools,
@@ -1129,7 +1132,7 @@ func (s *Service) heartbeat(ctx context.Context, p, conv, runID string) {
 // startup with a zero duration, because every claim then belongs to a process
 // that no longer exists.
 func (s *Service) ReapStale(ctx context.Context, olderThan time.Duration) (int, error) {
-	reaped, err := s.d.Store.ReapTurns(ctx, time.Now().Add(-olderThan))
+	reaped, err := s.d.Store.ReapTurns(ctx, olderThan)
 	for _, r := range reaped {
 		k := key(r.Principal, r.ChatID)
 		// The frontend that ran the turn is gone; so are the waiters of its
@@ -1137,6 +1140,8 @@ func (s *Service) ReapStale(ctx context.Context, olderThan time.Duration) (int, 
 		s.expireConsents(ctx, r.Principal, r.ChatID, r.RunID)
 		s.bus.Publish(k, session.Event{Kind: session.KindError, Text: "The turn was interrupted."})
 		s.bus.Publish(k, session.Event{Kind: session.KindTurnEnd})
+		// A parent waits for a sub-agent whose turn ended this way too.
+		s.notifyWaiters(k, store.TurnInterrupted)
 		// The goal of a turn that died does not go on by itself: the frontend
 		// that would have continued it is gone, and the person resumes it.
 		s.pauseGoal(ctx, r.Principal, r.ChatID, session.GoalPausedByInterrupted)

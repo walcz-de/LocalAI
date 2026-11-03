@@ -30,6 +30,18 @@ working as soon as the Telegram add-on is installed. Until then the binding is k
 switched as it was, and shown as not running with the reason "install the Telegram
 add-on"; nothing polls and nothing is lost.
 
+### How messages arrive: pull and push
+
+Each kind in the add-on manifest declares `delivery`:
+
+- **`pull`** (Slack and Telegram). The host polls the add-on. One process in the
+  cluster, the leader, does the polling. It stores the offset with the binding. When
+  the leader stops, a new leader continues from that offset.
+- **`push`**. The add-on calls the host operation `connector.inbound` for each
+  message. The turn then runs in the process that hosts the add-on. A push add-on
+  therefore needs a `combined` owner or a distributed owner (see
+  [The owner in distributed mode]({{% relref "features/addons" %}}#the-owner-in-distributed-mode)).
+
 ### Multiple frontends and readiness
 
 In a multi-frontend deployment, connector discovery and calls go to the frontend
@@ -145,8 +157,9 @@ a channel. The add-on uses Socket Mode, so LocalAI needs no public address.
    subscribes to `app_mention` and the `message.*` events, and asks for the bot scopes
    `app_mentions:read`, `channels:history`, `groups:history`, `im:history`,
    `mpim:history`, `chat:write`, `files:read`, `files:write` and `users:read`. An app
-   made before `files:write` was in the manifest cannot send files: add the scope and
-   reinstall the app.
+   made before `files:write` was in the manifest cannot send files. Add the scope in
+   the app settings, then reinstall the app to the workspace: Slack applies new scopes
+   only after a reinstall.
 3. Install the app to your workspace and copy the **bot token** (`xoxb-`).
 4. Under **Basic Information**, **App-Level Tokens**, make a token with the scope
    `connections:write` and copy it (`xapp-`).
@@ -211,7 +224,10 @@ polled for two minutes (the binding was switched off or deleted) is closed.
 
 A binding is switched off, with a notification, when Slack refuses a token
 (`invalid_auth`, `token_revoked` and similar) or turns Socket Mode off for the app.
-Socket Mode spreads the events of an app over all its open links, so bind one app to
+Socket Mode spreads the events of an app over all its open links, so use one
+connection per Slack app. If an old external agent and the add-on use the same Slack
+app, each gets part of the events and some messages are lost or answered twice at
+random. Stop the old bot or make a second app. Bind one app to
 one LocalAI instance only. A cluster of LocalAI frontends counts as one instance: only
 the leader opens links. Two separate installations that bind the same app each get
 part of the events, and LocalAI cannot detect it (Telegram's `conflict` answer has no
@@ -328,6 +344,17 @@ the sender attached.
   document. On Slack the file is uploaded into the conversation (the app needs
   `files:write`).
 - When the files of the chats are off (see [Files](/features/chats/)), nothing is sent.
+- The agent can also give the sender a file that already exists, such as one from an
+  earlier turn or from a folder it was given. It calls the `attach_file` tool with the
+  path, and the file goes after the answer, with the files the turn made. The same limits
+  apply, and the 5 files of a turn count both kinds. The tool is only offered in a chat
+  that a connector started, when the binding sends files. It reads with the access of the
+  chat, so an agent limited to a folder can attach only files inside it. When a file cannot
+  be attached (too large, a type that is not sent, not found), the tool says why, so the
+  agent can tell the sender. When the platform refuses a file, the sender gets "I could not
+  send" with the name of the file and the reason that the add-on reports, if it gives one.
+- Reading a binary file with `read_file` fails with a short hint: the skill for the file
+  type if the chat has one, or a script run with the commands tool.
 
 An update without `send_files` keeps the stored value.
 
@@ -425,6 +452,25 @@ restart). The JSON store is for one process.
 | Draft IDs | Per instance | A counter in the process that sends the replies gives each turn a new draft ID. Two frontends could give the same ID, but a draft only lives in one chat for one turn. |
 | The chats of the answers (thread mode) | Shared | Each answer's message IDs are stored with the chat of each sender, so a reply finds its chat on any frontend. |
 | Slack Socket Mode links and their queues | Per instance | The Slack add-on process keeps one link per polled binding, acknowledges each event at once and queues it until the next poll. An event that is queued when the process stops is lost. The followed threads and the "Working…" messages are kept there too. |
+| Files marked by `attach_file` | Per instance | The marks live in the process that runs the turn and are sent by the process that sends the replies. A turn that ends on another frontend than the one that sends the answer loses its marks; the agent then sees no error, and the person asks again. |
+
+### For add-on authors: sending files
+
+A connector add-on does not choose which files reach a person. The host does, and it
+sends each one with the typed `send_file` op: the file is in the request (`name`, `mime`
+and at most 1 MiB of `data`) with the chat and the thread of the message it answers. The
+host chooses the files in two ways:
+
+- The files that the turn made or changed go on their own, after the answer.
+- The files the agent picks with its `attach_file` tool go with them. The host checks the
+  path against the chat's access when the tool is called and again when it sends, drops
+  repeated paths, and counts both kinds in the limit of 5 files a turn.
+
+An add-on that implements `send_file` gets both, with no code of its own. It must not read
+chat files or add tools for this. When the platform refuses a file, return a
+`ConnectorError` with a short, plain `message` (for example the name of a missing
+permission): the host puts it after "I could not send <name>" in the message to the person.
+Keep the message free of tokens and internal addresses.
 
 ### Other connectors
 
@@ -541,7 +587,8 @@ used to probe the internal network, a connector may reach only public hosts:
 An administrator can allow private addresses with the runtime setting
 `mcp_connectors_allow_private` (Settings, Access and security; default off; no
 restart needed). Turn it on only when your users are trusted: with it, a connector
-can reach services on the server's own network. Turning it off closes the open
+can reach services on the server's own network. Cloud metadata addresses stay
+refused even then, and a request does not use a proxy from the environment. Turning it off closes the open
 sessions that were made to such addresses: a tool handed out before is refused,
 and the next turn connects again under the new rule. Likewise, a user who stops
 being an administrator loses their running local commands at their next use.
