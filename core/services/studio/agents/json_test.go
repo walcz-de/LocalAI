@@ -29,7 +29,7 @@ var _ = Describe("the JSON agent store", func() {
 		})
 	})
 
-	It("reads an agent stored before the folder fields and builtins_off as one without a folder or switches", func() {
+	It("reads an agent stored before the folder fields as one without a folder", func() {
 		dir := GinkgoT().TempDir()
 		old := `[{"ID":"old","Principal":"u1","Name":"Old","Description":"","Instructions":"","Model":"","MCPServers":null,"Addons":null,"Collections":null,"Skills":null,"Network":"","Created":"2026-10-01T09:00:00Z","Updated":"2026-10-01T09:00:00Z"}]`
 		Expect(os.WriteFile(filepath.Join(dir, "agents.json"), []byte(old), 0o600)).To(Succeed())
@@ -40,7 +40,6 @@ var _ = Describe("the JSON agent store", func() {
 		Expect(got.Name).To(Equal("Old"))
 		Expect(got.FolderID).To(BeZero())
 		Expect(got.FolderMode).To(BeEmpty())
-		Expect(got.BuiltinsOff).To(BeEmpty(), "stored before builtins_off: no group off")
 	})
 
 	It("survives a reopen", func() {

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/mudler/LocalAI/core/services/studio/builtins"
@@ -222,29 +221,12 @@ func (s *Service) builtinGroups(ctx context.Context, rec session.ChatRecord, too
 			out[i].Reason = shellReason(s.commandsOf(ctx, rec.Principal, tools, rec.AddonsOff, s.scopeOf(ctx, rec)), out[i].Reason)
 		}
 	}
-	// A group the saved agent switches off cannot serve the chat whatever the
-	// chat switches, so it is not usable, and the reason names the agent.
-	if name, agentOff := s.agentGroupsOff(ctx, rec); len(agentOff) > 0 {
-		reason := "the chat's saved agent is unavailable"
-		if name != "" {
-			reason = fmt.Sprintf("the saved agent %q switches it off", name)
-		}
-		for i := range out {
-			if slices.Contains(agentOff, out[i].Group) {
-				out[i].Off, out[i].Usable, out[i].Reason = true, false, reason
-			}
-		}
-	}
 	return out
 }
 
 // ErrBadBuiltinGroup means a switch names something that is not a group of
 // built-in tools.
 var ErrBadBuiltinGroup = errors.New("studio: not a group of built-in tools")
-
-// ErrAgentBuiltinOff means a switch would turn on a group of built-in tools
-// that the chat's saved agent switches off.
-var ErrAgentBuiltinOff = errors.New("studio: the chat's saved agent switches this group off")
 
 // SetBuiltinsOff sets the groups of built-in tools a chat has switched off,
 // replacing the earlier list. An opt-in group in the list is ignored: it is
@@ -253,9 +235,6 @@ var ErrAgentBuiltinOff = errors.New("studio: the chat's saved agent switches thi
 func (s *Service) SetBuiltinsOff(ctx context.Context, user, conv string, off []string) error {
 	clean, err := s.cleanGroups(off, false)
 	if err != nil {
-		return err
-	}
-	if err := s.agentLocks(ctx, user, conv, clean, nil); err != nil {
 		return err
 	}
 	return s.d.Store.SetBuiltinsOff(ctx, principal(user), conv, clean)
@@ -267,9 +246,6 @@ func (s *Service) SetBuiltinsOff(ctx context.Context, user, conv string, off []s
 func (s *Service) SetBuiltinsOn(ctx context.Context, user, conv string, on []string) error {
 	clean, err := s.cleanGroups(on, true)
 	if err != nil {
-		return err
-	}
-	if err := s.agentLocks(ctx, user, conv, nil, clean); err != nil {
 		return err
 	}
 	return s.d.Store.SetBuiltinsOn(ctx, principal(user), conv, clean)

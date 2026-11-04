@@ -119,11 +119,10 @@ func (s *Service) savedAgentsAllowed(ctx context.Context, rec session.ChatRecord
 	if !ok || !t.On() {
 		return ErrSavedAgentsOff
 	}
-	off, on := s.switchesOf(ctx, rec)
-	if !slices.Contains(on, builtins.GroupSavedAgents) || slices.Contains(off, builtins.GroupSavedAgents) {
+	if !slices.Contains(rec.BuiltinsOn, builtins.GroupSavedAgents) || slices.Contains(rec.BuiltinsOff, builtins.GroupSavedAgents) {
 		return ErrSavedAgentsNotAllowed
 	}
-	if slices.Contains(off, builtins.GroupSubAgents) {
+	if slices.Contains(rec.BuiltinsOff, builtins.GroupSubAgents) {
 		return ErrSubAgentsOff
 	}
 	return s.mayUseAgents(ctx, rec.Principal)

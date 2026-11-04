@@ -35,11 +35,8 @@ type agentRow struct {
 	// AutoMigrate is their migration.
 	FolderID   int64  `gorm:"not null;default:0"`
 	FolderMode string `gorm:"size:8;not null;default:''"`
-	// BuiltinsOff came later too: the default reads an older row as an
-	// agent that switches no built-in tool group off.
-	BuiltinsOff string `gorm:"not null;default:''"`
-	Created     time.Time
-	Updated     time.Time
+	Created    time.Time
+	Updated    time.Time
 }
 
 func (agentRow) TableName() string { return "studio_agents" }
@@ -81,7 +78,7 @@ func (r agentRow) agent() (Agent, error) {
 	for _, f := range []struct {
 		dst *[]string
 		src string
-	}{{&a.MCPServers, r.MCPServers}, {&a.Addons, r.Addons}, {&a.Collections, r.Collections}, {&a.Skills, r.Skills}, {&a.BuiltinsOff, r.BuiltinsOff}} {
+	}{{&a.MCPServers, r.MCPServers}, {&a.Addons, r.Addons}, {&a.Collections, r.Collections}, {&a.Skills, r.Skills}} {
 		if *f.dst, err = listFromJSON(f.src); err != nil {
 			return a, err
 		}
@@ -114,7 +111,7 @@ func (s *gormStore) Put(ctx context.Context, a Agent) error {
 		row := agentRow{ID: a.ID, Principal: a.Principal, NameKey: NameKey(a.Name), Name: a.Name,
 			Description: a.Description, Instructions: a.Instructions, Model: a.Model,
 			MCPServers: listJSON(a.MCPServers), Addons: listJSON(a.Addons),
-			Collections: listJSON(a.Collections), Skills: listJSON(a.Skills), BuiltinsOff: listJSON(a.BuiltinsOff), Network: a.Network,
+			Collections: listJSON(a.Collections), Skills: listJSON(a.Skills), Network: a.Network,
 			FolderID: a.FolderID, FolderMode: a.FolderMode, Created: a.Created, Updated: a.Updated}
 		if exists {
 			row.Created = old.Created

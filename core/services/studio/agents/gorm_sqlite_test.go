@@ -30,7 +30,7 @@ var _ = Describe("the GORM agent store on SQLite", func() {
 		return s
 	})
 
-	It("reads an agent stored before the folder fields and builtins_off as one without a folder or switches", func() {
+	It("reads an agent stored before the folder fields as one without a folder", func() {
 		db := openSQLite(filepath.Join(GinkgoT().TempDir(), "studio.db"))
 		// The table as it was before the folder columns.
 		Expect(db.AutoMigrate(&legacyAgentRow{})).To(Succeed())
@@ -43,7 +43,6 @@ var _ = Describe("the GORM agent store on SQLite", func() {
 		Expect(got.Name).To(Equal("Old"))
 		Expect(got.FolderID).To(BeZero())
 		Expect(got.FolderMode).To(BeEmpty())
-		Expect(got.BuiltinsOff).To(BeEmpty(), "stored before builtins_off: no group off")
 	})
 
 	It("survives a reopen", func() {

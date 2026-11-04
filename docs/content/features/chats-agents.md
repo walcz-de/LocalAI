@@ -24,7 +24,6 @@ An agent has:
 | `addons` | IDs of installed add-ons. |
 | `collections` | Names of your collections. |
 | `skills` | Names of skills. The index of skills and the `load_skill` tool of the chat offer only these. |
-| `builtins_off` | Optional. Groups of [built-in tools]({{%relref "features/chats#switch-tools-off-for-one-chat" %}}) that every chat with the agent has off, such as `["web"]`. See [Built-in tools an agent switches off](#built-in-tools-an-agent-switches-off). |
 | `network` | The network of the [Sandbox]({{%relref "features/addons#network-access" %}}) commands of the agent's trigger and connector runs: `off` (the default), `registries` (the package registries) or `all` (every public host), capped by the administrator's `chats_egress_ceiling`. A run never shows a card: a host outside it is blocked, and the block is in the run's output. A chat you start with the agent starts with this preset too; you change it in the chat's Tools menu. The agent form sets it in the add-ons fold. |
 | `folder` | Optional. One folder of your files that chats with the agent work in, and the mode: `read` or `write`. Without it the agent works on all your files. See [One folder for an agent](#one-folder-for-an-agent). |
 
@@ -66,26 +65,6 @@ office, collection docs`. A sub-agent of the chat can only get tools the chat
 has, and the groups of built-in tools that the chat switched off in its Tools
 menu (for example **Your files**) stay off for the sub-agent too.
 
-### Built-in tools an agent switches off
-
-`builtins_off` names groups of built-in tools, as `PUT
-/api/chats/{id}/builtins` names them (`shell`, `files`, `web`, `media`,
-`collections`, `subagents`, `triggers`, `saved_agents`). A name that is not a
-group on this server is refused (400). The groups are off in every chat that
-runs the agent: a chat you start with it, from its first turn, its trigger and
-connector runs, its runs as a sub-agent of another chat, and the sub-agents
-those start. Unlike the chat's own switches, the chat cannot switch them back
-on: the Tools menu shows them off and not usable, with the reason that the
-agent switches them off, and a `PUT .../builtins` that leaves one out of `off`
-(or names an opt-in one in `on`) is refused with a 400 that names the agent.
-The other groups switch as before. An opt-in group such as `saved_agents`
-listed here stays off too; one not listed keeps its default. Use it for an
-agent that must never reach the web, for example one that reads your mail: the
-instructions ask the model, `builtins_off` makes sure. A change of the field
-applies from the next turn of the agent's chats. A `PUT` of the agent without
-`builtins_off` keeps the groups it has, and `[]` clears them. If the agent
-cannot be read, deleted or not, its chats have every group off.
-
 A chat can also start a saved agent as a sub-agent, when you switch **Saved
 agents** on in its Tools menu. See [Saved agents as
 sub-agents]({{%relref "features/chats#saved-agents-as-sub-agents" %}}).
@@ -118,7 +97,7 @@ curl -X POST .../api/chats -d '{"agent_id": "<id>", "model": "my-model"}'
 ```
 
 `GET`, `PUT` and `DELETE /api/chats/agents/{id}` read, replace and delete one.
-A `PUT` replaces every field except `folder` (see below) and `builtins_off`, which a body without them keeps. Chats that already run with the agent use the new
+A `PUT` replaces every field except `folder` (see below). Chats that already run with the agent use the new
 definition from their next turn. Another user's agent is always `404`.
 
 Agents need the `agents` feature, which is off by default for a user (see
@@ -267,8 +246,7 @@ new agent. The folder is looked up by its path in your files; when you have
 no such folder, the agent is saved with the mode and no folder (`state:
 unset`), it does not start until you choose one, and a warning says so. A name you already use gets
 " (2)", " (3)" and so on, and a model that this server does not have, or that you
-may not use, is dropped. The response lists such changes under `warnings`. The file carries `builtins_off` when the agent has groups in it, and the import
-keeps them; a group this server does not offer refuses the import. The
+may not use, is dropped. The response lists such changes under `warnings`. The
 grants (MCP servers, add-ons, collections, skills) are kept as names; a grant
 that names something you do not have gives the chat nothing, as for any agent.
 Secrets are never part of an agent, so the file has none.

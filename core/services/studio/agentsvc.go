@@ -41,10 +41,6 @@ func (s *Service) SaveAgentWithFolder(ctx context.Context, user string, a agents
 	if err := agents.Validate(a); err != nil {
 		return agents.Agent{}, err
 	}
-	var err error
-	if a.BuiltinsOff, err = s.cleanAgentGroups(a.BuiltinsOff); err != nil {
-		return agents.Agent{}, err
-	}
 	a.Principal, a.Name = p, trimName(a.Name)
 	now := time.Now().UTC()
 	a.Updated = now

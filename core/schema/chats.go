@@ -48,10 +48,6 @@ type ChatsAgent struct {
 	Addons       []string `json:"addons"`
 	Collections  []string `json:"collections"`
 	Skills       []string `json:"skills"`
-	// BuiltinsOff are the groups of built-in tools (such as web) that every
-	// chat with the agent has off: the chats you start with it, its trigger
-	// runs and its runs as a sub-agent. Such a chat cannot switch them on.
-	BuiltinsOff []string `json:"builtins_off"`
 	// Network is the network preset of the Sandbox commands of the agent's
 	// unattended runs: off (the default), registries or all, capped by the
 	// administrator's ceiling.
@@ -104,13 +100,7 @@ type ChatsAgentWrite struct {
 	Addons       []string `json:"addons,omitempty"`
 	Collections  []string `json:"collections,omitempty"`
 	Skills       []string `json:"skills,omitempty"`
-	// BuiltinsOff are the groups of built-in tools every chat with the agent
-	// has off, named as PUT /api/chats/{id}/builtins names them; an opt-in
-	// group listed here stays off too. A replace without it keeps the groups
-	// the agent has, so a client that does not know the field cannot switch
-	// them back on; [] clears them.
-	BuiltinsOff *[]string `json:"builtins_off,omitempty"`
-	Network     string    `json:"network,omitempty"`
+	Network      string   `json:"network,omitempty"`
 	// Folder chooses the one folder the agent's chats work in. A write
 	// without it keeps the folder the agent has; {"path": ""} clears it. In
 	// an export file it is the home-relative path and mode when the file was

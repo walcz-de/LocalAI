@@ -41,8 +41,6 @@ var _ = Describe("agent validation", func() {
 			"bad network":      {Name: "a", Network: "everything"},
 			"folder, no mode":  {Name: "a", FolderID: 7},
 			"bad folder mode":  {Name: "a", FolderID: 7, FolderMode: "admin"},
-			"empty group":      {Name: "a", BuiltinsOff: []string{" "}},
-			"too many groups":  {Name: "a", BuiltinsOff: many},
 		} {
 			Expect(agents.Validate(a)).To(MatchError(agents.ErrInvalid), name)
 		}

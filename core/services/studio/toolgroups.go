@@ -3,11 +3,9 @@ package studio
 import (
 	"context"
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
 
-	"github.com/mudler/LocalAI/core/services/studio/agents"
 	"github.com/mudler/LocalAI/core/services/studio/builtins"
 	"github.com/mudler/LocalAI/core/services/studio/session"
 	"github.com/mudler/LocalAI/core/services/studio/skills"
@@ -25,8 +23,6 @@ import (
 //
 // They are on until the chat switches them off. A sub-agent follows the
 // switches of its parent chat: it never has a tool its parent switched off.
-// A saved agent can switch groups off for every chat that runs it
-// (agents.Agent.BuiltinsOff); its chats cannot switch those on.
 
 // The file tools, in the group GroupFiles. read_document comes from the media
 // helpers but reads a file like read_file does, so it switches with them.
@@ -106,82 +102,17 @@ func (s *Service) registerToolGroups() error {
 }
 
 // switchesOf returns the groups a chat switched off and on. A sub-agent has
-// none of its own: it follows its parent chat. The groups the chat's saved
-// agent switches off are added to off, so no switch of the chat turns them
-// on (see agentGroupsOff).
+// none of its own: it follows its parent chat.
 func (s *Service) switchesOf(ctx context.Context, rec session.ChatRecord) (off, on []string) {
 	if rec.Kind == session.KindSubAgent && rec.ParentID != "" {
 		parent, err := s.d.Store.GetChat(ctx, rec.Principal, rec.ParentID)
-		if err != nil {
-			s.log.Warn("studio: the parent of a sub-agent is gone; it keeps every group off", "chat", rec.ID, "error", err)
-			return s.builtins.Groups(), nil
+		if err == nil {
+			return parent.BuiltinsOff, parent.BuiltinsOn
 		}
-		off, on = s.switchesOf(ctx, parent)
-	} else {
-		off, on = rec.BuiltinsOff, rec.BuiltinsOn
+		s.log.Warn("studio: the parent of a sub-agent is gone; it keeps every group off", "chat", rec.ID, "error", err)
+		return s.builtins.Groups(), nil
 	}
-	if _, agentOff := s.agentGroupsOff(ctx, rec); len(agentOff) > 0 {
-		off = append(slices.Clone(off), agentOff...)
-	}
-	return off, on
-}
-
-// agentGroupsOff returns the groups of built-in tools that the chat's saved
-// agent switches off, and the agent's name. A chat without an agent has none.
-// When the agent cannot be read, deleted or not, every group is off and the
-// name is empty: a chat never gains a group because its agent is gone.
-func (s *Service) agentGroupsOff(ctx context.Context, rec session.ChatRecord) (name string, off []string) {
-	if rec.AgentID == "" {
-		return "", nil
-	}
-	if s.d.Agents == nil {
-		return "", s.builtins.Groups()
-	}
-	ag, err := s.d.Agents.Get(ctx, rec.Principal, rec.AgentID)
-	if err != nil {
-		if !errors.Is(err, agents.ErrNotFound) {
-			s.log.Warn("studio: agent unavailable; its chat keeps every group off", "chat", rec.ID, "agent", rec.AgentID, "error", err)
-		}
-		return "", s.builtins.Groups()
-	}
-	return ag.Name, ag.BuiltinsOff
-}
-
-// agentLocks refuses a switch that would turn on a group the chat's saved
-// agent switches off: a group of the agent missing from off, or one in on.
-func (s *Service) agentLocks(ctx context.Context, user, conv string, off, on []string) error {
-	rec, err := s.d.Store.GetChat(ctx, principal(user), conv)
-	if err != nil {
-		return err
-	}
-	name, locked := s.agentGroupsOff(ctx, rec)
-	if name == "" {
-		// No agent, or one that cannot be read: switchesOf keeps its chat's
-		// groups off whatever is stored, and there is no name to report.
-		return nil
-	}
-	for _, g := range locked {
-		if (off != nil && !s.builtins.IsOptIn(g) && !slices.Contains(off, g)) || slices.Contains(on, g) {
-			return fmt.Errorf("%w: the saved agent %q switches %s off for its chats", ErrAgentBuiltinOff, name, g)
-		}
-	}
-	return nil
-}
-
-// cleanAgentGroups checks and dedups the groups a saved agent switches off.
-// Unlike the off list of a chat it keeps an opt-in group: listed, the group
-// stays off whatever the chat switches on.
-func (s *Service) cleanAgentGroups(groups []string) ([]string, error) {
-	var clean []string
-	for _, g := range groups {
-		if !s.builtins.IsGroup(g) {
-			return nil, fmt.Errorf("%w: %q (known: %s)", ErrBadBuiltinGroup, g, strings.Join(s.builtins.Groups(), ", "))
-		}
-		if !slices.Contains(clean, g) {
-			clean = append(clean, g)
-		}
-	}
-	return clean, nil
+	return rec.BuiltinsOff, rec.BuiltinsOn
 }
 
 // hiddenFor returns the names of the tools the chat's switches take away

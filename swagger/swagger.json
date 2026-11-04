@@ -4462,7 +4462,7 @@
                 }
             },
             "post": {
-                "description": "An agent is a definition: instructions and exact lists of the MCP servers, add-ons, collections and skills a chat with it may use. A chat gets what the lists name and you may use at that moment, never more. builtins_off names groups of built-in tools (as PUT /api/chats/{id}/builtins names them) that every chat with the agent has off and cannot switch on; an unknown group is refused. Start a chat with it by passing agent_id to POST /api/chats. folder {path, mode} gives the agent one folder of your files, read or write; without it the agent works on all your files.",
+                "description": "An agent is a definition: instructions and exact lists of the MCP servers, add-ons, collections and skills a chat with it may use. A chat gets what the lists name and you may use at that moment, never more. Start a chat with it by passing agent_id to POST /api/chats. folder {path, mode} gives the agent one folder of your files, read or write; without it the agent works on all your files.",
                 "tags": [
                     "chats"
                 ],
@@ -4613,7 +4613,7 @@
                 }
             },
             "put": {
-                "description": "The body replaces every field but folder and builtins_off: a body without folder keeps the folder the agent has, so a client that does not know the field cannot widen the agent, and folder {path: \"\"} clears it. builtins_off works the same way: absent keeps the groups, [] clears them. Chats that already run with the agent use the new definition from their next turn.",
+                "description": "The body replaces every field but folder: a body without folder keeps the folder the agent has, so a client that does not know the field cannot widen the agent, and folder {path: \"\"} clears it. Chats that already run with the agent use the new definition from their next turn.",
                 "tags": [
                     "chats"
                 ],
@@ -18453,13 +18453,6 @@
                         "type": "string"
                     }
                 },
-                "builtins_off": {
-                    "description": "BuiltinsOff are the groups of built-in tools (such as web) that every\nchat with the agent has off: the chats you start with it, its trigger\nruns and its runs as a sub-agent. Such a chat cannot switch them on.",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "collections": {
                     "type": "array",
                     "items": {
@@ -18686,13 +18679,6 @@
             "type": "object",
             "properties": {
                 "addons": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "builtins_off": {
-                    "description": "BuiltinsOff are the groups of built-in tools every chat with the agent\nhas off, named as PUT /api/chats/{id}/builtins names them; an opt-in\ngroup listed here stays off too. A replace without it keeps the groups\nthe agent has, so a client that does not know the field cannot switch\nthem back on; [] clears them.",
                     "type": "array",
                     "items": {
                         "type": "string"

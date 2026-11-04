@@ -23,7 +23,7 @@ func sample(id, principal, name string) agents.Agent {
 	return agents.Agent{
 		ID: id, Principal: principal, Name: name, Description: "d", Instructions: "Be brief.", Model: "m1",
 		MCPServers: []string{"github"}, Addons: []string{"office", "sandbox"}, Collections: []string{"docs"}, Skills: []string{"review"},
-		BuiltinsOff: []string{"web"}, Network: "registries", Created: now, Updated: now,
+		Network: "registries", Created: now, Updated: now,
 	}
 }
 
@@ -43,16 +43,14 @@ func Run(newStore NewStore) {
 		Expect(strings.Join(got.MCPServers, ",")).To(Equal("github"))
 		Expect(strings.Join(got.Collections, ",")).To(Equal("docs"))
 		Expect(strings.Join(got.Skills, ",")).To(Equal("review"))
-		Expect(strings.Join(got.BuiltinsOff, ",")).To(Equal("web"))
 		Expect(got.Network).To(Equal("registries"))
 		Expect(got.Created.Equal(a.Created)).To(BeTrue(), "got %+v", got)
-		a.Name, a.Addons, a.BuiltinsOff, a.Updated = "Reviewer 2", nil, nil, a.Updated.Add(time.Hour)
+		a.Name, a.Addons, a.Updated = "Reviewer 2", nil, a.Updated.Add(time.Hour)
 		a.Created = time.Time{}
 		Expect(s.Put(ctx, a)).To(Succeed())
 		got, _ = s.Get(ctx, "u1", "a1")
 		Expect(got.Name).To(Equal("Reviewer 2"))
 		Expect(got.Addons).To(BeEmpty())
-		Expect(got.BuiltinsOff).To(BeEmpty())
 		Expect(got.Created.IsZero()).To(BeFalse(), "after replace: %+v", got)
 	})
 	It("ListAllSpansPrincipals", func() {
@@ -145,10 +143,8 @@ func Run(newStore NewStore) {
 		_ = s.Put(ctx, sample("a1", "u1", "x"))
 		got, _ := s.Get(ctx, "u1", "a1")
 		got.Addons[0] = "changed"
-		got.BuiltinsOff[0] = "changed"
 		again, _ := s.Get(ctx, "u1", "a1")
 		Expect(again.Addons[0]).To(Equal("office"), "a caller changed the stored agent: %+v", again)
-		Expect(again.BuiltinsOff[0]).To(Equal("web"), "a caller changed the stored agent: %+v", again)
 	})
 }
 
