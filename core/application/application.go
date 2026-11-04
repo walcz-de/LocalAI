@@ -26,6 +26,7 @@ import (
 	"github.com/mudler/LocalAI/core/services/addons/backendlib"
 	"github.com/mudler/LocalAI/core/services/addons/catalog"
 	"github.com/mudler/LocalAI/core/services/addons/gateway"
+	"github.com/mudler/LocalAI/core/services/addons/hostops"
 	"github.com/mudler/LocalAI/core/services/addons/hostsettings"
 	"github.com/mudler/LocalAI/core/services/addons/packages"
 	"github.com/mudler/LocalAI/core/services/addons/pins"
@@ -33,6 +34,8 @@ import (
 	"github.com/mudler/LocalAI/core/services/addons/recovery"
 	addonruntime "github.com/mudler/LocalAI/core/services/addons/runtime"
 	"github.com/mudler/LocalAI/core/services/addons/updates"
+	"github.com/mudler/LocalAI/core/services/addons/uploads"
+	"github.com/mudler/LocalAI/core/services/addons/usersettings"
 	"github.com/mudler/LocalAI/core/services/advisorylock"
 	"github.com/mudler/LocalAI/core/services/cloudproxy/mitm"
 	"github.com/mudler/LocalAI/core/services/facerecognition"
@@ -113,13 +116,28 @@ type Application struct {
 	backendLibrary  *backendlib.Installer
 	addonManager    *addons.Manager
 	addonHostOps    *addonruntime.HostOps
-	addonDataRoot   string // parent of the private data directory of each add-on; empty when none runs here
-	addonsProbe     addonsProbeState
-	modelsProbe     modelsProbeState
+	// hostAuthority answers what each add-on may call; see addonAuthority.
+	hostAuthority      hostops.Authority
+	addonAuthorityOnce sync.Once
+	addonGrantStore    addons.GrantStore
+	// addonGrants is the owner's host grants document and its glue; nil elsewhere.
+	addonGrants *addonHostGrants
+	// addonTransfers holds the handles of connector file transfers; see transfers.
+	addonTransfers     *hostops.Transfers
+	addonTransfersOnce sync.Once
+	addonDataRoot      string // parent of the private data directory of each add-on; empty when none runs here
+	addonsProbe        addonsProbeState
+	modelsProbe        modelsProbeState
 
 	// libraryStore is the library sources file when no add-on owner runs here.
 	libraryStore   *catalog.Sources
 	libraryStoreMu sync.Mutex
+
+	// The per-person add-on settings are built once: the routes and the chats
+	// read the same store.
+	addonUserSettingsOnce sync.Once
+	addonUserSettings     usersettings.Store
+	addonUserSettingsErr  error
 
 	// The pin store is built once so the routes and the retention sweep share it.
 	addonPinStoreOnce    sync.Once
@@ -727,6 +745,7 @@ func (a *Application) Shutdown() error {
 		if a.addonManager != nil {
 			err = a.addonManager.Close()
 		}
+		a.closeAddonHostGrants()
 		// Before distributed shutdown: the sync's subscriptions live on the
 		// NATS connection that closes there.
 		a.stopFailoverDistributed()
@@ -979,7 +998,7 @@ func (a *Application) startAddons() error {
 		}
 		host := c.Host
 		if host == (contract.HostCompatibility{}) {
-			host = contract.HostCompatibility{Host: 1, API: contract.HostAPIVersion, APIMin: contract.HostAPIMin, Protocol: 1, SDK: contract.HostSDKVersion, DataFormat: 1, OS: runtime.GOOS, Arch: runtime.GOARCH}
+			host = contract.HostCompatibility{Host: 1, API: contract.HostAPIVersion, Protocol: 1, SDK: contract.HostSDKVersion, DataFormat: 1, OS: runtime.GOOS, Arch: runtime.GOARCH}
 		}
 		cat = catalog.Catalog{Sources: sources, TargetOS: host.OS, TargetArch: host.Arch}
 		installer = &packages.Installer{Root: filepath.Join(c.Root, "packages"), Catalog: cat, Host: host}
@@ -997,6 +1016,7 @@ func (a *Application) startAddons() error {
 				a.addonHostSettingsClose()
 			}
 			_ = m.Close()
+			a.closeAddonHostGrants()
 		}
 	}()
 	if c.InstanceID == c.OwnerID && c.Transport != nil {
@@ -1004,7 +1024,13 @@ func (a *Application) startAddons() error {
 			return err
 		}
 	}
+	if c.InstanceID == c.OwnerID && c.Root != "" {
+		a.openAddonHostGrants(c.Root)
+		a.addonGrants.bind(m)
+	}
 	m.SetHostOps(a.applicationConfig.AddonHostOps)
+	m.SetAuthority(a.addonAuthority())
+	m.SetGrantStore(a.addonGrantStore)
 	if c.InstanceID == c.OwnerID {
 		// Data recovery sits beside the manager: an upgrade of an add-on that
 		// has data goes through it, and its journals are settled before any
@@ -1026,6 +1052,11 @@ func (a *Application) startAddons() error {
 		// The update check reads the libraries and the journal the owner
 		// holds; it applies nothing, and its cache is bounded.
 		m.EnableUpdates(updates.Config{TTL: c.UpdateCacheTTL, MinRefresh: c.UpdateRefreshInterval})
+		// The staging area of zip files waits empty at start: a file that was
+		// uploaded before a restart has to be uploaded again.
+		files := &uploads.Store{Root: filepath.Join(c.Root, "uploads")}
+		files.Purge()
+		m.SetUploads(files)
 		if err = m.Reconcile(a.applicationConfig.Context); err != nil {
 			return err
 		}

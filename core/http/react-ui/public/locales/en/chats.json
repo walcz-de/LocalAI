@@ -336,7 +336,7 @@
   },
   "conversionPage": {
     "title": "Converted from the old chat",
-    "intro": "The old chat, agents, tasks, skills and Telegram connectors were converted when this server started. Triggers and connectors are switched off until you turn them on. A chat keeps what was said, not what the model remembered.",
+    "intro": "The old chat, agents, tasks and skills were converted when this server started. Triggers are switched off until you turn them on. Connectors are not converted: add the bot again in the Connectors page. A chat keeps what was said, not what the model remembered.",
     "notRun": "No conversion has run on this server.",
     "nothing": "Nothing of yours needed converting.",
     "allUsers": "All users:",
@@ -365,15 +365,18 @@
   "tools": {
     "summary": "Tools ({{on}} of {{total}} on)",
     "builtins": "Built-in tools",
+    "grants": "What the agent may change",
+    "grantSensitive": "Sensitive: this changes what the agent may do or reach later.",
     "builtin": {
-      "web": "Web",
+      "web": "Look things up online",
       "saved_agents": "Saved agents",
       "triggers": "Triggers",
       "shell": "Run commands",
       "files": "Your files",
       "media": "Images and audio",
       "collections": "Collections",
-      "subagents": "Sub-agents"
+      "subagents": "Sub-agents",
+      "changes": "Memory and profile changes"
     },
     "builtinBy": "{{tools}} · built-in",
     "builtinByAddon": "{{tools}} · served by {{provider}}",
@@ -431,6 +434,46 @@
     "shell": {
       "machine": "This machine",
       "isolated": "Commands run isolated"
+    },
+    "describe": {
+      "shell": "The model can run shell commands and scripts. They run in an add-on that isolates them when one is installed, otherwise directly on this machine.",
+      "files": "The model can list, read, write, edit, move, delete and search your files, and read documents. A chat of an agent that works in one folder reaches only that folder.",
+      "web": "The model can search the web and read a public page by its address. Addresses inside your network are refused unless an administrator allows them.",
+      "media": "The model can describe an image or transcribe a recording from your files with a helper model.",
+      "collections": "The model can list your collections and search them for the passages that match a question.",
+      "subagents": "The model can start a sub-agent that works on one task with the same switches as this chat and reports back.",
+      "saved_agents": "The model can list your saved agents and start one as a sub-agent, with that agent's own instructions and model.",
+      "triggers": "The model can propose, list, change and delete triggers: tasks that run by themselves at a set time or when a file arrives in a folder. A new trigger or a change waits on a card in the chat until you confirm it; pausing or resuming a trigger applies at once and you can undo it.",
+      "changes": "The model can propose an edit to your memory notes or to an agent's standing rules, and undo an edit you confirmed. Nothing changes until you confirm the proposal on a card in the chat."
+    },
+    "whenOff": {
+      "shell": "The model can write files but cannot run anything.",
+      "files": "The model cannot see or change your files.",
+      "web": "The model cannot look anything up online.",
+      "media": "The model cannot read images or recordings itself.",
+      "collections": "The model cannot read your collections.",
+      "subagents": "The model works alone.",
+      "saved_agents": "The model cannot see or start your saved agents.",
+      "triggers": "The model cannot create or manage triggers. A run that a trigger or a connector started never has them.",
+      "changes": "The model cannot propose edits to your memory or to an agent's rules."
+    },
+    "addonDescribe_one": "Gives the model {{count}} tool from this add-on.",
+    "addonDescribe_other": "Gives the model {{count}} tools from this add-on.",
+    "serverDescribe": "An MCP server of the model: its tools are offered to the model.",
+    "connectorDescribe": "One of your MCP connectors: its tools are offered to the model.",
+    "gone": "Not available here any more. Switch it off to remove it.",
+    "connection": {
+      "label": "Connections",
+      "help": "Choose the connections this chat may use. The assistant can only use the ones you tick.",
+      "helpMany": "The assistant names the connection in each action, and can only name a ticked one.",
+      "sole": "This is your only connection, so it is used.",
+      "choose": "Choose at least one connection to use these tools",
+      "none": "No connection yet",
+      "create": "Add a connection",
+      "byAgent": "The agent of this chat sets the connections. Change them on the agent.",
+      "agentLabel": "Connections for chats of this agent",
+      "agentHelp": "Chats of this agent may use only these connections and cannot change them.",
+      "perChatHelp": "None chosen: each chat chooses its own."
     }
   },
   "mcpPage": {
@@ -659,6 +702,7 @@
       "undone": "Undone:",
       "again": "Schedule it again",
       "declined": "Declined:",
+      "expired": "Expired:",
       "restore": "Restore",
       "blocked": {
         "ran": "It already ran once; remove it from the Triggers page.",
@@ -692,7 +736,8 @@
       "costUnknown_other": "The tokens of a run are known after the first run. At most {{count}} runs a day.",
       "remoteNote": "{{model}} is a remote service: what a run reads leaves this server.",
       "stopWidget": "Pause it from the widget, or delete it in Triggers",
-      "stop": "Switch it off or delete it in Triggers"
+      "stop": "Switch it off or delete it in Triggers",
+      "actsLabel": "Permissions"
     }
   },
   "subAgents": {
@@ -958,6 +1003,7 @@
     "failed": "Could not save the change: {{message}}. It is still waiting for you.",
     "receipt": {
       "applied": "Applied:",
+      "savedAuto": "Saved to memory:",
       "reverted": "Undone:",
       "dismissed": "Dismissed:",
       "expired": "Expired:",
@@ -1021,5 +1067,27 @@
     "clearYes_other": "Delete {{count}} files",
     "cleared_one": "Moved {{count}} file to the Trash.",
     "cleared_other": "Moved {{count}} files to the Trash."
+  },
+  "triggerActs": {
+    "help": "A run starts by itself, so nobody is there to approve a step. It can read and report. Tick what it may also do. It never gets more than its agent holds.",
+    "noAgent": "No agent is chosen, so only what you tick limits it.",
+    "readOnly": "Read only",
+    "canAct": "May act on its own",
+    "canActText_one": "A run may use {{count}} kind of action without asking.",
+    "canActText_other": "A run may use {{count}} kinds of action without asking.",
+    "sensitive": "needs care",
+    "addonRow": "A run may use the actions of the add-on {{id}}.",
+    "blocked": "Your agent does not hold this, so it cannot be ticked. Add it to the agent first.",
+    "unused": "Your agent does not hold this, so a run does not use it.",
+    "unusedList": "Listed, but not used because the agent does not hold it: {{names}}.",
+    "writesNote": "Its plan names the file {{file}}, so a run may also write files.",
+    "listCan_one": "Can act ({{count}})",
+    "listCan_other": "Can act ({{count}})",
+    "why": {
+      "no_acts": "No permission to act is set, so its runs only read and report.",
+      "agent": "Its agent does not hold the permissions it asks for, so its runs only read and report.",
+      "declared": "It was set up to read and report only. Nothing ticked here changes that.",
+      "binding": "A connection in read only mode made it. Nothing ticked here changes that."
+    }
   }
 }

@@ -116,6 +116,15 @@ type App struct {
 	// the argument schema and the kind of each tool. The host serves them to
 	// chat from the verified manifest; the add-on process is never asked.
 	ToolDefinitions []contract.ToolDefinition `json:"toolDefinitions,omitempty"`
+	// Credentialed is true when the manifest declares credentials: the tools
+	// work with a secret that the person keeps in a connector binding. A
+	// connector chat holds its write tools to contract.ToolPermission.
+	Credentialed bool `json:"credentialed,omitempty"`
+	// ResourceArgument and ResourceLabel come from the credential slot: the
+	// argument that names the resource of a call, and the word for it in the
+	// lines that say which connection acted. They are not part of the apps API.
+	ResourceArgument string `json:"-"`
+	ResourceLabel    string `json:"-"`
 	// Resources is the resource mapping of the manifest, with the listing
 	// declaration the host acts on. It is not part of the apps API.
 	Resources *contract.ResourceTools `json:"-"`
@@ -124,6 +133,13 @@ type App struct {
 	Skills []contract.SkillDefinition `json:"skills,omitempty"`
 	// SkillShadows lists the built-in skills the add-on replaces (xlsx, say).
 	SkillShadows []string `json:"skillShadows,omitempty"`
+	// ContextFiles are the index files the add-on asks the host to load into
+	// the prompt of a chat, from the verified manifest. The host reads them as
+	// the person; the add-on is not called.
+	ContextFiles []contract.ContextFile `json:"contextFiles,omitempty"`
+	// UserSettings are the per-person choices the add-on declares, from the
+	// verified manifest. The host keeps the answers; the add-on is not called.
+	UserSettings []contract.UserSetting `json:"userSettings,omitempty"`
 	// UI describes what the shell loads for this app. It is present only for
 	// an enabled addon with a UI whose installed package has a sha256 digest.
 	UI *UIView `json:"ui,omitempty"`
@@ -263,9 +279,18 @@ func build(s Snapshot, admin bool) App {
 		d.InputSchema = slices.Clone(d.InputSchema)
 		a.ToolDefinitions = append(a.ToolDefinitions, d)
 	}
+	a.Credentialed = len(m.Capabilities.Credentials) > 0
+	if a.Credentialed {
+		a.ResourceArgument, a.ResourceLabel = m.Capabilities.Credentials[0].ResourceArgument, m.Capabilities.Credentials[0].ResourceLabel
+	}
 	a.Resources = resourceTools(m)
 	a.Skills = slices.Clone(m.Capabilities.SkillDefinitions)
 	a.SkillShadows = contract.ShadowedSkills(m.Capabilities.SkillDefinitions)
+	a.ContextFiles = slices.Clone(m.Capabilities.ContextFiles)
+	for _, us := range m.Capabilities.UserSettings {
+		us.Values = slices.Clone(us.Values)
+		a.UserSettings = append(a.UserSettings, us)
+	}
 	if u := m.Capabilities.UI; u != nil {
 		a.HasUI = true
 		if u.Title != nil {
@@ -409,8 +434,7 @@ func contributions(u *contract.UI) ([]ChatActionView, []SlotView, []contract.Ren
 	return actions, slots, slices.Clone(u.Renderers)
 }
 
-// resourceTools copies the resource mapping of the manifest and fills the
-// listing declaration an older manifest implied (see legacyResourceList).
+// resourceTools copies the resource mapping of the manifest.
 func resourceTools(m contract.Manifest) *contract.ResourceTools {
 	if m.Capabilities.Resources == nil {
 		return nil
@@ -419,8 +443,6 @@ func resourceTools(m contract.Manifest) *contract.ResourceTools {
 	if r.List != nil {
 		l := *r.List
 		r.List = &l
-	} else {
-		r.List = legacyResourceList(m)
 	}
 	return &r
 }

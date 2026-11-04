@@ -9,10 +9,14 @@ import { useTranslation } from 'react-i18next'
 import ConfirmDialog from '../../host-compat/src/components/ConfirmDialog'
 import Icon from '../../host-compat/src/components/Icon'
 import AnswerFields, { answerSummary, answerT } from './AnswerFields'
+import AccessView from './AccessView'
+import ApprovalFields from './ApprovalFields'
+import FilesFields from './FilesFields'
 import { Check, Field, Notice, RadioCards, Select, Switch, TextInput } from './controls'
 import NameList from './NameList'
+import PermissionFields, { NoCapsNotice } from './PermissionFields'
 import { agentsApi, connectorsApi } from './api'
-import { canSave, connectorPayload, emptyConnector, listEntries, replaceList, senderLine } from './connector'
+import { canSave, connectorForm, hasNoCaps, connectorPayload, emptyConnector, listEntries, replaceList, senderLine, usualCaps } from './connector'
 import './connector.css'
 
 function Senders({ id, onAllowed, t }) {
@@ -68,8 +72,17 @@ const ONE_LIST = [{ key: 'allow', label: 'allow', hint: 'allowHint', testId: 'co
  * @param {Array} [props.lists]        the allowlists: { key, label, hint, testId, match }
  * @param {Function} [props.Help]      a block under the intro ({ t })
  * @param {string} [props.notifyMode]  the inputMode of the notification field
+ * @param {boolean} [props.messaging]  false for a kind that carries no messages: the page then hides the sender,
+ *                                     reply, file and notification settings and the switch of the binding
+ * @param {Function} [props.ExtraFields] more fields of the add-on's own ({ form, setForm, t })
+ * @param {Function} [props.extraBody] the request fields they make: (form) => object
+ * @param {Function} [props.extraForm] their values from a saved binding: (binding) => object
+ * @param {Function} [props.extraValid] whether they allow saving: (form) => boolean
+ * @param {Function} [props.testExtra] more checks after the Test button: async (binding, t) => string
+ * @param {Function} [props.RowInfo]   a line under a binding in the list ({ c, t })
  */
-export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleToken, tokenOf = (f) => f.token || '', lists = ONE_LIST, Help, notifyMode = 'text' }) {
+export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleToken, tokenOf = (f) => f.token || '', lists = ONE_LIST, Help, notifyMode = 'text',
+  messaging = true, ExtraFields, extraBody, extraForm, extraValid, testExtra, RowInfo }) {
   const { t } = useTranslation(ns)
   const [items, setItems] = useState([])
   const [agents, setAgents] = useState([])
@@ -82,6 +95,13 @@ export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleTo
   const [toDelete, setToDelete] = useState(null)
   const [openSenders, setOpenSenders] = useState('')
   const [kindInfo, setKindInfo] = useState(null)
+  const [capabilities, setCapabilities] = useState([])
+  const [accessVersion, setAccessVersion] = useState(0)
+  const kindFiles = kindInfo?.files || null
+  // A kind that declares agent_optional lets a binding hold credentials only.
+  const agentOptional = Boolean(kindInfo?.agent_optional)
+  const s = answerT(t)
+  const pairedChanged = useCallback(() => setAccessVersion((v) => v + 1), [])
 
   const fail = useCallback((e) => {
     if (e?.status === 409 && e.body?.error?.type === 'connectors_off') { setOff(e.body.error.message); return }
@@ -97,12 +117,24 @@ export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleTo
   }, [fail, kind])
 
   useEffect(() => { load() }, [load])
-  // What the add-on of this kind can do: read a thread, and the choices it offers.
-  useEffect(() => { connectorsApi.kinds().then((r) => setKindInfo((r.kinds || []).find((k) => k.kind === kind) || null)).catch(() => {}) }, [kind])
+  // What the add-on of this kind offers: the choices of its options.
+  useEffect(() => {
+    connectorsApi.kinds().then((r) => {
+      setKindInfo((r.kinds || []).find((k) => k.kind === kind) || null)
+      setCapabilities(r.capabilities || [])
+    }).catch(() => {})
+  }, [kind])
   useEffect(() => { agentsApi.list().then((r) => setAgents(r.agents || [])).catch(() => {}) }, [])
 
   const agentName = (id) => agents.find((a) => a.id === id)?.name || id
   const open = (c) => { setForm(c); setConfirmed(Boolean(c.accept_any)); setNote('') }
+  const extra = (form) => ({ ...(messaging ? {} : { enabled: false, accept_any: false }), ...(extraBody ? extraBody(form) : {}) })
+  const check = async (c) => {
+    const r = await connectorsApi.test(c.id)
+    let text = t('testOk', { bot: r.bot_username })
+    if (testExtra) text += ` ${await testExtra(c, t)}`
+    return text
+  }
 
   // The server refuses a token that the platform refuses. After a save with
   // a new token, the page names the bot the token belongs to.
@@ -113,17 +145,31 @@ export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleTo
     setNote('')
     try {
       const token = tokenOf(form).trim()
-      const body = connectorPayload(form, kind, token)
+      const body = connectorPayload(form, kind, token, extra(form))
       const saved = form.id ? await connectorsApi.update(form.id, body) : await connectorsApi.create(body)
       setForm(null)
       await load()
       if (token && saved?.id) {
         try {
-          const r = await connectorsApi.test(saved.id)
-          setNote(t('testOk', { bot: r.bot_username }))
+          setNote(await check(saved))
         } catch (err) { setError(t('checkFailed', { reason: err?.message || '' })) }
       }
     } catch (err) { fail(err) } finally { setBusy(false) }
+  }
+
+  // The preset for a saved binding that has no permission on: the usual set,
+  // saved at once, with every other setting as it was.
+  const allowUsual = async (c) => {
+    setBusy(true)
+    setError('')
+    setNote('')
+    try {
+      const f = { ...connectorForm(c), ...(extraForm ? extraForm(c) : {}) }
+      f.caps = usualCaps(capabilities)
+      await connectorsApi.update(c.id, connectorPayload(f, kind, '', extra(f)))
+      setNote(s('perm.usualSaved', { name: c.name }))
+      await load()
+    } catch (e) { fail(e) } finally { setBusy(false) }
   }
 
   const act = async (fn) => {
@@ -144,7 +190,7 @@ export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleTo
     <div className="cn-page" data-testid={testId}>
       <header className="cn-head">
         <h1 className="cn-title">{t('title')}</h1>
-        <button type="button" className="dk-btn dk-btn--primary" onClick={() => open(emptyConnector())}>
+        <button type="button" className="dk-btn dk-btn--primary" onClick={() => open({ ...emptyConnector(), ...(extraForm ? extraForm({}) : {}) })}>
           <Icon name="plus" /> {t('new')}
         </button>
       </header>
@@ -166,16 +212,18 @@ export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleTo
               {(p) => <TextInput {...p} value={form.name} required maxLength={80} onChange={(e) => setForm({ ...form, name: e.target.value })} />}
             </Field>
             <TokenFields form={form} setForm={setForm} t={t} />
-            <Field label={t('agent')}>
+            <Field label={t('agent')} hint={agentOptional ? t('agentOptionalHint', { defaultValue: 'Optional. Without an agent this connection only holds the token, the repository list and the write mode for your chats. It answers no messages. Choose an agent to let it listen.' }) : undefined} optional={agentOptional}>
               {(p) => (
-                <Select {...p} aria-label={t('agent')} value={form.agent_id} required onChange={(e) => setForm({ ...form, agent_id: e.target.value })}>
-                  <option value="">{t('agentNone')}</option>
+                <Select {...p} aria-label={t('agent')} value={form.agent_id} required={!agentOptional} onChange={(e) => setForm({ ...form, agent_id: e.target.value })}>
+                  <option value="">{agentOptional ? t('agentCredentialsOnly', { defaultValue: 'No agent (credentials only)' }) : t('agentNone')}</option>
                   {agents.map((a) => (
                     <option key={a.id} value={a.id} disabled={!a.model}>{a.model ? a.name : t('agentNoModel', { name: a.name })}</option>
                   ))}
                 </Select>
               )}
             </Field>
+            {ExtraFields && <ExtraFields form={form} setForm={setForm} t={t} />}
+            {messaging && (<>
             <fieldset className="cn-group">
               <legend>{t('who')}</legend>
               <RadioCards name="who" legend={t('who')} value={form.accept_any} onChange={(any) => { setForm({ ...form, accept_any: any }); if (!any) setConfirmed(false) }}
@@ -195,12 +243,17 @@ export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleTo
               {(p) => <TextInput {...p} mono inputMode={notifyMode} value={form.notify_chat} onChange={(e) => setForm({ ...form, notify_chat: e.target.value })} />}
             </Field>
             <AnswerFields form={form} setForm={setForm} t={t} kindInfo={kindInfo} />
+            <FilesFields form={form} setForm={setForm} kind={kindFiles} saved={form.files} s={answerT(t)} />
+            <PermissionFields form={form} setForm={setForm} kind={kindInfo} capabilities={capabilities} s={s} onPaired={pairedChanged} />
+            <ApprovalFields form={form} setForm={setForm} s={s} triggersOff={capabilities.length > 0 && !(form.caps || []).includes('triggers.propose')} />
+            {capabilities.length > 0 && <AccessView binding={form} capabilities={capabilities} s={s} version={accessVersion} />}
+            </>)}
             <div className="cn-actions">
-              <button type="submit" className="dk-btn dk-btn--primary" aria-busy={busy ? 'true' : undefined} disabled={busy || !canSave(form, confirmed, Boolean(tokenOf(form).trim()))}>{t('save')}</button>
+              <button type="submit" className="dk-btn dk-btn--primary" aria-busy={busy ? 'true' : undefined} disabled={busy || !canSave(form, confirmed, Boolean(tokenOf(form).trim()), kindFiles, agentOptional) || (extraValid ? !extraValid(form) : false)}>{t('save')}</button>
               <button type="button" className="dk-btn dk-btn--secondary" onClick={() => setForm(null)}>{t('cancel')}</button>
             </div>
           </form>
-          <aside className="cn-aside" aria-label={answerT(t)('aside.title')}>
+          {messaging && <aside className="cn-aside" aria-label={answerT(t)('aside.title')}>
             <h2 className="cn-aside__title">{answerT(t)('aside.title')}</h2>
             <ol className="cn-aside__steps">
               <li>{answerT(t)('aside.step1')}</li>
@@ -209,7 +262,7 @@ export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleTo
             </ol>
             <h2 className="cn-aside__title">{answerT(t)('aside.testTitle')}</h2>
             <p className="cn-muted">{answerT(t)('aside.testText')}</p>
-          </aside>
+          </aside>}
         </div>
       )}
 
@@ -218,27 +271,35 @@ export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleTo
           <li key={c.id} className="cn-row" data-testid="connector-row">
             <div className="cn-row__text">
               <span className="cn-row__name">{c.name}</span>
+              {messaging ? (<>
               <span className="cn-muted">
-                {t('agentOf', { name: agentName(c.agent_id) })}
+                {c.credentials_only ? t('credentialsOnly', { defaultValue: 'Credentials only' }) : t('agentOf', { name: agentName(c.agent_id) })}
                 {' · '}
                 {t('accepts', { who: c.accept_any ? t('modes.anyone') : (c.allow || []).length === 0 ? t('modes.nobody') : t('modes.listed', { count: c.allow.length }) })}
               </span>
               <span className="cn-muted" data-testid="connector-answer-summary">{answerSummary(c, t)}</span>
+              </>) : <span className="cn-muted" data-testid={c.credentials_only ? 'connector-credentials-only' : undefined}>
+                {c.credentials_only ? t('credentialsOnly', { defaultValue: 'Credentials only' }) : t('agentOf', { name: agentName(c.agent_id) })}
+              </span>}
+              {RowInfo && <RowInfo c={c} t={t} />}
+              {messaging && capabilities.length > 0 && hasNoCaps(c) && (
+                <NoCapsNotice capabilities={capabilities} s={s} busy={busy} name={c.name} onUsual={() => allowUsual(c)} />
+              )}
               {c.active === false && <span className="cn-muted" data-testid="connector-inactive">{t('inactive', { reason: c.reason })}</span>}
               {openSenders === c.id && <Senders id={c.id} onAllowed={load} t={t} />}
             </div>
             <span className="cn-row__actions">
-              <Switch checked={c.enabled} label={t('onFor', { name: c.name })}
+              {messaging && <Switch checked={c.enabled} label={t('onFor', { name: c.name })}
                 onChange={(on) => {
                   setItems((list) => list.map((x) => (x.id === c.id ? { ...x, enabled: on } : x)))
                   act(() => (on ? connectorsApi.enable(c.id) : connectorsApi.disable(c.id)))
-                }} />
+                }} />}
               <button type="button" className="dk-btn dk-btn--secondary dk-btn--sm"
-                onClick={async () => { setError(''); try { const r = await connectorsApi.test(c.id); setNote(t('testOk', { bot: r.bot_username })) } catch (e) { fail(e) } }}>
+                onClick={async () => { setError(''); try { setNote(await check(c)) } catch (e) { fail(e) } }}>
                 {t('test')}
               </button>
-              <button type="button" className="dk-btn dk-btn--secondary dk-btn--sm" onClick={() => setOpenSenders(openSenders === c.id ? '' : c.id)}>{t('senders')}</button>
-              <button type="button" className="dk-btn dk-btn--secondary dk-btn--sm" onClick={() => open({ ...emptyConnector(), ...c, token: '' })}>{t('editButton')}</button>
+              {messaging && <button type="button" className="dk-btn dk-btn--secondary dk-btn--sm" onClick={() => setOpenSenders(openSenders === c.id ? '' : c.id)}>{t('senders')}</button>}
+              <button type="button" className="dk-btn dk-btn--secondary dk-btn--sm" onClick={() => open({ ...connectorForm(c), ...(extraForm ? extraForm(c) : {}) })}>{t('editButton')}</button>
               <button type="button" className="dk-btn dk-btn--secondary dk-btn--sm" onClick={() => setToDelete(c)}>{t('delete')}</button>
             </span>
           </li>

@@ -58,25 +58,18 @@ func (r VersionRange) accepts(v uint64) bool {
 	return r.Min > 0 && r.Max >= r.Min && v >= r.Min && v <= r.Max
 }
 
-// HostAPIVersion is the manifest API version this host speaks. Version 2 adds
-// the execution descriptor of a tool. The host still accepts add-ons that
-// declare only version 1 (HostAPIMin), because every change since is optional.
-const (
-	HostAPIVersion uint64 = 2
-	HostAPIMin     uint64 = 1
-)
+// HostAPIVersion is the manifest API version of this host. It is the only
+// one: a manifest declares the range {"min": 2, "max": 2}.
+const HostAPIVersion uint64 = 2
 
-// overlaps reports whether the range holds a version from lo to hi.
-func (r VersionRange) overlaps(lo, hi uint64) bool {
-	return r.Min > 0 && r.Max >= r.Min && r.Min <= hi && r.Max >= lo
+// isHostAPI reports whether the range is exactly the manifest API of the host.
+func (r VersionRange) isHostAPI() bool {
+	return r.Min == HostAPIVersion && r.Max == HostAPIVersion
 }
 
 type HostCompatibility struct {
-	Host uint64 `json:"host"`
-	API  uint64 `json:"api"`
-	// APIMin is the oldest manifest API the host still accepts. Zero means API
-	// only.
-	APIMin     uint64 `json:"apiMin,omitempty"`
+	Host       uint64 `json:"host"`
+	API        uint64 `json:"api"`
 	Protocol   uint64 `json:"protocol"`
 	SDK        uint64 `json:"sdk"`
 	DataFormat uint64 `json:"dataFormat"`
@@ -134,6 +127,17 @@ type Capabilities struct {
 	// Network declares the network policy of the commands the add-on runs
 	// (see network.go). It attaches the network-policy host control.
 	Network *NetworkCapability `json:"network,omitempty"`
+	// ContextFiles name small index files of the user's home that the host
+	// loads into the prompt of a chat (see contextfiles.go).
+	ContextFiles []ContextFile `json:"contextFiles,omitempty"`
+	// UserSettings declare the choices that each person makes for the add-on
+	// (see usersettings.go). The host keeps the answers and validates them.
+	UserSettings []UserSetting `json:"userSettings,omitempty"`
+
+	// Credentials declare the secret that the host keeps for the person and
+	// hands to each call (see credentials.go). It needs a connector
+	// kind that holds the binding.
+	Credentials []CredentialSlot `json:"credentials,omitempty"`
 }
 
 // ResourceTools maps the host's UI-only resource management operations to
@@ -155,7 +159,7 @@ type ResourceTools struct {
 	// backing data. It is reachable only from the UI-only delete endpoint.
 	Delete string `json:"delete,omitempty"`
 	// List asks the host for a read tool that lists the resources the caller
-	// may use (see ResourceList). It needs manifest API 2.
+	// may use (see ResourceList).
 	List *ResourceList `json:"list,omitempty"`
 }
 
@@ -298,7 +302,7 @@ var assetPath = regexp.MustCompile(`^[a-zA-Z0-9_./-]+$`)
 // so an add-on with one of these IDs would have its asset URLs captured by the
 // host route of the same name. A test derives the registered segments from the
 // real routes and requires each to be listed here.
-var reservedAddonIDs = []string{"apps", "proposals", "artifacts", "resources", "conversations", "dispatch", "relay", "catalog", "icon", "assets", "installed", "sources", "builtin", "pins"}
+var reservedAddonIDs = []string{"apps", "proposals", "artifacts", "resources", "conversations", "dispatch", "relay", "catalog", "icon", "assets", "installed", "sources", "builtin", "pins", "host-grants", "files"}
 
 // ReservedAddonIDs returns a copy of the reserved add-on IDs.
 func ReservedAddonIDs() []string { return append([]string(nil), reservedAddonIDs...) }
@@ -369,11 +373,10 @@ func ValidateManifest(m Manifest, h HostCompatibility) error {
 	if !namespace.MatchString(m.OS) || !namespace.MatchString(m.Arch) || m.OS != h.OS || m.Arch != h.Arch {
 		return fmt.Errorf("incompatible platform")
 	}
-	apiMin := h.APIMin
-	if apiMin == 0 || apiMin > h.API {
-		apiMin = h.API
+	if !m.API.isHostAPI() {
+		return fmt.Errorf("the manifest must declare api {\"min\": %d, \"max\": %d}", HostAPIVersion, HostAPIVersion)
 	}
-	if !m.Host.accepts(h.Host) || !m.API.overlaps(apiMin, h.API) || !m.Protocol.accepts(h.Protocol) || !m.DataFormat.accepts(h.DataFormat) {
+	if !m.Host.accepts(h.Host) || !m.API.accepts(h.API) || !m.Protocol.accepts(h.Protocol) || !m.DataFormat.accepts(h.DataFormat) {
 		return fmt.Errorf("incompatible host, API, protocol or data format")
 	}
 	c := m.Capabilities
@@ -381,14 +384,11 @@ func ValidateManifest(m Manifest, h HostCompatibility) error {
 		return fmt.Errorf("invalid capabilities")
 	}
 	for _, d := range c.ToolDefinitions {
-		if d.Execution != nil && m.API.Max < MinExecutionAPI {
-			return fmt.Errorf("tool %s declares an execution descriptor, which needs api %d", d.Name, MinExecutionAPI)
-		}
 		if d.Kind == ToolKindAction && !c.Actions {
 			return fmt.Errorf("tool %s is an action tool but the add-on does not declare actions", d.Name)
 		}
 	}
-	if e := validateToolDefinitions(c.ToolDefinitions, c.Tools); e != nil {
+	if e := validateToolDefinitionsFor(c.ToolDefinitions, c.Tools, len(c.Credentials) > 0); e != nil {
 		return e
 	}
 	if e := validateExtensions(c); e != nil {
@@ -397,13 +397,22 @@ func ValidateManifest(m Manifest, h HostCompatibility) error {
 	if e := c.Network.validate(m); e != nil {
 		return e
 	}
+	if e := validateContextFiles(m); e != nil {
+		return e
+	}
+	if e := validateUserSettings(c.UserSettings); e != nil {
+		return e
+	}
 	if e := validateResourceTools(c); e != nil {
 		return e
 	}
-	if e := validateResourceList(c, m.API); e != nil {
+	if e := validateCredentials(c); e != nil {
 		return e
 	}
-	if e := validateConnector(c.Connector, c.UI, m.API); e != nil {
+	if e := validateResourceList(c); e != nil {
+		return e
+	}
+	if e := validateConnector(c.Connector, c.UI); e != nil {
 		return e
 	}
 	if e := validateSkillDefinitions(m.ID, c.SkillDefinitions); e != nil {

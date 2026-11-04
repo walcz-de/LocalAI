@@ -87,6 +87,8 @@ what runs (`chats`, `agents`, `triggers`, `connectors`).
 | `LOCALAI_DISABLE_CHATS` | `false` | Turns off the chats: the `/api/chats` API, saved agents, triggers, connectors, notifications and the agent jobs (`/api/chats/*`, `/api/workspace/*` and `/api/agent/*` answer `404` with the type `chats_off`). The files workspace of the add-ons is not affected. |
 | `LOCALAI_DISABLE_TRIGGERS` | `false` | Turns off the trigger runner. Trigger routes answer `409 triggers_off`. |
 | `LOCALAI_DISABLE_CONNECTORS` | `false` | Turns off the connector bots. Connector routes answer `409 connectors_off`. |
+| `LOCALAI_DISABLE_CONNECTOR_TALKBACK` | `false` | Turns off `send_message` and the reports of triggers to a channel for every connector binding. |
+| `LOCALAI_SKIP_BINDING_CAPS_MIGRATION` | `false` | Skips the one-time grant of the usual permissions to connector bindings that have none. |
 | `LOCALAI_DISABLE_AGENTS` | `false` | Deprecated. It kept the meaning it had in the old agent pool, which also held the knowledge base: it sets `LOCALAI_DISABLE_CHATS` and `LOCALAI_DISABLE_COLLECTIONS`, and logs a warning. |
 
 `LOCALAI_DISABLE_COLLECTIONS` stays separate and turns off only the
@@ -180,6 +182,29 @@ curl -s localhost:8080/api/chats/skills
 The answers have the shapes of `GET /api/chats/{id}/tools` and `GET
 /api/chats/{id}/addons`. A model you may not use is `403`, a model the server
 does not have is `400`, and another user's agent is `404`.
+
+The draft add-ons list also takes the switches the composer has so far, as
+comma-separated query parameters `addons_off`, `builtins_off` and `builtins_on`
+(the lists that `POST /api/chats` takes in `switches`). The `commands` state of
+the answer is then the one the new chat would have: with `builtins_off=shell`
+it is `switched_off`. A name that is not an add-on switch or a built-in group
+is `400`. The Home composer sends them each time you change a switch.
+
+### List the chats of one origin
+
+`GET /api/chats` returns every chat unless you send `origin`. With
+`origin=person` it returns only the chats a person started, with
+`origin=automated` only the chats that something else started, and with an
+origin kind (`trigger`, `connector`, `job`, `page`) only the chats of that kind.
+Each chat carries `origin` (empty for a person) and `origin_id` (the trigger,
+binding, job or page that started it). With `origin` set, `limit` counts the
+chats kept and sub-agent runs are left out, so a burst of chats from a bot
+cannot push your own chats out of the first page.
+
+```bash
+curl -s 'localhost:8080/api/chats?kind=chat&origin=person&limit=8'
+curl -s 'localhost:8080/api/chats?kind=chat&origin=automated&limit=200'
+```
 
 ## Keep typing while the model works
 
@@ -581,7 +606,7 @@ every turn, so it knows which files exist and where they are now.
   The model sees the same file as
   `/workspace/home/Chats/2026-10-29 Budget/q1.csv`. The folder is made at the
   first attachment. In a chat whose agent works in [one
-  folder]({{%relref "features/chats-agents#one-folder-for-an-agent" %}}), the
+  folder]({{%relref "features/chats-agents#folders-of-an-agent" %}}), the
   model sees the chat folder at `/workspace/chat` instead (the file above is
   `/workspace/chat/q1.csv`), and the folder is made before the first turn. The
   list on this page keeps the paths in your home.
@@ -745,7 +770,7 @@ later as a message in the conversation and as a `sub_agent_done` event.
 - A `sub_agent_started` event (with the run's id and title) and a
   `sub_agent_done` event mark the run in the parent's event stream.
 - A sub-agent of a chat whose agent works in [one
-  folder]({{%relref "features/chats-agents#one-folder-for-an-agent" %}})
+  folder]({{%relref "features/chats-agents#folders-of-an-agent" %}})
   works inside the chat's folders, never in more of your files and never
   with more rights than the chat.
 - A sub-agent cannot run commands when its parent cannot (see [Running
@@ -774,7 +799,7 @@ is off for every chat until you switch **Saved agents** on in the chat's
   `model`, at most 100, and for an agent that works in a folder the folder's
   name (`folder`) and its mode (`folder_mode`, `read` or `write`). It lists only
   your own agents. In a chat whose agent has a folder it lists only the agents
-  that can start there (see [One folder for an agent]({{%relref "features/chats-agents#one-folder-for-an-agent" %}})).
+  that can start there (see [Folders of an agent]({{%relref "features/chats-agents#folders-of-an-agent" %}})).
 - `spawn_agent` takes an `agent` argument, the id or the name (ignoring case) of
   one of them. The sub-agent runs with the agent's instructions, its model (or
   the chat's model when the agent names none) and only what the agent grants,
@@ -817,7 +842,7 @@ the server:
 - **Nothing.** With neither, nothing in the chat runs code.
 
 A chat whose agent works in [one
-folder]({{%relref "features/chats-agents#one-folder-for-an-agent" %}}) runs
+folder]({{%relref "features/chats-agents#folders-of-an-agent" %}}) runs
 commands only in the Sandbox, never on this machine. Its sandbox has the
 agent's folder at `/workspace/home` and the chat's own folder at
 `/workspace/chat`.
@@ -944,7 +969,7 @@ shown when the Sandbox is already installed, or when add-ons are off.
   `chats_host_exec` says: a command here can read every file LocalAI can read,
   so nothing keeps it in that folder. Such a chat runs commands only in the
   Sandbox, and its Tools menu says why. See
-  [One folder for an agent]({{%relref "features/chats-agents#one-folder-for-an-agent" %}}).
+  [Folders of an agent]({{%relref "features/chats-agents#folders-of-an-agent" %}}).
 - **Your files.** Each chat gets a scratch folder with your files: `home/`
   there is `/workspace/home` of the file tools, and `shared-<name>/` is a
   shared folder. A command starts in `home/`, so a relative path is a path in
@@ -1045,6 +1070,76 @@ an add-on by ID.
 curl -s localhost:8080/api/chats/$ID/addons
 # {"addons":[],"commands":"available","commands_isolation":"host","commands_provider":"builtin","commands_consent":"ask"}
 ```
+
+### The connections of an add-on
+
+Some add-ons run their tools with a token that you keep in a connection (for
+example the [GitHub add-on](/features/chats-connectors/#github)). Any add-on
+that declares a credential in its manifest works this way. LocalAI never
+chooses the connections for you, and a chat can use more than one for the same
+add-on:
+
+- With **one** connection for the add-on, it is enabled and cannot be switched
+  off separately.
+- With **several**, the add-on's row in the **Tools** menu has a **Connections**
+  list with a checkbox for each. You tick the ones this chat may use. Until you
+  tick one, the tools of the add-on are not offered to the model, the row is off
+  and says "Choose at least one connection to use these tools". Ticking a
+  connection switches the add-on on.
+- With **none**, the row says "No connection yet" and links to the Connectors
+  page.
+- A [saved agent](/features/chats-agents/#connections-of-an-agent) can name a
+  set of connections for the add-on. A chat of that agent uses that set, shows it
+  read only, and cannot change it. An agent with no set follows the same rules as
+  a chat.
+- A chat that a connector binding started uses that binding and no other.
+
+The set is stored with the chat, like the other switches, and survives a reload,
+a fork and the runs of the triggers that the chat proposed.
+
+**How the model picks one.** The tools keep their names. With exactly one
+connection enabled, nothing changes for the model: the tools run with that
+connection. With two or more enabled, LocalAI adds one argument, `connection`, to
+every tool of the add-on, reads and writes alike. It is required, and its value
+is one of the enabled connections by name. The name is the connection's name in
+lower case, with each run of other characters turned into a hyphen ("Work
+account" is `work-account`); the description of the argument lists each name
+with the name you gave the connection. The add-on never sees the argument.
+LocalAI checks the name against the connections enabled for this chat, not
+against all your connections, so the model cannot use a connection you did not
+enable, whatever a tool result or a file says. A missing or unknown name returns
+a plain sentence that lists the allowed names, and nothing is sent. A tool that
+changes something never runs without the name, also when changes are made
+without asking.
+
+The names of your connections to one add-on must differ (case and punctuation
+do not make a new name): saving a connection with a name that another has is a
+`400`. Connections saved before this rule keep working, and LocalAI gives a
+repeated name a numeric suffix in the list the model sees.
+
+The repository (or other resource) list of the connection that was named is the
+only one that applies: a call that names a repository that is not on that
+connection's list is refused with the list of that connection. The tool result
+and the confirmation say which connection acted ("as Work, repository
+acme/widgets"). When a change waits for you to confirm it, the card shows the
+connection first, and the change is applied with the connection it was previewed
+with, even if you change the set meanwhile. The audit line of each use of a
+token carries the binding ID.
+
+In `GET /api/chats/{id}/addons` such an add-on has `credentialed: true`,
+`connections` (`[{id, name, handle}]`, oldest first; `handle` is the name the
+model uses), `enabled_connections` (the IDs this chat may use), `connection_by`
+(`chat`, `agent`, `binding` or `only`) and `needs_connection`.
+`PUT /api/chats/{id}/connections {"addon": "<add-on id>", "connections": ["<binding id>", ...]}`
+sets the set (an empty list clears the choice; `400` when the agent of the chat
+names a set or a binding is not yours for that add-on; the older single
+`connection` field is read as a set of one). The draft list takes
+`connections=<add-on id>:<binding id>`, once for each binding, and
+`POST /api/chats` takes `switches.connections` (`{"<add-on id>": ["<binding id>"]}`).
+Stored data and requests that hold a single binding ID for an add-on are read as
+a set of one. A call that comes from no chat, such as the add-on's own page, can
+use a connection only when you have exactly one; otherwise it is refused with
+`select_connection`.
 
 ## Long conversations
 
@@ -1242,7 +1337,7 @@ it off, so a chat that never touches the menu works as before:
 | **Sub-agents** | `subagents` | `spawn_agent` |
 | **Saved agents** | `saved_agents` | `list_agents` and the `agent` argument of `spawn_agent` (opt-in) |
 | **Triggers** | `triggers` | `propose_trigger`, `list_triggers`, `update_trigger` and `delete_trigger` |
-| **Proposed changes** | `changes` | `propose_change` and `revert_change`: a model asks to change your memory or an agent profile, and you confirm (see [change proposals](/features/addons/#change-proposals-from-chats)) |
+| **Proposed changes** | `changes` | `propose_change` and `revert_change`: a model asks to change your memory or an agent profile, and you confirm (see [change proposals](/features/addons/#change-proposals-from-chats)); for memory notes only, you can choose on the Short memory page to have them saved at once with an Undo, or never (see [Short memory](/features/short-memory/#choose-how-a-note-is-saved)) |
 
 ```bash
 curl -s -X PUT localhost:8080/api/chats/$ID/builtins -d '{"off":["web","files"]}'
@@ -1375,15 +1470,18 @@ A skill is a folder with a `SKILL.md`: a `name`, a one-line `description` and a 
 
 When the folder of a skill holds other files, such as references and scripts, the answer starts with `Base directory for this skill:` and the folder, and names up to 20 of the files, relative to it, so the model reads them with `read_file`. A sub-agent that has no `read_file` gets the instructions only. A skill with `requires: [exec]` in a chat that cannot run commands answers that it cannot be used there. Every chat with at least one skill has `load_skill`, and a sub-agent gets it with its parent's other tools. It has no switch and Settings > Tools does not list it; the Skills menu chooses what it offers. The Sandbox does not see the skill folders (the built-in `bash` does, see [Commands on this machine](#commands-on-this-machine)). When the model reads a `SKILL.md` with `read_file` at a wrong path, the error names the right path and `load_skill`. A `SKILL.md` over 64 KiB is refused.
 
-Skills come from five places, nearest first, and the nearest wins when two have the same name:
+Skills come from six places, nearest first, and the nearest wins when two have the same name:
 
 | Layer | Where | Who writes it |
 |---|---|---|
 | Folder | any `.skills` folder in your files | you |
+| Agent | `LocalAI/agents/<agent>/skills` in your home folder | the agent proposes, you confirm |
 | Personal | `.skills` in your home folder | you |
 | Shared | for every user | an administrator |
 | Add-on | ships with an installed add-on | the add-on owner |
 | Built-in | ships with the server | the server |
+
+The agent layer holds the skills of one saved agent. Only a chat that runs that agent sees them, and it needs no grant in the agent's skill list. They win over your personal skill of the same name, for that agent only. An agent writes one by a change proposal of kind `skill` with scope `agent` (see [Agents]({{%relref "features/chats-agents" %}})); nothing is written until you confirm, and the write can be undone. An agent skill cannot take the name of a built-in skill or of a document skill such as `xlsx`, and a skill that you locked in your personal layer stays locked against it. The grant `skills.write` shows the built-in `writing-skills` to the agent, led by the line "Do not write files. Call propose_change with kind skill." The **Skills** page lists agent skills with the agent's name and a **Remove** button; a removed skill goes to the Trash. `GET /api/chats/skills?agents=true` adds them to the list with `layer: "agent"`, `agent` and `agent_name` (a chat's own list has the layer of its agent already), and `GET` or `DELETE /api/chats/skills/agent/<name>?agent=<id>` reads or removes one.
 
 The add-on layer holds the skills of the add-ons that the chat can use now: installed, running, usable by you and on for the chat (see [Add-on tools](#add-on-tools)). A chat with a saved agent gets them only for the add-ons the agent grants. The model loads one by its name with `load_skill`; its files are in `/workspace/shared-addon-skills/<add-on>/<skill>/`, where the add-on ID says where it comes from. Switching the add-on off for a chat takes its skills out of that chat's index, and the skill list shows each one with `addon` and `addon_title`. Its switch id is `addon:<name>`.
 
@@ -1502,7 +1600,8 @@ With authentication off, chats belong to one anonymous owner.
 ## Memory settings
 
 Your settings page (Account) has a **Memory** tab. It lists the notes that the host
-puts in the prompt of your chats: your own index and its topic files, the notes of
+puts in the prompt of your chats when the [Short memory add-on](/features/short-memory/)
+(or another add-on that declares context files) is installed: your own index and its topic files, the notes of
 each saved agent and of each connector conversation, and the agent profiles. Each
 index shows its size against the caps (at most 40 lines and 2 KiB for an index,
 4 KiB for a profile, 6 KiB of notes in one turn). You can open a file, edit it,
@@ -1811,6 +1910,22 @@ and opens again from any browser.
   Markdown or delete one, clear them all, or import a JSON export. A deleted
   chat can be brought back for a few seconds with **Undo**; then the server
   deletes it.
+
+  The page lists the chats you started. Chats that something else started (a
+  connector, a trigger, an agent job or a page) have a second tab, **From
+  add-ons and automations**, which appears once there is one. It groups them by
+  what started them: first the kind (triggers, connectors, jobs, pages, any
+  other), then the origin itself, such as one connector binding or one
+  trigger, with the origin's name, how many chats it has, when it was last
+  active, a **Running** mark while a turn runs and **Waiting for you** when a
+  chat needs you (its turn paused at the step limit, or an unread inbox item
+  asks for you). A link opens the origin's page. These chats do not appear in
+  the sidebar, in **Jump back in** or in the **My chats** tab; the **All
+  chats** entry in the sidebar shows a number when some of them wait for you.
+  `Ctrl+K` in a transcript still lists and finds every chat, with a badge on
+  the ones you did not start. Opening one shows "This conversation was started
+  by ..." over the transcript, with a link to the origin. The browser
+  remembers which tab you used last.
 - **Old addresses.** `/app/chats` with no chat id opens Home. A `?model=` in
   the address selects that model on Home, so `/app/chats?model=<id>` and the
   older `/app/chat/<model>` still start a chat on that model.

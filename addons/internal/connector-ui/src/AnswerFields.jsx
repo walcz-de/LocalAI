@@ -4,6 +4,11 @@
 // files of a turn go out. The words are the same on every platform, so they
 // live here as defaults; an add-on can still change one in its namespace.
 import { Field, Hint, Select, Switch, TextInput } from './controls'
+import { APPROVAL_TEXT } from './ApprovalFields'
+import { FILES_TEXT } from './FilesFields'
+import { PERMISSION_TEXT } from './PermissionFields'
+import { PAIRING_TEXT } from './PairingFields'
+import { ACCESS_TEXT } from './AccessView'
 import { CONVERSATIONS, MAX_WINDOW_MINUTES, REPLY_MODES } from './connector'
 
 export const ANSWER_TEXT = {
@@ -30,9 +35,7 @@ export const ANSWER_TEXT = {
   'add': 'Add',
   'more': 'More',
   'less': 'Less',
-  'answer.threadContext': 'Read the earlier messages of a thread',
-  'answer.threadContextHelp': 'When the bot is mentioned in a thread, it reads the messages of that thread, and only that thread, to answer with the context.',
-  'answer.filesHelp': 'After the answer, up to 5 files of at most 1 MB each. Programs and scripts are not sent.',
+  'answer.filesHelp': 'After the answer, up to 5 files. Programs and scripts are not sent. The size limit is under Files.',
   'answer.summary': 'Answers: {{reply}} · {{conversation}}',
   'answer.short.off': 'typing',
   'answer.short.progress': 'progress',
@@ -45,7 +48,7 @@ export const ANSWER_TEXT = {
 
 // text reads a string of the add-on's namespace, with the default above.
 export function answerT(t) {
-  return (key, opts = {}) => t(key, { defaultValue: ANSWER_TEXT[key], ...opts })
+  return (key, opts = {}) => t(key, { defaultValue: ANSWER_TEXT[key] ?? FILES_TEXT[key] ?? APPROVAL_TEXT[key] ?? PERMISSION_TEXT[key] ?? PAIRING_TEXT[key] ?? ACCESS_TEXT[key], ...opts })
 }
 
 // answerSummary says in a few words how a binding answers, for its row.
@@ -95,14 +98,6 @@ export default function AnswerFields({ form, setForm, t, kindInfo }) {
         </Switch>
         <Hint>{s('answer.filesHelp')}</Hint>
       </div>
-      {kindInfo?.thread_history && (
-        <div className="cn-switchfield">
-          <Switch testId="connector-thread-context" checked={form.thread_context !== false} onChange={(on) => setForm({ ...form, thread_context: on })}>
-            {s('answer.threadContext')}
-          </Switch>
-          <Hint>{s('answer.threadContextHelp')}</Hint>
-        </div>
-      )}
       {(kindInfo?.options || []).map((o) => (
         <Field key={o.id} label={o.title} hint={o.description}>
           {(p) => (

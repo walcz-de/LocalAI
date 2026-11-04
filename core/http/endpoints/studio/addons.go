@@ -28,9 +28,23 @@ func writeAddonList(c echo.Context, list []studiosvc.AddonInfo, cmds studiosvc.C
 		out.ExecutionStatus = &schema.ChatsExecutionStatus{Readiness: v.Readiness, Isolation: v.Isolation, Explanation: v.Explanation, UnknownReason: v.UnknownReason, Generation: v.Generation, Incarnation: v.Incarnation}
 	}
 	for _, a := range list {
-		out.Addons = append(out.Addons, schema.ChatsAddon{ID: a.ID, Tools: a.Tools, Off: a.Off})
+		out.Addons = append(out.Addons, addonOut(a))
 	}
 	return c.JSON(http.StatusOK, out)
+}
+
+// addonOut is one add-on row with its switch and, for an add-on that runs
+// with a credential, the connections and the ones this chat may use.
+func addonOut(a studiosvc.AddonInfo) schema.ChatsAddon {
+	row := schema.ChatsAddon{ID: a.ID, Tools: a.Tools, Off: a.Off, Title: a.Title, Description: a.Description, Credentialed: a.Credentialed,
+		Enabled: a.Enabled.IDs(), ConnectionBy: a.Enabled.By, NeedsConnection: a.Credentialed && len(a.Enabled.Items) == 0}
+	if len(row.Enabled) == 0 {
+		row.Enabled = nil
+	}
+	for _, x := range a.Connections {
+		row.Connections = append(row.Connections, schema.ChatsConnection{ID: x.ID, Name: x.Name, Handle: x.Handle})
+	}
+	return row
 }
 
 // ListChatAddons lists the add-ons a chat can use.
@@ -60,6 +74,31 @@ func (h *Handlers) SetChatAddons(c echo.Context) error {
 		return nil
 	}
 	if err := h.svc.SetAddonsOff(c.Request().Context(), userID(c), c.Param("id"), req.Off); err != nil {
+		return failFor(c, err)
+	}
+	return addonList(c, h)
+}
+
+// SetChatConnection sets the connections a chat may use for an add-on.
+// @Summary Choose the connections a chat may use for an add-on.
+// @Description For an add-on whose tools run with the token of one of your connections, the host never picks connections for you. With exactly one it is enabled; with several, choose the set here, and until then the tools of the add-on are not offered to the model. With two or more enabled, the model names the connection in every tool call by a generic connection argument; it can only name an enabled one. An empty list clears the choice. Choosing connections switches the add-on on for the chat. If the saved agent of the chat names the set, the answer is 400: the agent decides. A request with the older single connection field is read as a set of one.
+// @Tags chats
+// @Param id path string true "conversation id"
+// @Param request body schema.ChatsConnectionSwitch true "the add-on and the connections"
+// @Success 200 {object} schema.ChatsAddonList "The add-ons and their switches now in force"
+// @Failure 400 {object} schema.ErrorResponse "The request is not valid, or the agent names the connection"
+// @Failure 404 {object} schema.ErrorResponse "No such conversation, or it is another user's"
+// @Router /api/chats/{id}/connections [put]
+func (h *Handlers) SetChatConnection(c echo.Context) error {
+	req, ok := bind[schema.ChatsConnectionSwitch](c, "addon is required")
+	if !ok {
+		return nil
+	}
+	ids := req.Connections
+	if len(ids) == 0 && req.Connection != "" {
+		ids = []string{req.Connection}
+	}
+	if err := h.svc.SetConnections(c.Request().Context(), userID(c), c.Param("id"), req.Addon, ids); err != nil {
 		return failFor(c, err)
 	}
 	return addonList(c, h)

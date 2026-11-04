@@ -72,8 +72,9 @@ const (
 	// ConnectorRateLimited means the platform asks the host to wait RetryAfter seconds.
 	ConnectorRateLimited = "rate_limited"
 	// ConnectorTooLarge means the file that the op media names is larger than
-	// MaxConnectorFileBytes or than the platform lets a bot download. The host
-	// tells the sender so, instead of saying that the file could not be read.
+	// the bound of the handle (ConnectorTransfer.MaxBytes) or than the platform
+	// lets a bot download. The host tells the sender so, instead of saying that
+	// the file could not be read.
 	ConnectorTooLarge = "too_large"
 	// ConnectorFailed is any other failure of the platform or of the network.
 	ConnectorFailed = "failed"
@@ -85,19 +86,12 @@ const (
 	MaxConnectorMedia  = 8
 	MaxPollSeconds     = 25
 	MaxConnectorSender = 64 // the width of the sender column of the stores
-	// MaxConnectorFileBytes is the largest file the ops media and send_file
-	// carry. The body is JSON, so the file with its base64 overhead stays
-	// within the envelope limit of the add-on route.
-	MaxConnectorFileBytes = 1 << 20
 	// MaxConnectorFileName is the longest file name, in bytes, that the op
 	// send_file takes.
 	MaxConnectorFileName = 128
 	// MinPreviewMs and MaxPreviewMs bound ConnectorKind.PreviewMs.
 	MinPreviewMs = 250
 	MaxPreviewMs = 10000
-	// MinHistoryAPI is the first manifest API version that knows the History
-	// ability of a connector kind.
-	MinHistoryAPI uint64 = 2
 	// DefaultHistoryMessages is how many messages the host asks the op
 	// history for when the kind declares no limit of its own.
 	DefaultHistoryMessages = 30
@@ -142,6 +136,11 @@ type ConnectorKind struct {
 	// Page is the add-on page that adds and edits bindings of this kind. It
 	// must be one of the pages of the add-on's UI.
 	Page string `json:"page,omitempty"`
+	// AgentOptional lets a binding of this kind have no agent. Such a binding
+	// is credentials only: it holds the token, the resource list and the write
+	// mode for the tools of a chat, and the host never delivers a message to it
+	// or answers one from it. A kind without it needs an agent on every binding.
+	AgentOptional bool `json:"agentOptional,omitempty"`
 	// Drafts tells that the add-on serves the op draft. The host then shows
 	// a live answer in a direct conversation as a draft, not as a working
 	// message that it edits.
@@ -152,14 +151,26 @@ type ConnectorKind struct {
 	PreviewMs int `json:"previewMs,omitempty"`
 	// History declares that the add-on serves the op history. A kind without
 	// it keeps the behaviour of a platform that cannot be asked for old
-	// messages. It needs manifest api MinHistoryAPI.
+	// messages.
 	History *ConnectorHistory `json:"history,omitempty"`
 	// Options are the choices of the add-on that each binding of this kind
 	// makes, such as how the bot follows a thread. The host shows them next to
 	// the other settings of the binding, keeps the choice, checks it against
-	// this declaration and sends it with the op poll. It needs manifest api
-	// MinHistoryAPI.
+	// this declaration and sends it with the op poll.
 	Options []ConnectorOption `json:"options,omitempty"`
+	// Files declares the files the kind can receive and send, with a limit
+	// for each direction. A kind that declares none moves no files; a
+	// direction it leaves out is not served. The bytes travel by handle, never
+	// in the connector envelope.
+	Files *ConnectorFiles `json:"files,omitempty"`
+	// Roles are the roles the kind can give to a sender. The add-on owns
+	// the membership and sends the role IDs with each message; the owner of
+	// a binding maps each role to capabilities.
+	Roles []ConnectorRole `json:"roles,omitempty"`
+	// Permissions are the capabilities (see ConnectorCapabilityNames) that the kind can
+	// grant to a role. A sensitive name may be listed to explain the pairing
+	// path, but it is never granted to a role.
+	Permissions []string `json:"permissions,omitempty"`
 }
 
 // ConnectorOption is one choice among a few values.
@@ -266,7 +277,7 @@ type ConnectorCapability struct {
 	Kinds []ConnectorKind `json:"kinds"`
 }
 
-func validateConnector(c *ConnectorCapability, ui *UI, api VersionRange) error {
+func validateConnector(c *ConnectorCapability, ui *UI) error {
 	if c == nil {
 		return nil
 	}
@@ -289,20 +300,20 @@ func validateConnector(c *ConnectorCapability, ui *UI, api VersionRange) error {
 			return fmt.Errorf("connector previewMs must be 0 or %d to %d", MinPreviewMs, MaxPreviewMs)
 		}
 		if h := k.History; h != nil {
-			if api.Max < MinHistoryAPI {
-				return fmt.Errorf("connector history needs api %d", MinHistoryAPI)
-			}
 			if !h.Thread || h.MaxMessages < 0 || h.MaxMessages > MaxHistoryMessages {
 				return fmt.Errorf("connector history needs thread and maxMessages 0 to %d", MaxHistoryMessages)
 			}
 		}
 		if len(k.Options) > 0 {
-			if api.Max < MinHistoryAPI {
-				return fmt.Errorf("connector options need api %d", MinHistoryAPI)
-			}
 			if err := validateOptions(k.Options); err != nil {
 				return err
 			}
+		}
+		if err := k.Files.validate(); err != nil {
+			return err
+		}
+		if err := validatePermissions(k); err != nil {
+			return err
 		}
 		if k.Page != "" {
 			ok := false
@@ -388,6 +399,11 @@ type ConnectorMessage struct {
 	// such a file. An add-on that cannot tell the kinds leaves it out; a
 	// binding that accepts only some kinds then reads none of the files.
 	MediaKinds []string `json:"mediaKinds,omitempty"`
+	// Roles are the IDs of the roles (ConnectorKind.Roles) that the sender
+	// has, at most MaxMessageRoles. The host drops an ID the kind does not
+	// declare, and the whole field for a kind with no roles. Roles are never
+	// authority for a sensitive capability.
+	Roles []string `json:"roles,omitempty"`
 }
 
 // ConnectorInbound is the argument object of ConnectorInboundOp. It names the
@@ -432,17 +448,10 @@ type ConnectorRequest struct {
 	// messages are not returned.
 	Limit  int    `json:"limit,omitempty"`
 	Before string `json:"before,omitempty"`
-	// send_file: the file. Its name is SafeFileName of itself and its data
-	// is 1 to MaxConnectorFileBytes long.
-	File *ConnectorFile `json:"file,omitempty"`
-}
-
-// ConnectorFile is a file that the op media returns or the op send_file
-// carries. Data is at most MaxConnectorFileBytes.
-type ConnectorFile struct {
-	Name string `json:"name"`
-	MIME string `json:"mime,omitempty"`
-	Data []byte `json:"data"`
+	// Transfer is the handle for the bytes of a file, set for the ops media and
+	// send_file. media: the add-on writes the file with ConnectorFilePutOp.
+	// send_file: the add-on reads the file with ConnectorFileGetOp.
+	Transfer *ConnectorTransfer `json:"transfer,omitempty"`
 }
 
 // ConnectorError is a failure the add-on reports. The host maps the code to
@@ -466,8 +475,9 @@ type ConnectorResponse struct {
 	// me
 	BotID       string `json:"botId,omitempty"`
 	BotUsername string `json:"botUsername,omitempty"`
-	// media
-	File *ConnectorFile `json:"file,omitempty"`
+	// Received answers the op media: the file was written by handle. The host
+	// adds Size and SHA256 from its record.
+	Received *ConnectorReceived `json:"received,omitempty"`
 	// history: the messages, oldest first, at most the Limit asked for.
 	// Truncated says that older messages exist that are not returned.
 	Messages  []ConnectorHistoryMessage `json:"messages,omitempty"`
@@ -502,6 +512,18 @@ type ConnectorRuntime interface {
 // ConnectorTimeout is how long one connector call may run: a poll waits up to
 // MaxPollSeconds for the platform.
 const ConnectorTimeout = (MaxPollSeconds + 20) * time.Second
+
+// ConnectorTransferTimeout is how long a call that carries a Transfer may
+// run: it moves a whole file chunk by chunk, and a large file takes minutes.
+const ConnectorTransferTimeout = 15 * time.Minute
+
+// CallTimeout is the time one connector call may run.
+func (r ConnectorRequest) CallTimeout() time.Duration {
+	if r.Transfer != nil {
+		return ConnectorTransferTimeout
+	}
+	return ConnectorTimeout
+}
 
 // SafeFileName returns a file name that every platform takes: the last
 // element of a path, without control characters, quotes or path separators,

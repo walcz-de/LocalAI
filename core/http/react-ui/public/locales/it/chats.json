@@ -22,6 +22,7 @@
       "undone": "Annullato:",
       "again": "Pianificalo di nuovo",
       "declined": "Rifiutato:",
+      "expired": "Scaduta:",
       "restore": "Ripristina",
       "blocked": {
         "ran": "È già stato eseguito una volta; rimuovilo dalla pagina Trigger.",
@@ -55,7 +56,8 @@
       "costUnknown_other": "I token di un'esecuzione si conoscono dopo la prima. Al massimo {{count}} esecuzioni al giorno.",
       "remoteNote": "{{model}} è un servizio remoto: quello che un'esecuzione legge esce da questo server.",
       "stopWidget": "Mettilo in pausa dal widget, o eliminalo in Trigger",
-      "stop": "Spegnilo o eliminalo in Trigger"
+      "stop": "Spegnilo o eliminalo in Trigger",
+      "actsLabel": "Permessi"
     }
   },
   "mcpPage": {
@@ -317,7 +319,8 @@
       "files": "I tuoi file",
       "media": "Immagini e audio",
       "collections": "Raccolte",
-      "subagents": "Sotto-agenti"
+      "subagents": "Sotto-agenti",
+      "changes": "Modifiche a memoria e profilo"
     },
     "builtinBy": "{{tools}} · integrati",
     "builtinByAddon": "{{tools}} · servito da {{provider}}",
@@ -329,6 +332,48 @@
     "shell": {
       "machine": "Questa macchina",
       "isolated": "I comandi girano isolati"
+    },
+    "describe": {
+      "shell": "Il modello può eseguire comandi di shell e script. Girano in un add-on che li isola, se ce n'è uno installato, altrimenti direttamente su questa macchina.",
+      "files": "Il modello può elencare, leggere, scrivere, modificare, spostare, eliminare e cercare i tuoi file, e leggere documenti. Una chat di un agente che lavora in una sola cartella raggiunge solo quella cartella.",
+      "web": "Il modello può cercare sul web e leggere una pagina pubblica dal suo indirizzo. Gli indirizzi dentro la tua rete sono rifiutati, a meno che un amministratore li permetta.",
+      "media": "Il modello può descrivere un'immagine o trascrivere una registrazione dai tuoi file con un modello di supporto.",
+      "collections": "Il modello può elencare le tue raccolte e cercarvi i passaggi che rispondono a una domanda.",
+      "subagents": "Il modello può avviare un sotto-agente che lavora su un compito con gli stessi interruttori di questa chat e poi riferisce.",
+      "saved_agents": "Il modello può elencare i tuoi agenti salvati e avviarne uno come sotto-agente, con le istruzioni e il modello di quell'agente.",
+      "triggers": "Il modello può proporre, elencare, modificare ed eliminare trigger: attività che partono da sole a un'ora stabilita o quando arriva un file in una cartella. Un nuovo trigger o una modifica aspetta su una scheda nella chat finché non la confermi; mettere in pausa o riprendere un trigger vale subito e puoi annullarlo.",
+      "changes": "Il modello può proporre una modifica alle tue note di memoria o alle regole fisse di un agente, e annullare una modifica che hai confermato. Nulla cambia finché non confermi la proposta su una scheda nella chat."
+    },
+    "whenOff": {
+      "shell": "Il modello può scrivere file ma non può eseguire nulla.",
+      "files": "Il modello non può vedere né cambiare i tuoi file.",
+      "web": "Il modello non può cercare nulla online.",
+      "media": "Il modello non può leggere da solo immagini o registrazioni.",
+      "collections": "Il modello non può leggere le tue raccolte.",
+      "subagents": "Il modello lavora da solo.",
+      "saved_agents": "Il modello non può vedere né avviare i tuoi agenti salvati.",
+      "triggers": "Il modello non può creare né gestire trigger. Una esecuzione avviata da un trigger o da un connettore non li ha mai.",
+      "changes": "Il modello non può proporre modifiche alla tua memoria o alle regole di un agente."
+    },
+    "addonDescribe_one": "Dà al modello {{count}} strumento di questo add-on.",
+    "addonDescribe_other": "Dà al modello {{count}} strumenti di questo add-on.",
+    "serverDescribe": "Un server MCP del modello: i suoi strumenti sono offerti al modello.",
+    "connectorDescribe": "Uno dei tuoi connettori MCP: i suoi strumenti sono offerti al modello.",
+    "gone": "Non più disponibile qui. Spegnilo per rimuoverlo.",
+    "grants": "Cosa può modificare l'agente",
+    "grantSensitive": "Sensibile: cambia ciò che l'agente potrà fare o raggiungere in seguito.",
+    "connection": {
+      "label": "Connessioni",
+      "help": "Scegli le connessioni che questa chat può usare. L'assistente può usare solo quelle selezionate.",
+      "helpMany": "L'assistente indica la connessione in ogni azione e può indicare solo una selezionata.",
+      "sole": "È la tua unica connessione, quindi viene usata.",
+      "choose": "Scegli almeno una connessione per usare questi strumenti",
+      "none": "Nessuna connessione per ora",
+      "create": "Aggiungi una connessione",
+      "byAgent": "L'agente di questa chat imposta le connessioni. Cambiale sull'agente.",
+      "agentLabel": "Connessioni per le chat di questo agente",
+      "agentHelp": "Le chat di questo agente possono usare solo queste connessioni e non possono cambiarle.",
+      "perChatHelp": "Nessuna scelta: ogni chat sceglie la sua."
     }
   },
   "vision": {
@@ -636,6 +681,7 @@
     "failed": "Impossibile salvare la modifica: {{message}}. È ancora in attesa di te.",
     "receipt": {
       "applied": "Applicata:",
+      "savedAuto": "Salvato in memoria:",
       "reverted": "Annullata:",
       "dismissed": "Rifiutata:",
       "expired": "Scaduta:",
@@ -699,5 +745,27 @@
     "clearYes_other": "Elimina {{count}} file",
     "cleared_one": "{{count}} file spostato nel Cestino.",
     "cleared_other": "{{count}} file spostati nel Cestino."
+  },
+  "triggerActs": {
+    "help": "Un'esecuzione parte da sola, quindi nessuno approva un passo. Può leggere e riferire. Spunta ciò che può fare in più. Non ottiene mai più di quanto ha il suo agente.",
+    "noAgent": "Nessun agente scelto, quindi la limita solo ciò che spunti.",
+    "readOnly": "Sola lettura",
+    "canAct": "Può agire da sola",
+    "canActText_one": "Un'esecuzione può usare {{count}} tipo di azione senza chiedere.",
+    "canActText_other": "Un'esecuzione può usare {{count}} tipi di azione senza chiedere.",
+    "sensitive": "da usare con cura",
+    "addonRow": "Un'esecuzione può usare le azioni del componente {{id}}.",
+    "blocked": "Il tuo agente non ha questo permesso, quindi non si può spuntare. Aggiungilo prima all'agente.",
+    "unused": "Il tuo agente non ha questo permesso, quindi un'esecuzione non lo usa.",
+    "unusedList": "In elenco, ma non usato perché l'agente non lo ha: {{names}}.",
+    "writesNote": "Il suo piano nomina il file {{file}}, quindi un'esecuzione può anche scrivere file.",
+    "listCan_one": "Può agire ({{count}})",
+    "listCan_other": "Può agire ({{count}})",
+    "why": {
+      "no_acts": "Nessun permesso di agire, quindi le sue esecuzioni leggono e riferiscono soltanto.",
+      "agent": "Il suo agente non ha i permessi richiesti, quindi le sue esecuzioni leggono e riferiscono soltanto.",
+      "declared": "È stato creato per leggere e riferire soltanto. Nulla di ciò che spunti qui lo cambia.",
+      "binding": "L'ha creato una connessione in sola lettura. Nulla di ciò che spunti qui lo cambia."
+    }
   }
 }

@@ -752,6 +752,616 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/addons/files": {
+            "post": {
+                "description": "Administrators only (an administrator's session or API key). Multipart form with one part named file, the add-on zip made by ` + "`" + `make addons-zip` + "`" + `. The bytes stream to the add-on owner, which keeps them in a private staging area for one hour, bound to the uploading user, and verifies the file: its digest manifest, its paths and sizes, its platform and its add-on manifest. Nothing is installed. Returns the file ID, the sha256 of the file, the add-on ID, version, platform and API range, the host operations the manifest asks for, how the file relates to the installed version (new, upgrade, same or downgrade) and the origin \"local file, unsigned\": nothing signs a local file, so the administrator chooses what to install. The install is host-grants/preview and host-grants/install with sourceId local-file and version equal to the file ID; it needs the administrator's own browser session. Refusals carry the rule that failed as the error type: bad_zip, unsafe_path, unsupported_entry, too_large, too_many_files, compression_ratio, bad_manifest, digest_mismatch, wrong_platform or bad_mode. No MCP tool maps to this route.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Addons"
+                ],
+                "summary": "Upload an add-on zip file to install from a file (administrators)",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "The add-on zip",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The verified file",
+                        "schema": {
+                            "$ref": "#/definitions/addons.FileView"
+                        }
+                    },
+                    "400": {
+                        "description": "Not a multipart form with a file, or the file broke a rule",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Named authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Feature or administration denied",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "The file is over the size limit",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too many staged files",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Addons or the owner are unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/addons/files/{fileId}": {
+            "get": {
+                "description": "Administrators only. The same answer as the upload, for a file of the calling user that has not expired. 404 when the file is gone or belongs to another user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Addons"
+                ],
+                "summary": "Read a staged add-on file (administrators)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID from the upload",
+                        "name": "fileId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The staged file",
+                        "schema": {
+                            "$ref": "#/definitions/addons.FileView"
+                        }
+                    },
+                    "401": {
+                        "description": "Named authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Feature or administration denied",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No such file",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Addons or the owner are unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Administrators only. Removes a file of the calling user that waits for an install. 404 when the file is gone or belongs to another user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Addons"
+                ],
+                "summary": "Remove a staged add-on file (administrators)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID from the upload",
+                        "name": "fileId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Removed"
+                    },
+                    "401": {
+                        "description": "Named authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Feature or administration denied",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No such file",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Addons or the owner are unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/addons/host-grants": {
+            "get": {
+                "description": "Administrators only (an administrator's session or API key). Returns the revision of the grants document, whether the deployment locks the UI store, the blanket approval switch (mode off, official or any; setBy ui or deployment), the deployment floor (the policy file and flags, read-only), the deny rules by source (file and flags, which cannot be edited here, and ui), and for each installed add-on the operations its verified manifest requests (required and optional) with a plain title, text and risk, whether each is allowed, not_allowed, blocked or unsupported, where the grant comes from (deployment, install, upgrade, edit or blanket), when and by whom, the operations granted that the manifest no longer requests, an identity mismatch flag and a pending upgrade that waits for approval. Read-only. Nothing in the answer is a credential. No MCP tool maps to this route.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Addons"
+                ],
+                "summary": "Read the host access policy and what each add-on holds (administrators)",
+                "responses": {
+                    "200": {
+                        "description": "Host access state",
+                        "schema": {
+                            "$ref": "#/definitions/gateway.HostGrantsView"
+                        }
+                    },
+                    "401": {
+                        "description": "Named authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Feature or administration denied",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Addons or the owner are unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/addons/host-grants/blanket": {
+            "put": {
+                "description": "Administrators only, from their own browser session (X-LocalAI-Confirm equal to \"blanket\"). Mode off, official or any. With it on, an install or upgrade grants the add-on the operations its verified manifest declares as required (also the optional ones with includeOptional) without the dialog step; it never grants an undeclared or unregistered operation and never overrides a deny rule. Mode official covers only the official library with its official signer. Mode any covers every library the administrator configured: ANY LIBRARY ENTRY THEN RECEIVES EXACTLY THE OPERATIONS ITS MANIFEST DECLARES, with no review, so a malicious or compromised entry gets what it asks for. Turning it on, or widening it, needs confirm equal to \"grant official add-ons what they declare\" (official) or \"grant any library add-on what it declares\" (any), else 400 confirmation_mismatch. applyToInstalled also grants the installed add-ons in the same revision. Turning it off keeps the grants it made, marked blanket; revokeOnOff revokes them all. When the deployment fixes the mode the answer is 403 locked_by_deployment.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Addons"
+                ],
+                "summary": "Turn the blanket approval on, off or wider (browser session, typed confirmation)",
+                "parameters": [
+                    {
+                        "description": "Blanket change",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/gateway.HostGrantsBlanketRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The switch, the add-ons that were granted or skipped and the add-ons whose blanket grants were revoked",
+                        "schema": {
+                            "$ref": "#/definitions/gateway.HostGrantsBlanketResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Malformed request, or confirmation_mismatch",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Named authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "not_human_surface, locked_by_deployment or administration denied",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "revision_conflict or operation_conflict",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Unavailable, or outcome_unknown (with operationId)",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/addons/host-grants/deny": {
+            "put": {
+                "description": "Administrators only. A deny rule beats every grant. deny maps an add-on ID, or \"*\" for all, to prefixes (\"egress.\"), exact operation names or the single token \"*\". The rules of the policy file and flags are not editable here and are unioned with these. With dryRun true the answer is the affected add-ons only (affects: the operations each would lose and whether it will stop because a required one is lost) and nothing changes; a dry run needs the administrator but not the browser session. Without dryRun the change needs the administrator's own browser session (X-LocalAI-Confirm equal to \"deny\"), the revision the caller read (409 revision_conflict otherwise), and applies to the next call with no restart.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Addons"
+                ],
+                "summary": "Replace the deny rules set in the UI, or preview their effect (browser session)",
+                "parameters": [
+                    {
+                        "description": "Deny rules",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/gateway.HostGrantsDenyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The rules and what they take",
+                        "schema": {
+                            "$ref": "#/definitions/gateway.HostGrantsDenyResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Malformed request or invalid rule",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Named authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "not_human_surface, locked_by_deployment or administration denied",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "revision_conflict or operation_conflict",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Unavailable, or outcome_unknown (with operationId)",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/addons/host-grants/install": {
+            "post": {
+                "description": "Administrators only, from their own browser session (same-origin fetch, X-LocalAI-Confirm equal to addonId@digest, the add-on and the digest of the approved package). API keys, bearer tokens, MCP sessions and tool calls are refused with 403 not_human_surface. Carries the approval the dialog collected: the digest of the previewed package, the operations ticked, the revision of the grants document and the preview nonce. The owner stages the package again and grants only the operations that are approved AND declared by that verified manifest AND registered by the host AND not denied; a different package is 409 approval_stale, a changed document 409 revision_conflict, an expired or reused nonce 409 approval_stale. A required operation that is neither held nor approved is refused (approval_required) and one that a deny rule blocks is 403 blocked_by_policy; nothing is written then. For action upgrade, expectedDigest and candidateDigest pin the upgrade as in the plain upgrade. The plain dispatch install carries no approval. Repeating the operationId with the same request returns the recorded operation. After outcome_unknown keep the operationId and poll the operation status.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Addons"
+                ],
+                "summary": "Install or upgrade an add-on with the host access the administrator approved (browser session)",
+                "parameters": [
+                    {
+                        "description": "Install with approval",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/gateway.HostGrantsInstallRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The lifecycle operation, with the host operations summary",
+                        "schema": {
+                            "$ref": "#/definitions/addons.OperationStatus"
+                        }
+                    },
+                    "400": {
+                        "description": "Malformed request",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Named authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Not a human surface (not_human_surface), locked_by_deployment, blocked_by_policy, approval_required, or administration denied",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "revision_conflict or approval_stale",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Unavailable, or outcome_unknown (with operationId)",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/addons/host-grants/preview": {
+            "post": {
+                "description": "Administrators only (an administrator's session or API key). The owner resolves and stages the release, reads the verified manifest of the staged package, computes the answer against the policy and discards the stage. Returns the digest of the staged package, the requested operations with plain text and risk, and for each one held (already allowed), grantable, blocked (a deny rule, which wins over every grant) or unsupported; canInstall false with blockedRequired when a required operation is blocked; whether the blanket approval would grant on install; the revision of the grants document; and a single-use nonce (five minutes, bound to the caller's credential, the add-on, the digest and the revision) that the install must present. Operations granted before an earlier uninstall carry hinted true so the dialog may tick them; a hint grants nothing. Changes no state.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Addons"
+                ],
+                "summary": "Preview the host access an install or upgrade would ask for (administrators)",
+                "parameters": [
+                    {
+                        "description": "Release to preview",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/gateway.HostGrantsPreviewRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "What the release asks for",
+                        "schema": {
+                            "$ref": "#/definitions/gateway.HostGrantsPreviewView"
+                        }
+                    },
+                    "400": {
+                        "description": "Malformed or unknown request fields",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Named authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Feature or administration denied, or the release could not be verified",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Addons or the owner are unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/addons/host-grants/{addonId}": {
+            "put": {
+                "description": "Administrators only, from their own browser session (X-LocalAI-Confirm equal to the add-on ID). operationId is optional (the host makes one); send your own to make a retry the same change. ops is the full set the add-on keeps: operations left out are revoked, new ones must be declared by the installed manifest, registered by the host and not denied (403 blocked_by_policy). Grants made by the policy file or flags are not editable here. keep names held blanket grants to relabel as the administrator's own. revision is the revision the caller read; a stale one is 409 revision_conflict. Takes effect for the next call of the add-on with no restart.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Addons"
+                ],
+                "summary": "Set the host operations an add-on keeps through the UI (browser session)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Add-on ID",
+                        "name": "addonId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Edit",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/gateway.HostGrantsEditRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The add-on entry and the new revision",
+                        "schema": {
+                            "$ref": "#/definitions/gateway.HostGrantsAddonResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Malformed request",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Named authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "not_human_surface, locked_by_deployment, blocked_by_policy or administration denied",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "The add-on is not installed",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "revision_conflict or operation_conflict",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Unavailable, or outcome_unknown (with operationId)",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Administrators only, from their own browser session (X-LocalAI-Confirm equal to the add-on ID). Removes the UI and blanket grants of the add-on; grants of the policy file stay. Query: revision (the revision the caller read) and, optionally, operationId. Takes effect for the next call with no restart; a running call finishes. An add-on whose required operation is revoked becomes unavailable.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Addons"
+                ],
+                "summary": "Revoke every host operation granted to an add-on through the UI (browser session)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Add-on ID",
+                        "name": "addonId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Revision of the grants document the caller read",
+                        "name": "revision",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Operation ID (optional)",
+                        "name": "operationId",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The new revision",
+                        "schema": {
+                            "$ref": "#/definitions/gateway.HostGrantsRevision"
+                        }
+                    },
+                    "400": {
+                        "description": "Malformed request",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Named authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "not_human_surface, locked_by_deployment or administration denied",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "The add-on is not installed",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "revision_conflict or operation_conflict",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Unavailable, or outcome_unknown (with operationId)",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/addons/pins": {
             "get": {
                 "description": "Returns the ordered add-on IDs the caller pinned to the sidebar. The route never pins anything by itself; Studio and Talk are pinned once, at upgrade, for the accounts that existed then. The list holds only IDs the caller may see right now: a hidden or removed add-on is left out and the route does not reveal whether it exists. Needs an authenticated caller and no administrator role.",
@@ -2843,6 +3453,122 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/addons/{id}/user-settings": {
+            "get": {
+                "description": "Returns the per-person settings that the add-on declares in its manifest (userSettings), each with the allowed values, the default and the answer in force for the caller: the caller's own choice, or the default when none was made or the declaration no longer allows it. The answers are kept by the host for the signed-in person, not by the add-on. An add-on that declares none gives an empty list. The route does not reveal an add-on the caller cannot see.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "AddonNavigation"
+                ],
+                "summary": "Read the caller's settings for an add-on",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Add-on ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The settings of the add-on",
+                        "schema": {
+                            "$ref": "#/definitions/addons.UserSettingsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No such add-on",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "The settings store or the add-on owner is unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Stores one answer for the signed-in person. The key must be declared in the manifest of the add-on and the value must be one of the values declared for it; anything else is 400 and nothing is stored. The write needs the person's own browser session (same-origin fetch with X-LocalAI-Confirm equal to the add-on ID): an API key, a bearer token, an MCP session or a tool call is refused with 403 not_human_surface, so no model or add-on can change a person's setting. Repeating the same write has the same result. The add-on is not called and cannot set a value for a person.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "AddonNavigation"
+                ],
+                "summary": "Set the caller's setting for an add-on",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Add-on ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The key and the new value",
+                        "name": "setting",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/addons.UserSettingRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The settings of the add-on after the write",
+                        "schema": {
+                            "$ref": "#/definitions/addons.UserSettingsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Unknown key, or a value the add-on does not allow",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Not the person's own browser session",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No such add-on",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "The settings store or the add-on owner is unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/addons.AddonErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/agent/jobs": {
             "get": {
                 "description": "Newest first. With all_users=true an administrator also gets the jobs of the other users, read-only, in user_groups keyed by owner.",
@@ -3660,6 +4386,12 @@ const docTemplate = `{
                         "description": "with chat, sub-agent runs are left out and the limit counts chats",
                         "name": "kind",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "only chats of one origin, with sub-agent runs left out and the limit counting the chats kept: person (a person started it), automated (anything else) or one origin kind (trigger, connector, job, page). Without it, all chats",
+                        "name": "origin",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -3708,7 +4440,7 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "The saved agent's folder is missing or not chosen (agent_folder_missing)",
+                        "description": "The saved agent's folder is missing or not chosen (agent_folder_missing), or its complete file access exceeds the folder limit (agent_folder_limit)",
                         "schema": {
                             "$ref": "#/definitions/schema.ErrorResponse"
                         }
@@ -3855,7 +4587,7 @@ const docTemplate = `{
                 "tags": [
                     "chats"
                 ],
-                "summary": "Read the settings of the Sandbox network (administrators).",
+                "summary": "Read the settings of the network of commands (administrators).",
                 "responses": {
                     "200": {
                         "description": "The settings in force",
@@ -3868,11 +4600,11 @@ const docTemplate = `{
         },
         "/api/chats/admin/egress/events": {
             "get": {
-                "description": "Every request a command made through the Sandbox proxy, newest first: who, which chat, host, port, kind (connect or http), verdict (allow, block, or done when an allowed connection ended, with its address, bytes and duration) and reason.",
+                "description": "Every request a command made through the proxy of the add-on, newest first: who, which chat, host, port, kind (connect or http), verdict (allow, block, or done when an allowed connection ended, with its address, bytes and duration) and reason.",
                 "tags": [
                     "chats"
                 ],
-                "summary": "Read the audit of the Sandbox network requests (administrators).",
+                "summary": "Read the audit of the network of commands requests (administrators).",
                 "parameters": [
                     {
                         "type": "integer",
@@ -4465,7 +5197,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "An agent is a definition: instructions and exact lists of the MCP servers, add-ons, collections and skills a chat with it may use. A chat gets what the lists name and you may use at that moment, never more. Start a chat with it by passing agent_id to POST /api/chats. folder {path, mode} gives the agent one folder of your files, read or write; without it the agent works on all your files.",
+                "description": "An agent is a definition: instructions and exact lists of the MCP servers, add-ons, collections and skills a chat with it may use. A chat gets what the lists name and you may use at that moment, never more. Start a chat with it by passing agent_id to POST /api/chats. folders [{path, mode}] gives the agent up to 8 folders of your files, each read or write (folder {path, mode} is the same with one entry); without them the agent works on all your files.",
                 "tags": [
                     "chats"
                 ],
@@ -4497,9 +5229,26 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/chats/agents/builtin-grants": {
+            "get": {
+                "description": "Each grant has a name (the value for builtins in an agent), a title, a description and sensitive. A sensitive grant changes what the agent may do or reach later (profile, skills, pages, dashboard, new channels, actions of unattended runs); none is on by default. A chat of the agent holds only the grants you may use at that moment.",
+                "tags": [
+                    "chats"
+                ],
+                "summary": "List the builtin grants of a saved agent.",
+                "responses": {
+                    "200": {
+                        "description": "The grants, in display order",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ChatsBuiltinGrantList"
+                        }
+                    }
+                }
+            }
+        },
         "/api/chats/agents/import": {
             "post": {
-                "description": "Send the export file (version 1, or 2 for an agent with a folder) as the JSON body, or as the file field of a multipart form. A bare agent definition (the body of POST /api/chats/agents) is accepted too. The agent is always new: a name you already use gets a number, and a model this server does not have, or you may not use, is dropped with a warning. A folder is looked up by its path in your files; when you have no such folder the agent keeps the mode without a folder (folder state unset) and does not start until you choose one, and a warning says so.",
+                "description": "Send the export file (version 1, 2 for an agent with a folder, or 3 for an agent with several) as the JSON body, or as the file field of a multipart form. A bare agent definition (the body of POST /api/chats/agents) is accepted too. The agent is always new: a name you already use gets a number, and a model this server does not have, or you may not use, is dropped with a warning. A folder is looked up by its path in your files; when you have no such folder the agent keeps the mode without a folder (folder state unset) and does not start until you choose one, and a warning says so.",
                 "consumes": [
                     "application/json",
                     "multipart/form-data"
@@ -4616,7 +5365,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "The body replaces every field but folder: a body without folder keeps the folder the agent has, so a client that does not know the field cannot widen the agent, and folder {path: \"\"} clears it. Chats that already run with the agent use the new definition from their next turn.",
+                "description": "The body replaces every field but folder: a body without folder or folders keeps the folders the agent has, so a client that does not know the fields cannot widen the agent, and folders [] (or folder {path: \"\"}) clears them. Chats that already run with the agent use the new definition from their next turn.",
                 "tags": [
                     "chats"
                 ],
@@ -4690,7 +5439,7 @@ const docTemplate = `{
         },
         "/api/chats/agents/{id}/export": {
             "get": {
-                "description": "Returns the definition as a JSON file (version, kind localai-agent, agent). It holds no ID, owner or time. An agent with a folder is version 2 and carries folder {path, mode}, the folder's path in your files now (empty when the folder is missing or not chosen); a server that knows only version 1 refuses it. An agent without a folder is version 1. POST /api/chats/agents/import reads it. This replaces the old /api/agents/{name}/export.",
+                "description": "Returns the definition as a JSON file (version, kind localai-agent, agent). It holds no ID, owner or time. An agent with one folder is version 2 and carries folder {path, mode}; an agent with several is version 3 and carries folders [{path, mode}], the folder's home-relative path now (empty when the folder is missing, not chosen, or outside your home, even if readable); importing an empty path preserves the scope as unset with a warning; a server that knows only version 1 refuses it. An agent with switches of built-in tool groups (builtins_off, builtins_on) is version 4. An agent without a folder or switches is version 1. The builtins list (builtin grants) is an extra field of any version: a server that does not know it ignores it, so the agent comes back without the grants. POST /api/chats/agents/import reads it. This replaces the old /api/agents/{name}/export.",
                 "tags": [
                     "chats"
                 ],
@@ -5103,6 +5852,32 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/chats/connectors/{id}/access": {
+            "get": {
+                "description": "Runs the permission check the host uses for each turn, for a sender on the allowlist, a paired sender and a sender of each role the kind declares, and lists the latest decisions. A settings page of the add-on can show it.",
+                "tags": [
+                    "chats"
+                ],
+                "summary": "Show what each kind of sender may do on a connector binding.",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the binding's id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The effective permissions",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ChatsConnectorAccess"
+                        }
+                    }
+                }
+            }
+        },
         "/api/chats/connectors/{id}/disable": {
             "post": {
                 "tags": [
@@ -5148,6 +5923,65 @@ const docTemplate = `{
                         "description": "The binding",
                         "schema": {
                             "$ref": "#/definitions/schema.ChatsConnector"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/chats/connectors/{id}/paired/{sender}": {
+            "delete": {
+                "description": "The sender can pair again with a new code.",
+                "tags": [
+                    "chats"
+                ],
+                "summary": "End the pairing of a sender of a connector binding.",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the binding's id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "the sender's id",
+                        "name": "sender",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The binding",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ChatsConnector"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/chats/connectors/{id}/pairing": {
+            "post": {
+                "description": "Pairing proves that you control a platform account. Send the code, as a direct message to the bot, from an account on the allowlist, within ten minutes. The code works once, and a new code replaces the old one. A paired sender may use the sensitive capabilities you enabled; a pairing ends after 90 days. At most three senders are paired.",
+                "tags": [
+                    "chats"
+                ],
+                "summary": "Make a pairing code for a connector binding.",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the binding's id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The code and when it expires",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ChatsConnectorPairing"
                         }
                     }
                 }
@@ -5257,7 +6091,7 @@ const docTemplate = `{
         },
         "/api/chats/conversion": {
             "get": {
-                "description": "At start the server converts the old chat page, agents, tasks, skills and Telegram connectors into chats, saved agents, triggers, skills and connector bindings. Triggers and connectors are made switched off. This lists the items that belong to you, with what was dropped and why; an administrator also gets the totals of all users. It never holds a token or the text of a prompt.",
+                "description": "At start the server converts the old chat page, agents, tasks, skills and connectors into chats, saved agents, triggers and skills. Triggers are made switched off; connectors are listed as dropped and are made again in the Connectors page. This lists the items that belong to you, with what was dropped and why; an administrator also gets the totals of all users. It never holds a token or the text of a prompt.",
                 "tags": [
                     "chats"
                 ],
@@ -5274,7 +6108,7 @@ const docTemplate = `{
         },
         "/api/chats/draft/addons": {
             "get": {
-                "description": "What GET /api/chats/{id}/addons lists, for a chat that does not exist yet, as GET /api/chats/draft/tools takes it: the add-ons with their default switch and whether the chat could run commands at its first turn.",
+                "description": "What GET /api/chats/{id}/addons lists, for a chat that does not exist yet, as GET /api/chats/draft/tools takes it: the add-ons with their switch and whether the chat could run commands at its first turn. The draft's current switches may be passed (addons_off, builtins_off, builtins_on: comma-separated lists, as the create request takes them) so the answer is the one the chat would get: with the shell group off, commands is switched_off.",
                 "tags": [
                     "chats"
                 ],
@@ -5291,11 +6125,29 @@ const docTemplate = `{
                         "description": "a saved agent of yours",
                         "name": "agent_id",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "comma-separated add-on IDs the draft switched off",
+                        "name": "addons_off",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "comma-separated built-in groups the draft switched off",
+                        "name": "builtins_off",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "comma-separated opt-in built-in groups the draft switched on",
+                        "name": "builtins_on",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "The add-ons and their default switches",
+                        "description": "The add-ons and the commands state, with the draft switches applied",
                         "schema": {
                             "$ref": "#/definitions/schema.ChatsAddonList"
                         }
@@ -7075,7 +7927,7 @@ const docTemplate = `{
         },
         "/api/chats/skills": {
             "get": {
-                "description": "Skills from every layer: .skills folders of your files, your personal skills, the shared ones, the ones of the add-ons you may use now (addon, with the add-on in addon and addon_title) and the built-in ones. The nearest wins; a skill that another overrides says so in shadowed. With chat set, the chat's switches are applied.",
+                "description": "Skills from every layer: .skills folders of your files, your personal skills, the shared ones, the ones of the add-ons you may use now (addon, with the add-on in addon and addon_title) and the built-in ones. A chat with a saved agent also lists the skills of that agent (agent). The nearest wins; a skill that another overrides says so in shadowed. With chat set, the chat's switches are applied.",
                 "tags": [
                     "chats"
                 ],
@@ -7085,6 +7937,12 @@ const docTemplate = `{
                         "type": "string",
                         "description": "a chat id, to apply its switches",
                         "name": "chat",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "true: add the skills of your saved agents (layer agent), for the Skills page; ignored with chat",
+                        "name": "agents",
                         "in": "query"
                     }
                 ],
@@ -7139,7 +7997,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "personal, shared, addon or builtin",
+                        "description": "personal, shared, agent, addon or builtin",
                         "name": "layer",
                         "in": "path",
                         "required": true
@@ -7155,6 +8013,12 @@ const docTemplate = `{
                         "type": "string",
                         "description": "the add-on's ID, for the addon layer",
                         "name": "addon",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "the saved agent's ID, for the agent layer",
+                        "name": "agent",
                         "in": "query"
                     }
                 ],
@@ -7219,7 +8083,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "The skill's folder goes to the Trash of your files, where it can be restored. Shared skills need an administrator.",
+                "description": "The skill's folder goes to the Trash of your files, where it can be restored. Shared skills need an administrator. A skill of the agent layer is deleted with the agent query parameter.",
                 "tags": [
                     "chats"
                 ],
@@ -7227,10 +8091,16 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "personal or shared",
+                        "description": "personal, shared or agent",
                         "name": "layer",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "the saved agent's ID, for the agent layer",
+                        "name": "agent",
+                        "in": "query"
                     },
                     {
                         "type": "string",
@@ -8495,13 +9365,60 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/chats/{id}/egress": {
-            "get": {
-                "description": "The preset of the chat (off, registries, all), the administrator's ceiling, the preset in force (the lower of the two), whether it applies (false when commands run on this machine, applies_reason host, or no Sandbox serves bash, none), addon (the add-on that runs the commands and draws the network controls of the chat, from its network-policy host control; absent when none does), the package registries the preset registries admits, the chat's allow and deny rules (above_limit when the ceiling no longer admits one) and the cards that asked. A sub-agent chat shows its parent's. Another user's chat is 404.",
+        "/api/chats/{id}/connections": {
+            "put": {
+                "description": "For an add-on whose tools run with the token of one of your connections, the host never picks connections for you. With exactly one it is enabled; with several, choose the set here, and until then the tools of the add-on are not offered to the model. With two or more enabled, the model names the connection in every tool call by a generic connection argument; it can only name an enabled one. An empty list clears the choice. Choosing connections switches the add-on on for the chat. If the saved agent of the chat names the set, the answer is 400: the agent decides. A request with the older single connection field is read as a set of one.",
                 "tags": [
                     "chats"
                 ],
-                "summary": "Read the network of a chat's Sandbox commands.",
+                "summary": "Choose the connections a chat may use for an add-on.",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "conversation id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "the add-on and the connections",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/schema.ChatsConnectionSwitch"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The add-ons and their switches now in force",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ChatsAddonList"
+                        }
+                    },
+                    "400": {
+                        "description": "The request is not valid, or the agent names the connection",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No such conversation, or it is another user's",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/chats/{id}/egress": {
+            "get": {
+                "description": "The preset of the chat (off, registries, all), the administrator's ceiling, the preset in force (the lower of the two), whether it applies (false when commands run on this machine, applies_reason host, or no add-on serves bash, none), addon (the add-on that runs the commands and draws the network controls of the chat, from its network-policy host control; absent when none does), the package registries the preset registries admits, the chat's allow and deny rules (above_limit when the ceiling no longer admits one) and the cards that asked. A sub-agent chat shows its parent's. Another user's chat is 404.",
+                "tags": [
+                    "chats"
+                ],
+                "summary": "Read the network of a chat's commands.",
                 "parameters": [
                     {
                         "type": "string",
@@ -8531,7 +9448,7 @@ const docTemplate = `{
                 "tags": [
                     "chats"
                 ],
-                "summary": "Set the network preset of a chat's Sandbox commands.",
+                "summary": "Set the network preset of a chat's commands.",
                 "parameters": [
                     {
                         "type": "string",
@@ -8578,7 +9495,7 @@ const docTemplate = `{
                 "tags": [
                     "chats"
                 ],
-                "summary": "Answer a network card of a chat's Sandbox commands.",
+                "summary": "Answer a network card of a chat's commands.",
                 "parameters": [
                     {
                         "type": "string",
@@ -8630,7 +9547,7 @@ const docTemplate = `{
         },
         "/api/chats/{id}/egress/rules/{host}/{port}": {
             "delete": {
-                "description": "Removes the rule that allows or denies one host and port for the chat's Sandbox commands. A host that was denied asks again; one that was allowed follows the preset again.",
+                "description": "Removes the rule that allows or denies one host and port for the chat's commands. A host that was denied asks again; one that was allowed follows the preset again.",
                 "tags": [
                     "chats"
                 ],
@@ -9579,7 +10496,7 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "A turn is running for a command, or the saved agent's folder is missing (agent_folder_missing)",
+                        "description": "A turn is running for a command, or the saved agent's folder is missing (agent_folder_missing), or its complete file access exceeds the folder limit (agent_folder_limit)",
                         "schema": {
                             "$ref": "#/definitions/schema.ErrorResponse"
                         }
@@ -14664,6 +15581,105 @@ const docTemplate = `{
                 }
             }
         },
+        "addons.FileView": {
+            "type": "object",
+            "properties": {
+                "addonId": {
+                    "type": "string"
+                },
+                "api": {
+                    "description": "API is the host API range the manifest declares.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/contract.VersionRange"
+                        }
+                    ]
+                },
+                "fileId": {
+                    "type": "string"
+                },
+                "installed": {
+                    "type": "boolean"
+                },
+                "installedVersion": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "optional": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "origin": {
+                    "type": "string"
+                },
+                "platform": {
+                    "type": "string"
+                },
+                "relation": {
+                    "description": "Relation is new, upgrade, same or downgrade.",
+                    "type": "string"
+                },
+                "required": {
+                    "description": "Required and Optional are the host operations the manifest asks for.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "sha256": {
+                    "description": "SHA256 is the digest of the whole file, in hex. The install approval\nbinds to \"sha256:\" plus this value.",
+                    "type": "string"
+                },
+                "size": {
+                    "type": "integer"
+                },
+                "source": {
+                    "description": "Source and Origin say that nothing signs the file.",
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "addons.OperationStatus": {
+            "type": "object",
+            "properties": {
+                "addonID": {
+                    "type": "string"
+                },
+                "failureCode": {
+                    "type": "string"
+                },
+                "generation": {
+                    "type": "integer",
+                    "format": "int64"
+                },
+                "hostOperations": {
+                    "$ref": "#/definitions/hostops.RequestSummary"
+                },
+                "operationID": {
+                    "type": "string"
+                },
+                "phase": {
+                    "type": "string"
+                },
+                "runtimeState": {
+                    "type": "string"
+                },
+                "stage": {
+                    "description": "RuntimeState is an observation, never a durable execution receipt.",
+                    "type": "string"
+                }
+            }
+        },
         "addons.RecoveryBackupRequest": {
             "type": "object",
             "properties": {
@@ -14807,6 +15823,62 @@ const docTemplate = `{
                 }
             }
         },
+        "addons.UserSettingRequest": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "example": "save-mode"
+                },
+                "value": {
+                    "type": "string",
+                    "example": "auto"
+                }
+            }
+        },
+        "addons.UserSettingView": {
+            "type": "object",
+            "properties": {
+                "default": {
+                    "description": "Default is the answer of a person who has not chosen.",
+                    "type": "string",
+                    "example": "ask"
+                },
+                "key": {
+                    "description": "Key is the name the add-on declared.",
+                    "type": "string",
+                    "example": "save-mode"
+                },
+                "value": {
+                    "description": "Value is the answer in force: the person's own, or the default.",
+                    "type": "string",
+                    "example": "ask"
+                },
+                "values": {
+                    "description": "Values are the answers the add-on allows.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "ask",
+                        "auto",
+                        "never"
+                    ]
+                }
+            }
+        },
+        "addons.UserSettingsResponse": {
+            "type": "object",
+            "properties": {
+                "settings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/addons.UserSettingView"
+                    }
+                }
+            }
+        },
         "apps.AdminView": {
             "type": "object",
             "properties": {
@@ -14815,6 +15887,9 @@ const docTemplate = `{
                 },
                 "canStop": {
                     "type": "boolean"
+                },
+                "hostOperations": {
+                    "$ref": "#/definitions/hostops.RequestSummary"
                 },
                 "managementUrl": {
                     "description": "ManagementURL opens the management view of the addon.",
@@ -14833,6 +15908,17 @@ const docTemplate = `{
                             "$ref": "#/definitions/apps.AdminView"
                         }
                     ]
+                },
+                "contextFiles": {
+                    "description": "ContextFiles are the index files the add-on asks the host to load into\nthe prompt of a chat, from the verified manifest. The host reads them as\nthe person; the add-on is not called.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/contract.ContextFile"
+                    }
+                },
+                "credentialed": {
+                    "description": "Credentialed is true when the manifest declares credentials: the tools\nwork with a secret that the person keeps in a connector binding. A\nconnector chat holds its write tools to contract.ToolPermission.",
+                    "type": "boolean"
                 },
                 "description": {
                     "type": "string",
@@ -14884,6 +15970,14 @@ const docTemplate = `{
                 "name": {
                     "type": "string",
                     "example": "notes"
+                },
+                "network": {
+                    "description": "Network is the network policy the add-on declares, present only while\nthe host draws its network-policy control (see contract.EntitledControls).",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/apps.NetworkView"
+                        }
+                    ]
                 },
                 "shadows": {
                     "description": "Shadows lists the built-in chat tools the add-on replaces (bash, say).",
@@ -14961,6 +16055,13 @@ const docTemplate = `{
                     ],
                     "example": "update-pending"
                 },
+                "userSettings": {
+                    "description": "UserSettings are the per-person choices the add-on declares, from the\nverified manifest. The host keeps the answers; the add-on is not called.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/contract.UserSetting"
+                    }
+                },
                 "version": {
                     "type": "string",
                     "example": "1.2.3"
@@ -15015,6 +16116,32 @@ const docTemplate = `{
                 }
             }
         },
+        "apps.HomeCommandView": {
+            "type": "object",
+            "properties": {
+                "alias": {
+                    "type": "string"
+                },
+                "icon": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "page": {
+                    "type": "string"
+                }
+            }
+        },
         "apps.List": {
             "type": "object",
             "properties": {
@@ -15023,6 +16150,31 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/apps.App"
                     }
+                }
+            }
+        },
+        "apps.NetworkView": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "description": "Kind is the declared kind of network policy.",
+                    "type": "string",
+                    "enum": [
+                        "egress-check"
+                    ],
+                    "example": "egress-check"
+                },
+                "presets": {
+                    "description": "Presets are the titles the add-on gives the host's network presets.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/contract.NetworkPreset"
+                    }
+                },
+                "title": {
+                    "description": "Title names the network in text: the declared title, else the add-on's.",
+                    "type": "string",
+                    "example": "Example provider"
                 }
             }
         },
@@ -15117,6 +16269,20 @@ const docTemplate = `{
                     "description": "Entry is the URL of the packaged ES module. Every asset URL names the\npackage digest, so a new package is a new URL.",
                     "type": "string",
                     "example": "/api/addons/notes/assets/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/ui.js"
+                },
+                "homeCommands": {
+                    "description": "HomeCommands contains only resolved navigation metadata for this app.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/apps.HomeCommandView"
+                    }
+                },
+                "modelActions": {
+                    "description": "ModelActions contains only declared destinations for this installed UI.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/contract.ModelAction"
+                    }
                 },
                 "navigation": {
                     "type": "array",
@@ -15363,6 +16529,15 @@ const docTemplate = `{
                 }
             }
         },
+        "connsets.Sets": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            }
+        },
         "contextfiles.Scope": {
             "type": "string",
             "enum": [
@@ -15401,6 +16576,10 @@ const docTemplate = `{
                 },
                 "answered": {
                     "type": "string"
+                },
+                "auto": {
+                    "description": "Auto is true when the host applied the change at once because the person\nchose so (the memory save setting), not after a confirmation. The change\nset is the same and can be undone the same way.",
+                    "type": "boolean"
                 },
                 "base_hash": {
                     "type": "string"
@@ -15480,6 +16659,22 @@ const docTemplate = `{
                 }
             }
         },
+        "contract.ContextFile": {
+            "type": "object",
+            "properties": {
+                "cap": {
+                    "description": "Cap is the most bytes of the index the prompt carries. Zero means\nMaxContextFileBytes.",
+                    "type": "integer"
+                },
+                "path": {
+                    "description": "Path is relative to the user's home, under ContextFilesRoot, and ends\nin .md.",
+                    "type": "string"
+                },
+                "scope": {
+                    "$ref": "#/definitions/contract.ChangeScope"
+                }
+            }
+        },
         "contract.ExecutionDescriptor": {
             "type": "object",
             "properties": {
@@ -15514,6 +16709,31 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "contract.ModelAction": {
+            "type": "object",
+            "properties": {
+                "capability": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                }
+            }
+        },
+        "contract.NetworkPreset": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
                 }
             }
         },
@@ -15619,6 +16839,10 @@ const docTemplate = `{
                 },
                 "resourceId": {
                     "type": "string"
+                },
+                "resourceKey": {
+                    "description": "ResourceKey and Credential are set by the host alone, for an add-on that\ndeclares credentials (see CredentialSlot). ResourceKey is the external\nname of the resource the call works on, after the host checked it against\nthe person's list, and ResourceID is then the host ID of that entry.\nCredential is the secret of the person's binding. An add-on never stores\nor logs it, and the host drops both fields from every request that a\ncaller sends.",
+                    "type": "string"
                 }
             }
         },
@@ -15651,24 +16875,63 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "name": {
-                    "description": "Name is the skill's name and the name of its folder. A plain skill is\nnamed after the add-on: the add-on ID, or the ID and a dash and more\n(office-quickstart), so two add-ons never ship one plain name. A skill\nthat replaces a built-in one has the built-in's name (see Shadows).",
+                    "description": "Name is the skill's name and the name of its folder. A plain skill is\nnamed after the add-on: the add-on ID, or the ID and a dash and more\n(office-quickstart), so two add-ons never ship one plain name. A skill\nfor a reserved document slot has the slot's name (see Shadows).",
                     "type": "string"
                 },
                 "shadows": {
-                    "description": "Shadows names the built-in skill this skill replaces. It must equal Name\nand be one of ReplaceableSkills. It repeats the name on purpose: the\nreplacement is an explicit act, which the install warning and the check\nread from the manifest without opening the package. Empty: a plain\nadd-on skill.",
+                    "description": "Shadows names the document-provider slot this skill supplies. It must equal Name\nand name a slot: one the skill declares (Slot) or a default one\n(DefaultSlots). It repeats the name on purpose: the\nreplacement is an explicit act, which the install warning and the check\nread from the manifest without opening the package. Empty: a plain\nadd-on skill.",
                     "type": "string"
+                },
+                "slot": {
+                    "description": "Slot describes the slot this skill serves: the files it covers and the\nwords to say about them (see SlotDefinition). It needs Shadows. A skill that shadows a default slot may leave it out.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/contract.SlotDefinition"
+                        }
+                    ]
+                }
+            }
+        },
+        "contract.SlotDefinition": {
+            "type": "object",
+            "properties": {
+                "extensions": {
+                    "description": "Extensions are the file extensions the skill covers, lower case with the\ndot, such as \".docx\".",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "kind": {
+                    "description": "Kind is SlotKindDocuments.",
+                    "type": "string"
+                },
+                "library": {
+                    "description": "Library names what a script can use to read these files, shown as a hint.",
+                    "type": "string"
+                },
+                "words": {
+                    "description": "Words are lower-case words that a skill of this slot has in its name.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
         "contract.ToolDefinition": {
             "type": "object",
             "properties": {
+                "approval": {
+                    "description": "Approval, when it is ApprovalAlways, is a ceiling the person cannot lift:\nthe host stores a proposal for a write tool of this kind and applies it\nonly when a person confirms it at a host surface. A chat or an agent\nnever applies it, even when the person allowed writes without asking.\nOnly a write tool may set it.",
+                    "type": "string"
+                },
                 "description": {
                     "description": "Description is plain text for the model.",
                     "type": "string"
                 },
                 "execution": {
-                    "description": "Execution declares that this tool runs commands and what the host may\nsay about the provider. Only a tool that shadows bash may declare it, and\nthe manifest must then accept API 2 (see MinExecutionAPI).",
+                    "description": "Execution declares that this tool runs commands and what the host may\nsay about the provider. Only a tool that shadows bash may declare it.",
                     "allOf": [
                         {
                             "$ref": "#/definitions/contract.ExecutionDescriptor"
@@ -15694,6 +16957,30 @@ const docTemplate = `{
                 "uiOnly": {
                     "description": "UIOnly marks a tool that only the add-on's own page may call, such as a\nsettings change that asks the host whether the caller is an\nadministrator. It is never offered to a model, a chat or an agent. The\npage has no resource to name, so it must be a read tool without one.",
                     "type": "boolean"
+                }
+            }
+        },
+        "contract.UserSetting": {
+            "type": "object",
+            "properties": {
+                "default": {
+                    "description": "Default is the answer of a person who has not chosen. It is one of Values.",
+                    "type": "string"
+                },
+                "key": {
+                    "description": "Key names the setting inside the add-on: lowercase letters, digits and\ndashes, at most 40.",
+                    "type": "string"
+                },
+                "role": {
+                    "description": "Role names what the host does with the answer, when the host reads it\nitself. Empty: the setting is only for the add-on's own page. A known\nrole fixes the values and the default (see roleRules), so the manifest\ncannot make the host more permissive than its own default.",
+                    "type": "string"
+                },
+                "values": {
+                    "description": "Values are the allowed answers, in the order the add-on lists them. Each\none has the same form as the key.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -16529,6 +17816,557 @@ const docTemplate = `{
                 }
             }
         },
+        "gateway.HostBlanketChange": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "ops": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "gateway.HostBlanketPreview": {
+            "type": "object",
+            "properties": {
+                "applies": {
+                    "type": "boolean"
+                },
+                "revision": {
+                    "type": "integer"
+                }
+            }
+        },
+        "gateway.HostBlanketSkip": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                }
+            }
+        },
+        "gateway.HostBlanketView": {
+            "type": "object",
+            "properties": {
+                "includeOptional": {
+                    "type": "boolean"
+                },
+                "mode": {
+                    "type": "string"
+                },
+                "revision": {
+                    "type": "integer"
+                },
+                "setBy": {
+                    "description": "SetBy is ui, or deployment when a flag fixes the mode.",
+                    "type": "string"
+                }
+            }
+        },
+        "gateway.HostDenyAffect": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "loses": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "willStop": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "gateway.HostFloorAddon": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "prefixes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "gateway.HostGrantsAddon": {
+            "type": "object",
+            "properties": {
+                "blanketGrants": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "identityMismatch": {
+                    "type": "boolean"
+                },
+                "newOptional": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "noLongerRequested": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/gateway.HostOpView"
+                    }
+                },
+                "ops": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/gateway.HostOpView"
+                    }
+                },
+                "pendingUpgrade": {
+                    "$ref": "#/definitions/gateway.PendingUpgrade"
+                },
+                "requested": {
+                    "$ref": "#/definitions/gateway.HostRequested"
+                },
+                "sourceId": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "stopped": {
+                    "description": "Stopped lists the required operations the add-on lacks, which keep it\nfrom running (\"stopped: needs X\").",
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "gateway.HostGrantsAddonResult": {
+            "type": "object",
+            "properties": {
+                "addon": {
+                    "$ref": "#/definitions/gateway.HostGrantsAddon"
+                },
+                "revision": {
+                    "type": "integer"
+                }
+            }
+        },
+        "gateway.HostGrantsApprove": {
+            "type": "object",
+            "properties": {
+                "digest": {
+                    "type": "string"
+                },
+                "nonce": {
+                    "type": "string"
+                },
+                "ops": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "revision": {
+                    "type": "integer"
+                }
+            }
+        },
+        "gateway.HostGrantsBlanketRequest": {
+            "type": "object",
+            "properties": {
+                "applyToInstalled": {
+                    "type": "boolean"
+                },
+                "confirm": {
+                    "description": "Confirm is the typed confirmation text, required to turn the switch\non or widen it.",
+                    "type": "string"
+                },
+                "includeOptional": {
+                    "type": "boolean"
+                },
+                "mode": {
+                    "type": "string"
+                },
+                "operationId": {
+                    "type": "string"
+                },
+                "revision": {
+                    "type": "integer"
+                },
+                "revokeOnOff": {
+                    "description": "RevokeOnOff, with mode off, also revokes the grants the blanket made.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "gateway.HostGrantsBlanketResult": {
+            "type": "object",
+            "properties": {
+                "blanket": {
+                    "$ref": "#/definitions/gateway.HostBlanketView"
+                },
+                "changed": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/gateway.HostBlanketChange"
+                    }
+                },
+                "revision": {
+                    "type": "integer"
+                },
+                "revoked": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "skipped": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/gateway.HostBlanketSkip"
+                    }
+                }
+            }
+        },
+        "gateway.HostGrantsDenyRequest": {
+            "type": "object",
+            "properties": {
+                "deny": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "dryRun": {
+                    "description": "DryRun answers what the rules would do and changes nothing.",
+                    "type": "boolean"
+                },
+                "operationId": {
+                    "type": "string"
+                },
+                "revision": {
+                    "type": "integer"
+                }
+            }
+        },
+        "gateway.HostGrantsDenyResult": {
+            "type": "object",
+            "properties": {
+                "affects": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/gateway.HostDenyAffect"
+                    }
+                },
+                "deny": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "dryRun": {
+                    "type": "boolean"
+                },
+                "revision": {
+                    "type": "integer"
+                }
+            }
+        },
+        "gateway.HostGrantsDenyView": {
+            "type": "object",
+            "properties": {
+                "file": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "ui": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "gateway.HostGrantsEditRequest": {
+            "type": "object",
+            "properties": {
+                "keep": {
+                    "description": "Keep names held blanket grants to relabel as the administrator's own,\nso revoking the blanket grants leaves them.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "operationId": {
+                    "type": "string"
+                },
+                "ops": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "revision": {
+                    "type": "integer"
+                }
+            }
+        },
+        "gateway.HostGrantsFloor": {
+            "type": "object",
+            "properties": {
+                "addons": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/gateway.HostFloorAddon"
+                    }
+                },
+                "source": {
+                    "type": "string"
+                }
+            }
+        },
+        "gateway.HostGrantsInstallRequest": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "description": "Action is install or upgrade.",
+                    "type": "string"
+                },
+                "addonId": {
+                    "type": "string"
+                },
+                "approve": {
+                    "$ref": "#/definitions/gateway.HostGrantsApprove"
+                },
+                "candidateDigest": {
+                    "type": "string"
+                },
+                "downgrade": {
+                    "description": "Downgrade confirms that a local file may install an older version than\nthe installed one. Only a sourceId of local-file reads it.",
+                    "type": "boolean"
+                },
+                "expectedDigest": {
+                    "description": "ExpectedDigest and CandidateDigest pin an upgrade; both or neither.",
+                    "type": "string"
+                },
+                "operationId": {
+                    "type": "string"
+                },
+                "sourceId": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "gateway.HostGrantsPreviewRequest": {
+            "type": "object",
+            "properties": {
+                "addonId": {
+                    "type": "string"
+                },
+                "sourceId": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "gateway.HostGrantsPreviewView": {
+            "type": "object",
+            "properties": {
+                "added": {
+                    "description": "Added are the operations this version asks for that the installed\nversion did not. Empty on an install.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "addonId": {
+                    "type": "string"
+                },
+                "blanket": {
+                    "$ref": "#/definitions/gateway.HostBlanketPreview"
+                },
+                "blockedRequired": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "canInstall": {
+                    "type": "boolean"
+                },
+                "digest": {
+                    "type": "string"
+                },
+                "installed": {
+                    "type": "boolean"
+                },
+                "locked": {
+                    "type": "boolean"
+                },
+                "lockedReason": {
+                    "type": "string"
+                },
+                "nonce": {
+                    "type": "string"
+                },
+                "nonceExpiresAt": {
+                    "type": "string"
+                },
+                "official": {
+                    "type": "boolean"
+                },
+                "ops": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/gateway.HostOpView"
+                    }
+                },
+                "requested": {
+                    "$ref": "#/definitions/gateway.HostRequested"
+                },
+                "revision": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "gateway.HostGrantsRevision": {
+            "type": "object",
+            "properties": {
+                "changed": {
+                    "type": "boolean"
+                },
+                "revision": {
+                    "type": "integer"
+                }
+            }
+        },
+        "gateway.HostGrantsView": {
+            "type": "object",
+            "properties": {
+                "addons": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/gateway.HostGrantsAddon"
+                    }
+                },
+                "blanket": {
+                    "$ref": "#/definitions/gateway.HostBlanketView"
+                },
+                "deny": {
+                    "$ref": "#/definitions/gateway.HostGrantsDenyView"
+                },
+                "floor": {
+                    "$ref": "#/definitions/gateway.HostGrantsFloor"
+                },
+                "locked": {
+                    "type": "boolean"
+                },
+                "lockedReason": {
+                    "description": "LockedReason is LockedByDeployment or LockedNoAuth when Locked.",
+                    "type": "string"
+                },
+                "revision": {
+                    "type": "integer"
+                }
+            }
+        },
+        "gateway.HostOpView": {
+            "type": "object",
+            "properties": {
+                "at": {
+                    "type": "string"
+                },
+                "by": {
+                    "type": "string"
+                },
+                "hint": {
+                    "description": "Hint is true in a preview when the operation was granted before an\nearlier uninstall, so the dialog may tick it. It grants nothing.",
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "risk": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status is allowed, not_allowed, blocked or unsupported, in the page and\nin a preview alike. In a preview not_allowed means the dialog may grant it.",
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "gateway.HostRequested": {
+            "type": "object",
+            "properties": {
+                "optional": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "required": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "gateway.OperationStatus": {
             "type": "object",
             "properties": {
@@ -16568,6 +18406,20 @@ const docTemplate = `{
                 }
             }
         },
+        "gateway.PendingUpgrade": {
+            "type": "object",
+            "properties": {
+                "delta": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
         "gateway.Proposal": {
             "type": "object",
             "properties": {
@@ -16581,9 +18433,20 @@ const docTemplate = `{
                     "description": "Arguments are the canonical stored arguments. They are the only\narguments that can ever be submitted for this proposal.",
                     "type": "object"
                 },
+                "awaitsPerson": {
+                    "description": "AwaitsPerson reports a proposal that only a person may apply, from a\nhost surface such as the browser: a chat or an agent never applies it.\nThe write mode of the binding or the approval of the tool asks for it.",
+                    "type": "boolean"
+                },
                 "blocked": {
                     "description": "Blocked reports that another operation on the resource has an\nunresolved outcome, so confirming is denied until it is resolved. The\noperation itself belongs to its proposer and is shown only to the\nresource's owner role, in the unresolved listing and in the denial.",
                     "type": "boolean"
+                },
+                "connectionId": {
+                    "description": "ConnectionID and ConnectionName say which connection of the person the\nchange will be made with. They are present for a write of an add-on that\nruns with a credential, and the apply uses that very connection.",
+                    "type": "string"
+                },
+                "connectionName": {
+                    "type": "string"
                 },
                 "createdAt": {
                     "type": "string"
@@ -16967,6 +18830,63 @@ const docTemplate = `{
                 "id": {
                     "type": "string",
                     "example": "4f1c"
+                }
+            }
+        },
+        "hostops.RequestSummary": {
+            "type": "object",
+            "properties": {
+                "deniedOptional": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "deniedRequired": {
+                    "description": "DeniedRequired and DeniedOptional are the missing operations that a deny\nrule forbids. They are also listed in the Missing lists. An operation\nthat is denied can never be approved, so a caller reads this to tell\n\"ask the administrator to approve\" from \"blocked by policy\".",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "granted": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "grantedCount": {
+                    "type": "integer"
+                },
+                "missingOptional": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "missingRequired": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "optional": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "optionalCount": {
+                    "type": "integer"
+                },
+                "required": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "requiredCount": {
+                    "type": "integer"
                 }
             }
         },
@@ -18146,11 +20066,40 @@ const docTemplate = `{
         "schema.ChatsAddon": {
             "type": "object",
             "properties": {
+                "connection_by": {
+                    "type": "string"
+                },
+                "connections": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnection"
+                    }
+                },
+                "credentialed": {
+                    "description": "Credentialed is true when the tools of the add-on run with the token of\nyour connections. Connections lists them, oldest first. Enabled is the\nIDs of the ones this chat may use (empty when none is enabled) and\nConnectionBy says why: chat (you chose them), agent (the agent of the\nchat names the set; you cannot change it here), binding (the chat was\nstarted by that binding) or only (it is your only connection).\nNeedsConnection is true while none is enabled: the tools are not offered\nto the model until you enable one. With two or more enabled, the model\nnames the connection in every call.",
+                    "type": "boolean"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "enabled_connections": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "id": {
                     "type": "string"
                 },
+                "needs_connection": {
+                    "type": "boolean"
+                },
                 "off": {
                     "type": "boolean"
+                },
+                "title": {
+                    "description": "Title and Description are what the add-on's manifest declares for\npeople. Title is empty when the add-on declares none; the interface then shows the ID.",
+                    "type": "string"
                 },
                 "tools": {
                     "type": "integer"
@@ -18192,6 +20141,9 @@ const docTemplate = `{
                 "commands_reason": {
                     "description": "CommandsReason is why commands cannot run, when Commands is unavailable.",
                     "type": "string"
+                },
+                "execution_status": {
+                    "$ref": "#/definitions/schema.ChatsExecutionStatus"
                 }
             }
         },
@@ -18281,12 +20233,35 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "agent_id": {
+                    "description": "AgentID is empty for a binding of a kind that declares agent_optional.",
                     "type": "string"
                 },
                 "allow": {
                     "type": "array",
                     "items": {
                         "type": "string"
+                    }
+                },
+                "approval": {
+                    "description": "Approval is what the host does with a trigger that the agent proposes\nfrom a chat of this binding.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/schema.ChatsConnectorApproval"
+                        }
+                    ]
+                },
+                "caps": {
+                    "description": "Caps are the capabilities you enabled for this binding: the ceiling of\nwhat any sender can use. Grants give roles of the kind some of them.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "channels": {
+                    "description": "Channels are the chats where the agent may write besides the\nconversation. Only you can change the list.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnectorChannel"
                     }
                 },
                 "conversation": {
@@ -18296,8 +20271,33 @@ const docTemplate = `{
                 "created": {
                     "type": "string"
                 },
+                "credentials_only": {
+                    "description": "CredentialsOnly is true for a binding without an agent: it holds the\ntoken, the resource list and the write mode, and never answers messages.",
+                    "type": "boolean"
+                },
                 "enabled": {
                     "type": "boolean"
+                },
+                "file_receive_max_bytes": {
+                    "description": "FileReceiveMaxBytes and FileSendMaxBytes are your limits for this bot;\nzero means you set none and the limit of the kind applies.",
+                    "type": "integer"
+                },
+                "file_send_max_bytes": {
+                    "type": "integer"
+                },
+                "files": {
+                    "description": "Files are the limits of the files the bot reads and sends, with the\nlimit that you set for this bot.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/schema.ChatsConnectorFiles"
+                        }
+                    ]
+                },
+                "grants": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnectorRoleGrant"
+                    }
                 },
                 "has_token": {
                     "type": "boolean"
@@ -18321,8 +20321,22 @@ const docTemplate = `{
                 "notify_chat": {
                     "type": "string"
                 },
+                "options": {
+                    "description": "Options are the choices made for the options of the kind, by option id.\nAn option that is absent has its default (see ChatsConnectorKind).",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
                 "owner": {
                     "type": "string"
+                },
+                "paired": {
+                    "description": "Paired are the senders you proved with a pairing code. A pairing ends\nat expires_at.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnectorPaired"
+                    }
                 },
                 "reason": {
                     "description": "Reason says in plain words why the binding is not active.",
@@ -18332,16 +20346,28 @@ const docTemplate = `{
                     "description": "ReplyMode is what a sender sees while a turn runs: off (typing, then\nthe answer), progress (a working message that names the tools as they\nstart) or stream (a working message that shows the answer as it is\nwritten). The answer replaces the working message.",
                     "type": "string"
                 },
+                "resources": {
+                    "description": "Resources are the external resources, such as repositories, that the\ntools of the add-on may reach with this binding. Nothing else is\nreachable.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "send_files": {
                     "description": "SendFiles sends the files that a turn makes to the sender, after the\nanswer.",
                     "type": "boolean"
                 },
-                "thread_context": {
-                    "description": "ThreadContext lets the bot read the earlier messages of the thread in\nwhich it is mentioned. It has an effect only on a platform that can\ngive them.",
-                    "type": "boolean"
-                },
                 "window_minutes": {
                     "type": "integer"
+                },
+                "write_mode": {
+                    "description": "WriteMode says what the tools of the add-on may change with this\nbinding's credential: off (nothing), propose (each change waits for your\nconfirmation) or auto (a chat of yours applies it at once, except a tool\nthe add-on marks as always needing your confirmation).",
+                    "type": "string",
+                    "enum": [
+                        "off",
+                        "propose",
+                        "auto"
+                    ]
                 }
             }
         },
@@ -18359,6 +20385,20 @@ const docTemplate = `{
         "schema.ChatsAdminTrigger": {
             "type": "object",
             "properties": {
+                "acts": {
+                    "description": "Acts are the action classes that a run with nobody present may use:\nact.files, act.addons, act.addons:\u003cid\u003e, act.send, act.spend. A run\nwithout any only reads.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "acts_held": {
+                    "description": "ActsHeld are the act.* names that apply to a run now: Acts within the\ngrants of the agent, plus act.files when the plan names a file it writes.\nReadOnly is true when a run can only read, and ReadOnlyWhy says why:\ndeclared (the proposal said so), binding (a connection in read only mode\nmade it), no_acts (it holds none) or agent (its agent holds none of them).",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "agent_id": {
                     "type": "string"
                 },
@@ -18421,6 +20461,12 @@ const docTemplate = `{
                 "quiet_seconds": {
                     "type": "integer"
                 },
+                "read_only": {
+                    "type": "boolean"
+                },
+                "read_only_why": {
+                    "type": "string"
+                },
                 "schedule": {
                     "type": "string"
                 },
@@ -18456,11 +20502,39 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "builtins": {
+                    "description": "Builtins are the builtin capabilities granted to the agent, by the names\nthat GET /api/chats/agents/builtin-grants lists (memory.write,\nskills.write and so on). Empty grants none. A chat of the agent holds\nthe grants you may use at that moment.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "builtins_off": {
+                    "description": "BuiltinsOff are the groups of built-in tools (web, files, triggers...)\nthe agent's chats never have, and BuiltinsOn the opt-in groups (saved\nagents) they start with. The names are the ones GET /api/chats/{id}/tools\nlists. Empty for an agent that has every group a chat has by default.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "builtins_on": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "collections": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
+                },
+                "connections": {
+                    "description": "Connections names, for each add-on whose tools run with a credential\n(by add-on ID), the connections (binding IDs) the agent's chats may use.\nA chat of the agent cannot change the set. An add-on with no entry gets\nnone from the agent: the person chooses in the chat.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/connsets.Sets"
+                        }
+                    ]
                 },
                 "created": {
                     "type": "string"
@@ -18475,6 +20549,21 @@ const docTemplate = `{
                             "$ref": "#/definitions/schema.ChatsAgentFolder"
                         }
                     ]
+                },
+                "folder_notice": {
+                    "description": "FolderNotice is set when shared folders do not fit the access limit of\na chat of this agent and are left out.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/schema.ChatsAgentFolderNotice"
+                        }
+                    ]
+                },
+                "folders": {
+                    "description": "Folders are all the folders of the agent (at most 8), in order; Folder\nis the first of them. Absent for an agent that works on all your files.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsAgentFolder"
+                    }
                 },
                 "id": {
                     "type": "string"
@@ -18529,6 +20618,10 @@ const docTemplate = `{
         "schema.ChatsAgentFolder": {
             "type": "object",
             "properties": {
+                "effective": {
+                    "description": "Effective is the mode the folder has in a chat: read for a shared\nfolder, and the mode of the outer folder when the folder is inside\nanother folder of the same agent.",
+                    "type": "string"
+                },
                 "mode": {
                     "description": "Mode is read (the agent's chats can read the folder) or write (they can\nread and change it).",
                     "type": "string"
@@ -18538,12 +20631,20 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "path": {
-                    "description": "Path is the folder's path in your files now (\"/\" is all of them). It\nis absent when the folder is missing or not chosen.",
+                    "description": "Path is home-relative (\"/\" is the whole home), or /shared/\u003cname\u003e/...\nfor a followed readable shared folder. It is absent when missing,\nnot chosen, or readable outside these public locations; a readable\nfolder without a public path still has state ok.",
                     "type": "string"
                 },
                 "state": {
                     "description": "State is ok; missing when the folder was deleted or you can no longer\nread it; or unset when no folder is chosen yet (an imported agent whose\nfolder was not found). An agent whose folder is missing or unset does\nnot start.",
                     "type": "string"
+                }
+            }
+        },
+        "schema.ChatsAgentFolderNotice": {
+            "type": "object",
+            "properties": {
+                "not_mounted": {
+                    "type": "integer"
                 }
             }
         },
@@ -18687,22 +20788,57 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "builtins": {
+                    "description": "Builtins are the builtin grants of the agent (see ChatsAgent). A write\nwithout them keeps the stored ones; an empty list clears them; a name\nthe server does not declare is a 400, except in an import, which drops it.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "builtins_off": {
+                    "description": "BuiltinsOff and BuiltinsOn are the switches of the built-in tools of\nthe agent's chats (see ChatsAgent). A write without them keeps the stored ones (an older client cannot widen\nthe agent); an empty list clears them.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "builtins_on": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "collections": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
+                "connections": {
+                    "description": "Connections names the connections the agent's chats may use for each\nadd-on with a credential (see ChatsAgent). A write without it keeps the\nstored ones; an empty object clears them. Each binding must be your own\nfor that add-on. A single string is read as a set of one. An export file\nnever carries it: a binding ID belongs to one server.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/connsets.Sets"
+                        }
+                    ]
+                },
                 "description": {
                     "type": "string"
                 },
                 "folder": {
-                    "description": "Folder chooses the one folder the agent's chats work in. A write\nwithout it keeps the folder the agent has; {\"path\": \"\"} clears it. In\nan export file it is the folder's path and mode when the file was made.",
+                    "description": "Folder chooses the one folder the agent's chats work in. A write\nwithout it keeps the folder the agent has; {\"path\": \"\"} clears it. In\nan export file it is the home-relative path and mode when the file was\nmade. A missing, unchosen or non-home folder has an empty export path;\nimport preserves its mode as unset and warns instead of clearing scope.",
                     "allOf": [
                         {
                             "$ref": "#/definitions/schema.ChatsAgentFolderWrite"
                         }
                     ]
+                },
+                "folders": {
+                    "description": "Folders chooses up to 8 folders, each with its own mode. When both are\nsent, folders wins. A write without folders and folder keeps the folders\nthe agent has; \"folders\": [] clears them. Where a folder is inside\nanother one, it gets the outer folder's mode.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsAgentFolderWrite"
+                    }
                 },
                 "instructions": {
                     "type": "string"
@@ -18772,9 +20908,44 @@ const docTemplate = `{
                 }
             }
         },
+        "schema.ChatsBuiltinGrant": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "description": "Description says what the agent can do with the grant, in English.",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Name is the value to put in an agent's builtins list.",
+                    "type": "string"
+                },
+                "sensitive": {
+                    "description": "Sensitive grants change what the agent may do or reach later. They are\nnever on by default and the editor marks them.",
+                    "type": "boolean"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "schema.ChatsBuiltinGrantList": {
+            "type": "object",
+            "properties": {
+                "grants": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsBuiltinGrant"
+                    }
+                }
+            }
+        },
         "schema.ChatsBuiltinGroup": {
             "type": "object",
             "properties": {
+                "description": {
+                    "type": "string",
+                    "example": "The model can search the web and read a public page by its address."
+                },
                 "group": {
                     "type": "string",
                     "example": "web"
@@ -18804,6 +20975,11 @@ const docTemplate = `{
                 "reason": {
                     "type": "string"
                 },
+                "title": {
+                    "description": "Title and Description say what the group is and what the model can do\nwhen its switch is on; WhenOff says what it cannot do when it is off.\nThey are English; the interface may translate them by group.",
+                    "type": "string",
+                    "example": "Look things up online"
+                },
                 "tools": {
                     "type": "array",
                     "items": {
@@ -18817,6 +20993,10 @@ const docTemplate = `{
                 "usable": {
                     "description": "Usable is false when the group cannot serve this chat now; Reason says\nwhy.",
                     "type": "boolean"
+                },
+                "when_off": {
+                    "type": "string",
+                    "example": "The model cannot look anything up online."
                 }
             }
         },
@@ -19082,6 +21262,40 @@ const docTemplate = `{
                 }
             }
         },
+        "schema.ChatsConnection": {
+            "type": "object",
+            "properties": {
+                "handle": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "schema.ChatsConnectionSwitch": {
+            "type": "object",
+            "properties": {
+                "addon": {
+                    "description": "Addon is the add-on ID.",
+                    "type": "string"
+                },
+                "connection": {
+                    "description": "Connection is the older form: one binding ID, read as a set of one when\nconnections is absent.",
+                    "type": "string"
+                },
+                "connections": {
+                    "description": "Connections are the IDs of your connector bindings for that add-on that\nthe chat may use; empty clears the choice.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "schema.ChatsConnector": {
             "type": "object",
             "properties": {
@@ -19096,12 +21310,35 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "agent_id": {
+                    "description": "AgentID is empty for a binding of a kind that declares agent_optional.",
                     "type": "string"
                 },
                 "allow": {
                     "type": "array",
                     "items": {
                         "type": "string"
+                    }
+                },
+                "approval": {
+                    "description": "Approval is what the host does with a trigger that the agent proposes\nfrom a chat of this binding.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/schema.ChatsConnectorApproval"
+                        }
+                    ]
+                },
+                "caps": {
+                    "description": "Caps are the capabilities you enabled for this binding: the ceiling of\nwhat any sender can use. Grants give roles of the kind some of them.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "channels": {
+                    "description": "Channels are the chats where the agent may write besides the\nconversation. Only you can change the list.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnectorChannel"
                     }
                 },
                 "conversation": {
@@ -19111,8 +21348,33 @@ const docTemplate = `{
                 "created": {
                     "type": "string"
                 },
+                "credentials_only": {
+                    "description": "CredentialsOnly is true for a binding without an agent: it holds the\ntoken, the resource list and the write mode, and never answers messages.",
+                    "type": "boolean"
+                },
                 "enabled": {
                     "type": "boolean"
+                },
+                "file_receive_max_bytes": {
+                    "description": "FileReceiveMaxBytes and FileSendMaxBytes are your limits for this bot;\nzero means you set none and the limit of the kind applies.",
+                    "type": "integer"
+                },
+                "file_send_max_bytes": {
+                    "type": "integer"
+                },
+                "files": {
+                    "description": "Files are the limits of the files the bot reads and sends, with the\nlimit that you set for this bot.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/schema.ChatsConnectorFiles"
+                        }
+                    ]
+                },
+                "grants": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnectorRoleGrant"
+                    }
                 },
                 "has_token": {
                     "type": "boolean"
@@ -19136,31 +21398,239 @@ const docTemplate = `{
                 "notify_chat": {
                     "type": "string"
                 },
-                "reason": {
-                    "description": "Reason says in plain words why the binding is not active.",
-                    "type": "string"
-                },
                 "options": {
-                    "description": "Options are the choices made for the options of the kind, by option id. An option that is absent has its default (see ChatsConnectorKind).",
+                    "description": "Options are the choices made for the options of the kind, by option id.\nAn option that is absent has its default (see ChatsConnectorKind).",
                     "type": "object",
                     "additionalProperties": {
                         "type": "string"
                     }
                 },
+                "paired": {
+                    "description": "Paired are the senders you proved with a pairing code. A pairing ends\nat expires_at.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnectorPaired"
+                    }
+                },
+                "reason": {
+                    "description": "Reason says in plain words why the binding is not active.",
+                    "type": "string"
+                },
                 "reply_mode": {
                     "description": "ReplyMode is what a sender sees while a turn runs: off (typing, then\nthe answer), progress (a working message that names the tools as they\nstart) or stream (a working message that shows the answer as it is\nwritten). The answer replaces the working message.",
                     "type": "string"
+                },
+                "resources": {
+                    "description": "Resources are the external resources, such as repositories, that the\ntools of the add-on may reach with this binding. Nothing else is\nreachable.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "send_files": {
                     "description": "SendFiles sends the files that a turn makes to the sender, after the\nanswer.",
                     "type": "boolean"
                 },
-                "thread_context": {
-                    "description": "ThreadContext lets the bot read the earlier messages of the thread in\nwhich it is mentioned. It has an effect only on a platform that can\ngive them.",
-                    "type": "boolean"
-                },
                 "window_minutes": {
                     "type": "integer"
+                },
+                "write_mode": {
+                    "description": "WriteMode says what the tools of the add-on may change with this\nbinding's credential: off (nothing), propose (each change waits for your\nconfirmation) or auto (a chat of yours applies it at once, except a tool\nthe add-on marks as always needing your confirmation).",
+                    "type": "string",
+                    "enum": [
+                        "off",
+                        "propose",
+                        "auto"
+                    ]
+                }
+            }
+        },
+        "schema.ChatsConnectorAccess": {
+            "type": "object",
+            "properties": {
+                "binding": {
+                    "type": "string"
+                },
+                "recent": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnectorAccessEvent"
+                    }
+                },
+                "subjects": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnectorAccessSubject"
+                    }
+                }
+            }
+        },
+        "schema.ChatsConnectorAccessDecision": {
+            "type": "object",
+            "properties": {
+                "allowed": {
+                    "type": "boolean"
+                },
+                "capability": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "via": {
+                    "description": "Via is how the capability is reached: paired, or role:\u003cid\u003e.",
+                    "type": "string"
+                }
+            }
+        },
+        "schema.ChatsConnectorAccessEvent": {
+            "type": "object",
+            "properties": {
+                "allowed": {
+                    "type": "boolean"
+                },
+                "at": {
+                    "type": "string"
+                },
+                "capability": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "roles": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "senders": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "via": {
+                    "type": "string"
+                }
+            }
+        },
+        "schema.ChatsConnectorAccessSubject": {
+            "type": "object",
+            "properties": {
+                "decisions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnectorAccessDecision"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "schema.ChatsConnectorApproval": {
+            "type": "object",
+            "properties": {
+                "max_lifetime_days": {
+                    "type": "integer"
+                },
+                "max_pending": {
+                    "type": "integer"
+                },
+                "max_runs_per_day": {
+                    "type": "integer"
+                },
+                "min_gap_minutes": {
+                    "type": "integer"
+                },
+                "mode": {
+                    "type": "string"
+                }
+            }
+        },
+        "schema.ChatsConnectorCapability": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "sensitive": {
+                    "description": "Sensitive capabilities are never granted to a role: only a paired\nsender can use them.",
+                    "type": "boolean"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "usual": {
+                    "description": "Usual capabilities are what a one-click preset turns on.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "schema.ChatsConnectorChannel": {
+            "type": "object",
+            "properties": {
+                "approved": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                }
+            }
+        },
+        "schema.ChatsConnectorFileLimit": {
+            "type": "object",
+            "properties": {
+                "allowed_bytes": {
+                    "description": "AllowedBytes is the most you may set for a bot.",
+                    "type": "integer"
+                },
+                "declared_bytes": {
+                    "description": "DeclaredBytes is the ability the kind declares, or zero.",
+                    "type": "integer"
+                },
+                "effective_bytes": {
+                    "description": "EffectiveBytes is the largest file that moves now: the smallest of the\nhost ceiling, the declared ability and your limit.",
+                    "type": "integer"
+                },
+                "layer": {
+                    "description": "Layer names the one that sets EffectiveBytes: owner (your limit for\nthis bot), addon (the ability the kind declares), host (the ceiling of\nthe server) or inline (the cap of the inline path).",
+                    "type": "string"
+                }
+            }
+        },
+        "schema.ChatsConnectorFiles": {
+            "type": "object",
+            "properties": {
+                "host_ceiling_bytes": {
+                    "description": "HostCeilingBytes is the ceiling of the server for a connector file, set\nby the add-on owner; no limit above it applies.",
+                    "type": "integer"
+                },
+                "receive": {
+                    "description": "Receive is the limit of the files that people send to the bot.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/schema.ChatsConnectorFileLimit"
+                        }
+                    ]
+                },
+                "send": {
+                    "description": "Send is the limit of the files that the bot sends.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/schema.ChatsConnectorFileLimit"
+                        }
+                    ]
                 }
             }
         },
@@ -19170,8 +21640,20 @@ const docTemplate = `{
                 "addon": {
                     "type": "string"
                 },
+                "agent_optional": {
+                    "description": "AgentOptional is true when a binding of this kind may have no agent. It\nthen only holds credentials (token, resource list, write mode).",
+                    "type": "boolean"
+                },
                 "description": {
                     "type": "string"
+                },
+                "files": {
+                    "description": "Files are the limits of a binding of this kind that has no limit of\nyour own.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/schema.ChatsConnectorFiles"
+                        }
+                    ]
                 },
                 "kind": {
                     "type": "string"
@@ -19187,15 +21669,57 @@ const docTemplate = `{
                     "description": "Page is the add-on page that adds and edits bindings of this kind.",
                     "type": "string"
                 },
+                "permissions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnectorPermission"
+                    }
+                },
+                "roles": {
+                    "description": "Roles are the roles the add-on can report for a sender, and\nPermissions the capabilities the kind lists. Grant them to a role with\nthe grants of a binding.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnectorRole"
+                    }
+                },
                 "sender_hint": {
                     "type": "string"
                 },
                 "thread_history": {
-                    "description": "ThreadHistory is true when the platform can give the earlier messages\nof a thread, so a binding of this kind has the thread_context option.",
+                    "description": "ThreadHistory is true when the platform can give the earlier messages\nof a thread. The host then reads them whenever the bot is mentioned in a\nthread.",
                     "type": "boolean"
                 },
                 "title": {
                     "type": "string"
+                }
+            }
+        },
+        "schema.ChatsConnectorKindList": {
+            "type": "object",
+            "properties": {
+                "capabilities": {
+                    "description": "Capabilities is the closed list of capabilities that a binding can\nenable, with a title and a description of each, for a settings page.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnectorCapability"
+                    }
+                },
+                "kinds": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnectorKind"
+                    }
+                }
+            }
+        },
+        "schema.ChatsConnectorList": {
+            "type": "object",
+            "properties": {
+                "connectors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnector"
+                    }
                 }
             }
         },
@@ -19233,25 +21757,67 @@ const docTemplate = `{
                 }
             }
         },
-        "schema.ChatsConnectorKindList": {
+        "schema.ChatsConnectorPaired": {
             "type": "object",
             "properties": {
-                "kinds": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/schema.ChatsConnectorKind"
-                    }
+                "expires_at": {
+                    "type": "string"
+                },
+                "paired_at": {
+                    "type": "string"
+                },
+                "sender_id": {
+                    "type": "string"
                 }
             }
         },
-        "schema.ChatsConnectorList": {
+        "schema.ChatsConnectorPairing": {
             "type": "object",
             "properties": {
-                "connectors": {
+                "code": {
+                    "type": "string"
+                },
+                "expires": {
+                    "type": "string"
+                }
+            }
+        },
+        "schema.ChatsConnectorPermission": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "sensitive": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "schema.ChatsConnectorRole": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "schema.ChatsConnectorRoleGrant": {
+            "type": "object",
+            "properties": {
+                "caps": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/schema.ChatsConnector"
+                        "type": "string"
                     }
+                },
+                "role": {
+                    "type": "string"
                 }
             }
         },
@@ -19315,6 +21881,28 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "approval": {
+                    "description": "Approval sets how triggers that the agent proposes from a chat of the\nbinding are approved, and the limits of the automatic modes. Absent\nmeans ask for a new binding and unchanged for an update.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/schema.ChatsConnectorApproval"
+                        }
+                    ]
+                },
+                "caps": {
+                    "description": "Caps are the capabilities you enable for the binding (a closed list,\nsee the kind's permissions for the ones it can grant to a role).\nAbsent means none for a new binding and unchanged for an update; an\nempty list clears.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "channels": {
+                    "description": "Channels are the chats of the platform where the agent may write\nbesides the conversation, at most 10: {id, label, approved}. A channel\nthat is not approved needs a paired sender for each message. Absent\nmeans none for a new binding and unchanged for an update; an empty list\nclears it.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnectorChannel"
+                    }
+                },
                 "confirm_accept_any": {
                     "description": "ConfirmAcceptAny must be the exact text \"accept any message\" in the\nrequest that turns accept_any on (a create with accept_any, or an update\nthat changes it from off to on). Anyone who can message the bot then uses\nthe agent's tools as you, so the server asks you to say you mean it.",
                     "type": "string"
@@ -19326,6 +21914,20 @@ const docTemplate = `{
                 "enabled": {
                     "type": "boolean"
                 },
+                "file_receive_max_bytes": {
+                    "description": "FileReceiveMaxBytes and FileSendMaxBytes limit the files the bot reads\nand sends, in bytes. A limit can only lower the limit of the kind, which\nthe kind list shows as allowed_bytes. Zero removes your limit. Absent\nmeans none for a new binding and unchanged for an update.",
+                    "type": "integer"
+                },
+                "file_send_max_bytes": {
+                    "type": "integer"
+                },
+                "grants": {
+                    "description": "Grants map roles of the kind to capabilities within caps. A sensitive\ncapability is never granted to a role. Absent means unchanged; an empty\nlist clears.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnectorRoleGrant"
+                    }
+                },
                 "inbound_media": {
                     "description": "InboundMedia lists the kinds of file that the bot takes from senders\n(photo, voice, audio, video_note, document); a file of another kind is\nnever read, and the sender is told. Empty takes every kind. Absent\nmeans every kind for a new binding and unchanged for an update.",
                     "type": "array",
@@ -19334,7 +21936,7 @@ const docTemplate = `{
                     }
                 },
                 "kind": {
-                    "description": "Kind is the platform, such as telegram. It is used to create a binding and\nignored by an update. Empty means telegram.",
+                    "description": "Kind is the platform, as a connector add-on declares it (see the kinds\ncall). It is required to create a binding and ignored by an update.",
                     "type": "string"
                 },
                 "name": {
@@ -19344,7 +21946,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "options": {
-                    "description": "Options are the choices for the options of the kind, by option id. Absent means the defaults for a new binding and unchanged for an update.",
+                    "description": "Options are the choices for the options of the kind, by option id. Absent\nmeans the defaults for a new binding and unchanged for an update.",
                     "type": "object",
                     "additionalProperties": {
                         "type": "string"
@@ -19354,12 +21956,15 @@ const docTemplate = `{
                     "description": "ReplyMode is off, progress or stream; empty means progress.",
                     "type": "string"
                 },
+                "resources": {
+                    "description": "Resources are the external resources the tools of the add-on may reach\nwith this binding, such as \"owner/repo\", at most 50. Absent means none\nfor a new binding and unchanged for an update; an empty list clears it.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "send_files": {
                     "description": "SendFiles turns the sending of a turn's files on or off. Absent means\non for a new binding and unchanged for an update.",
-                    "type": "boolean"
-                },
-                "thread_context": {
-                    "description": "ThreadContext turns the reading of the earlier messages of a thread on\nor off. Absent means on for a new binding and unchanged for an update.",
                     "type": "boolean"
                 },
                 "token": {
@@ -19368,6 +21973,15 @@ const docTemplate = `{
                 "window_minutes": {
                     "description": "WindowMinutes is the time window of the window mode, 1 to 10080.",
                     "type": "integer"
+                },
+                "write_mode": {
+                    "description": "WriteMode is off, propose or auto (see the connector record). Absent\nmeans off for a new binding and unchanged for an update.",
+                    "type": "string",
+                    "enum": [
+                        "off",
+                        "propose",
+                        "auto"
+                    ]
                 }
             }
         },
@@ -19676,7 +22290,7 @@ const docTemplate = `{
                     }
                 },
                 "applies": {
-                    "description": "Applies is false when commands run on this machine (applies_reason\nhost) or no Sandbox serves bash (none).",
+                    "description": "Applies is true when the add-on that runs the commands reports that it\nenforces the network policy. It is false when commands run on this\nmachine (applies_reason host), or no Sandbox serves bash or the add-on\ndoes not report enforcement (none).",
                     "type": "boolean"
                 },
                 "applies_reason": {
@@ -19695,6 +22309,14 @@ const docTemplate = `{
                 "effective": {
                     "description": "the lower of the two",
                     "type": "string"
+                },
+                "network": {
+                    "description": "Network names the network of addon in text and gives the preset titles\nthe add-on declares. Set with addon.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/schema.ChatsEgressNetwork"
+                        }
+                    ]
                 },
                 "preset": {
                     "description": "off, registries, all",
@@ -19750,6 +22372,14 @@ const docTemplate = `{
                 "isolation": {
                     "type": "string"
                 },
+                "network": {
+                    "description": "Network names the network of that add-on in text. Set with sandbox.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/schema.ChatsEgressNetwork"
+                        }
+                    ]
+                },
                 "ports": {
                     "type": "array",
                     "items": {
@@ -19763,7 +22393,7 @@ const docTemplate = `{
                     }
                 },
                 "sandbox": {
-                    "description": "Sandbox is the add-on that runs commands, empty when none serves;\nIsolation is isolated, host, or empty when unknown.",
+                    "description": "Sandbox is the add-on that runs commands, empty when none serves (the\nname of the field is kept for existing clients); Isolation is isolated,\nhost, or empty when unknown.",
                     "type": "string"
                 }
             }
@@ -19872,6 +22502,41 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/schema.ChatsEgressEvent"
                     }
+                }
+            }
+        },
+        "schema.ChatsEgressNetwork": {
+            "type": "object",
+            "properties": {
+                "presets": {
+                    "description": "Presets are the titles the add-on gives the host's presets; a preset\nthat is not listed keeps the host's title.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsEgressNetworkPreset"
+                    }
+                },
+                "title": {
+                    "description": "Title names the network in text: the declared title, else the title of\nthe commands tool.",
+                    "type": "string",
+                    "example": "Sandbox"
+                }
+            }
+        },
+        "schema.ChatsEgressNetworkPreset": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "enum": [
+                        "off",
+                        "registries",
+                        "all"
+                    ],
+                    "example": "off"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Closed"
                 }
             }
         },
@@ -19985,6 +22650,31 @@ const docTemplate = `{
                             "$ref": "#/definitions/schema.ChatsUsage"
                         }
                     ]
+                }
+            }
+        },
+        "schema.ChatsExecutionStatus": {
+            "type": "object",
+            "properties": {
+                "explanation": {
+                    "type": "string"
+                },
+                "generation": {
+                    "type": "string"
+                },
+                "incarnation": {
+                    "type": "string"
+                },
+                "isolation": {
+                    "type": "string"
+                },
+                "readiness": {
+                    "type": "string"
+                },
+                "unknown_reason": {
+                    "description": "UnknownReason says why the status is unknown: owner_unreachable,\nnot_reported, stale, invalid_status, not_selected, no_answer,\nreported_unknown or draft (the chat does not exist yet). Absent when the status is known.",
+                    "type": "string",
+                    "example": "owner_unreachable"
                 }
             }
         },
@@ -21273,6 +23963,13 @@ const docTemplate = `{
                 "addon_title": {
                     "type": "string"
                 },
+                "agent": {
+                    "description": "Agent and AgentName name the saved agent that owns a skill of the agent\nlayer: the agent proposed it and the owner confirmed it.",
+                    "type": "string"
+                },
+                "agent_name": {
+                    "type": "string"
+                },
                 "description": {
                     "type": "string"
                 },
@@ -21297,7 +23994,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "layer": {
-                    "description": "Layer is where it comes from: folder (a .skills folder of your files),\npersonal, shared, addon (an installed add-on ships it) or builtin.",
+                    "description": "Layer is where it comes from: folder (a .skills folder of your files),\nagent (a saved agent proposed it), personal, shared, addon (an installed\nadd-on ships it) or builtin.",
                     "type": "string"
                 },
                 "name": {
@@ -21306,6 +24003,10 @@ const docTemplate = `{
                 "path": {
                     "description": "Path is the path of its SKILL.md as the model sees it.",
                     "type": "string"
+                },
+                "removable": {
+                    "description": "Removable is true when the skill can be deleted from the Skills page\nalthough it cannot be edited there (a skill of the agent layer).",
+                    "type": "boolean"
                 },
                 "shadowed": {
                     "description": "Shadowed names the layer of a nearer skill with the same name, which wins.",
@@ -21458,6 +24159,14 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "connections": {
+                    "description": "Connections is the set of connections (connector binding IDs) the chat\nmay use for each add-on whose tools run with a credential, by add-on ID.\nEach must be one of your own for that add-on. A single string is read as\na set of one.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/connsets.Sets"
+                        }
+                    ]
                 },
                 "mcp_off": {
                     "type": "array",
@@ -21723,6 +24432,20 @@ const docTemplate = `{
         "schema.ChatsTrigger": {
             "type": "object",
             "properties": {
+                "acts": {
+                    "description": "Acts are the action classes that a run with nobody present may use:\nact.files, act.addons, act.addons:\u003cid\u003e, act.send, act.spend. A run\nwithout any only reads.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "acts_held": {
+                    "description": "ActsHeld are the act.* names that apply to a run now: Acts within the\ngrants of the agent, plus act.files when the plan names a file it writes.\nReadOnly is true when a run can only read, and ReadOnlyWhy says why:\ndeclared (the proposal said so), binding (a connection in read only mode\nmade it), no_acts (it holds none) or agent (its agent holds none of them).",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "agent_id": {
                     "type": "string"
                 },
@@ -21781,6 +24504,12 @@ const docTemplate = `{
                 },
                 "quiet_seconds": {
                     "type": "integer"
+                },
+                "read_only": {
+                    "type": "boolean"
+                },
+                "read_only_why": {
+                    "type": "string"
                 },
                 "schedule": {
                     "type": "string"
@@ -21981,6 +24710,13 @@ const docTemplate = `{
         "schema.ChatsTriggerWrite": {
             "type": "object",
             "properties": {
+                "acts": {
+                    "description": "Acts are the action classes that a run with nobody present may use\n(act.files, act.addons, act.addons:\u003cid\u003e, act.send, act.spend). Leave it\nout to keep the trigger's value; an empty list takes all of them away.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "agent_id": {
                     "description": "AgentID is optional. Model is needed when neither the agent nor the source\nchat names one.",
                     "type": "string"
@@ -24810,6 +27546,11 @@ const docTemplate = `{
                 "batch": {
                     "description": "Custom parameters - not present in the OpenAI API",
                     "type": "integer"
+                },
+                "chat_template_kwargs": {
+                    "description": "ChatTemplateKwargs is the per-request chat_template_kwargs field that\nllama.cpp's llama-server, vLLM and SGLang accept (e.g.\n{\"enable_thinking\": false}). Scalar values are folded into Metadata, so\nthey take the same path to the backend; an explicit Metadata key wins.",
+                    "type": "object",
+                    "additionalProperties": {}
                 },
                 "clip_skip": {
                     "description": "Diffusers",

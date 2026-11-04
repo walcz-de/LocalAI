@@ -14,6 +14,7 @@ import (
 	"github.com/mudler/xlog"
 	"gorm.io/gorm"
 
+	corebackend "github.com/mudler/LocalAI/core/backend"
 	"github.com/mudler/LocalAI/core/config"
 	"github.com/mudler/LocalAI/core/http/auth"
 	mcpendpoint "github.com/mudler/LocalAI/core/http/endpoints/mcp"
@@ -120,6 +121,7 @@ func (a *Application) initStudioService() {
 		PageConsents:       a.studioPageConsents(),
 		SharedFolderAudit:  a.studioSharedFolderAudit(),
 		Proposals:          a.studioProposalStore(),
+		UserSetting:        a.studioUserSetting,
 		EgressSettings:     a.studioEgressSettings,
 		EgressAudit:        a.studioEgressAudit(),
 		EgressAuditDays:    func() int { return a.applicationConfig.EffectiveChatsEgressAuditDays() },
@@ -315,20 +317,32 @@ func (a *Application) loadStudioUser(ctx context.Context, id string) (*auth.User
 	return &u, nil
 }
 
-// studioContextTokens is the context window of a model, or zero when its config
-// does not say.
+// studioModelConfig is the config of the model that serves a name. An alias is
+// a redirect whose own config carries no model settings (the loader gives it the
+// generic default window), so the settings come from its target.
+func (a *Application) studioModelConfig(model string) (config.ModelConfig, bool) {
+	bcl := a.ModelConfigLoader()
+	name, _ := bcl.ResolveAliasName(model)
+	return bcl.GetModelConfig(name)
+}
+
+// studioContextTokens is the context window a request to the model can use. A
+// config without context_size runs the backend with its default window, so that
+// is the limit (the same one /v1/models/capabilities reports), not a guess of
+// the harness. Zero only for a model with no local config (a remote one), whose
+// window is not known here.
 func (a *Application) studioContextTokens(model string) int {
-	cfg, ok := a.ModelConfigLoader().GetModelConfig(model)
-	if !ok || cfg.ContextSize == nil {
+	cfg, ok := a.studioModelConfig(model)
+	if !ok {
 		return 0
 	}
-	return *cfg.ContextSize
+	return corebackend.EffectiveRequestContextSize(cfg)
 }
 
 // studioModalities says which inputs a chat model takes natively, from its
 // configuration. An unknown model takes none.
 func (a *Application) studioModalities(model string) studio.Modalities {
-	cfg, ok := a.ModelConfigLoader().GetModelConfig(model)
+	cfg, ok := a.studioModelConfig(model)
 	if !ok {
 		return studio.Modalities{}
 	}
@@ -341,7 +355,7 @@ func (a *Application) studioModalities(model string) studio.Modalities {
 // limit is the model's agent.max_iterations, else chats_max_iterations.
 func (a *Application) studioAgentOptions(model string) nibharness.AgentOptions {
 	opts := nibharness.AgentOptions{Iterations: a.applicationConfig.EffectiveChatsMaxIterations()}
-	cfg, ok := a.ModelConfigLoader().GetModelConfig(model)
+	cfg, ok := a.studioModelConfig(model)
 	if !ok {
 		return opts
 	}

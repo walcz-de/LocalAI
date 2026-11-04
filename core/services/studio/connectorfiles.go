@@ -4,14 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"path"
 	"strings"
 	"time"
 
 	"github.com/mudler/LocalAI/core/services/studio/connectors"
 	"github.com/mudler/LocalAI/core/services/studio/session"
-	"github.com/mudler/LocalAI/core/services/studio/workspace"
 	"github.com/mudler/LocalAI/pkg/addons/contract"
 )
 
@@ -46,27 +44,6 @@ func outboundType(name string) (string, bool) {
 }
 
 var errFileTooLarge = errors.New("the file is too large")
-
-// readChatFile reads a file of the chat's access, at most limit bytes. A
-// chat of a scoped agent reads only inside its folders.
-func (s *Service) readChatFile(ctx context.Context, x session.Access, p string, limit int64) ([]byte, error) {
-	r, n, err := s.d.Files.Store().Open(ctx, x.Actor(), p)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = r.Close() }()
-	if n.Size > limit {
-		return nil, errFileTooLarge
-	}
-	data, err := io.ReadAll(io.LimitReader(r, limit+1))
-	if err != nil {
-		return nil, err
-	}
-	if int64(len(data)) > limit {
-		return nil, errFileTooLarge
-	}
-	return data, nil
-}
 
 // turnFiles are the files that a turn of a chat made or changed, among those
 // the chat's access reaches. turn is the number of the turn; 0 means it is
@@ -128,6 +105,10 @@ func (c *Connectors) sendFiles(b connectors.Binding, token string, m contract.Co
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
+	limits := c.FileLimits(ctx, b)
+	if limits.Send.Bytes <= 0 {
+		return // the kind declares no way to send files
+	}
 	// The files go with the chat's access, resolved now: a scoped agent's
 	// reply sends nothing from outside its folders, whatever was marked.
 	x, err := c.svc.ChatAccess(ctx, b.Owner, chatID)
@@ -137,6 +118,7 @@ func (c *Connectors) sendFiles(b connectors.Binding, token string, m contract.Co
 	}
 	files := c.outgoing(ctx, b, x, chatID, turn, since)
 	var notes []string
+	var sent int64
 	for i, f := range files {
 		if i == maxFilesPerTurn {
 			notes = append(notes, fmt.Sprintf("%d more files are in the chat's files.", len(files)-i))
@@ -151,25 +133,8 @@ func (c *Connectors) sendFiles(b connectors.Binding, token string, m contract.Co
 			}
 			continue
 		}
-		data, err := c.svc.readChatFile(ctx, x, f.path, contract.MaxConnectorFileBytes)
-		switch {
-		case errors.Is(err, workspace.ErrNotFound):
-			continue // gone since, or outside the chat's access: not named
-		case errors.Is(err, errFileTooLarge):
-			notes = append(notes, fmt.Sprintf("%s is too large to send here (the limit is 1 MB). It is in the chat's files.", f.name))
-			continue
-		case err != nil:
-			c.log.Warn("studio: could not read a file for a connector", "binding", b.ID, "error", err)
-			notes = append(notes, fmt.Sprintf("I could not read %s.", f.name))
-			continue
-		case len(data) == 0:
-			continue // an empty file says nothing, and platforms refuse it
-		}
-		err = c.send(ctx, b, contract.ConnectorRequest{Op: contract.ConnectorOpSendFile, Token: token, Chat: m.Chat, Thread: m.Thread,
-			File: &contract.ConnectorFile{Name: f.name, MIME: mimeType, Data: data}})
-		if err != nil {
-			c.log.Warn("studio: could not send a file to a connector", "binding", b.ID, "kind", b.Kind, "error", err)
-			notes = append(notes, fmt.Sprintf("I could not send %s%s.", f.name, sendReason(err)))
+		if note := c.sendHandled(ctx, b, token, m, x, f, mimeType, limits, &sent); note != "" {
+			notes = append(notes, note)
 		}
 	}
 	if len(notes) > 0 {

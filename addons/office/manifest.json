@@ -1,7 +1,7 @@
 {
   "api": {
-    "max": 1,
-    "min": 1
+    "max": 2,
+    "min": 2
   },
   "arch": "amd64",
   "capabilities": {
@@ -15,19 +15,62 @@
     "skillDefinitions": [
       {
         "name": "xlsx",
-        "shadows": "xlsx"
+        "shadows": "xlsx",
+        "slot": {
+          "extensions": [
+            ".xlsx"
+          ],
+          "kind": "documents",
+          "library": "openpyxl",
+          "words": [
+            "xlsx",
+            "excel"
+          ]
+        }
       },
       {
         "name": "docx",
-        "shadows": "docx"
+        "shadows": "docx",
+        "slot": {
+          "extensions": [
+            ".docx"
+          ],
+          "kind": "documents",
+          "library": "python-docx",
+          "words": [
+            "docx",
+            "word"
+          ]
+        }
       },
       {
         "name": "pptx",
-        "shadows": "pptx"
+        "shadows": "pptx",
+        "slot": {
+          "extensions": [
+            ".pptx"
+          ],
+          "kind": "documents",
+          "library": "python-pptx",
+          "words": [
+            "pptx",
+            "powerpoint"
+          ]
+        }
       },
       {
         "name": "pdf",
-        "shadows": "pdf"
+        "shadows": "pdf",
+        "slot": {
+          "extensions": [
+            ".pdf"
+          ],
+          "kind": "documents",
+          "library": "pypdf",
+          "words": [
+            "pdf"
+          ]
+        }
       }
     ],
     "toolDefinitions": [

@@ -20,7 +20,7 @@ const (
 	MaxTotalBytes = 6 << 10
 	// MaxProfileBytes is the most bytes of an agent profile.
 	MaxProfileBytes = 4 << 10
-	// MaxDetailBytes is the most bytes one memory_read call returns.
+	// MaxDetailBytes is the most bytes one context_read call returns.
 	MaxDetailBytes = 8 << 10
 	// MaxSources is the most sources a registry holds.
 	MaxSources = 8
@@ -70,6 +70,10 @@ func (s Source) limit() int {
 }
 
 var placeholder = regexp.MustCompile(`\{[^{}]*\}`)
+
+// Validate reports why a registry would refuse the source. A caller that builds
+// sources for one turn, instead of registering them, checks them with it.
+func (s Source) Validate() error { return s.validate() }
 
 func (s Source) validate() error {
 	bad := func(format string, args ...any) error {
@@ -147,8 +151,12 @@ func (r *Registry) Sources() []Source {
 	r.mu.RLock()
 	out := slices.Clone(r.sources)
 	r.mu.RUnlock()
-	slices.SortStableFunc(out, func(a, b Source) int {
+	sortSources(out)
+	return out
+}
+
+func sortSources(s []Source) {
+	slices.SortStableFunc(s, func(a, b Source) int {
 		return slices.Index(scopeOrder, a.Scope) - slices.Index(scopeOrder, b.Scope)
 	})
-	return out
 }

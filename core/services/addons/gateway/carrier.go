@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/mudler/LocalAI/core/services/addons"
@@ -146,6 +147,9 @@ type wireRequest struct {
 	// Library marks a library call: a change of the library sources, or the
 	// owner's half of a backend install. Such a call is never a typed dispatch.
 	Library *LibraryCall `json:"library,omitempty"`
+	// HostGrants marks a host access call (grants, deny rules, blanket
+	// approval). Such a call is never a typed dispatch.
+	HostGrants *HostGrantsCall `json:"hostGrants,omitempty"`
 }
 
 // exclusive reports whether exactly one routing payload is set. Each branch of
@@ -154,7 +158,7 @@ type wireRequest struct {
 // claims.
 func (w wireRequest) exclusive() bool {
 	set := 0
-	for _, present := range []bool{w.ExecutionBinding != nil, w.Observation != nil, w.Relay != nil, w.Proposal != nil, w.Artifact != nil, w.Apps != nil, w.Resource != nil, w.Library != nil} {
+	for _, present := range []bool{w.ExecutionBinding != nil, w.Observation != nil, w.Relay != nil, w.Proposal != nil, w.Artifact != nil, w.Apps != nil, w.Resource != nil, w.Library != nil, w.HostGrants != nil} {
 		if present {
 			set++
 		}
@@ -327,6 +331,22 @@ func (c *Carrier) OwnerHandler(g *Gateway) (http.Handler, error) {
 			_ = json.NewEncoder(w).Encode(out)
 			return
 		}
+		if wire.HostGrants != nil {
+			call := *wire.HostGrants
+			// The owner classifies by the call, not by the action the peer wrote.
+			if !wire.exclusive() || !call.valid() || wire.Request.Action != call.wireAction() {
+				http.Error(w, "invalid binding", 400)
+				return
+			}
+			// The human mark is the signed field of this request, honored for
+			// a host access call only.
+			hctx := r.Context()
+			if m.HumanSurface {
+				hctx = WithHumanSurface(hctx)
+			}
+			g.hostGrantsLocalReply(hctx, w, actor, call)
+			return
+		}
 		if wire.Library != nil {
 			call := *wire.Library
 			// The owner classifies by the call, not by the action the peer wrote.
@@ -363,7 +383,7 @@ func (c *Carrier) OwnerHandler(g *Gateway) (http.Handler, error) {
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(list)
+			_ = json.NewEncoder(w).Encode(newAppsWire(list))
 			return
 		}
 		if wire.Artifact != nil {
@@ -483,6 +503,10 @@ func matches(e error, set []error) bool {
 // unavailable: an unknown failure is never reported as success or as a policy
 // decision.
 func StatusFor(e error) int {
+	var limited *contract.ErrRateLimited
+	if errors.As(e, &limited) {
+		return http.StatusTooManyRequests
+	}
 	if e != nil && !matches(e, unavailable) && matches(e, denials) {
 		return http.StatusForbidden
 	}
@@ -533,6 +557,23 @@ func typedError(w http.ResponseWriter, e error) {
 		_ = json.NewEncoder(w).Encode(resourceWire{Type: wireInvalid})
 		return
 	}
+	var limited *contract.ErrRateLimited
+	if errors.As(e, &limited) {
+		// The service behind the add-on asks the caller to wait. Nothing
+		// failed for good, so the status is not a denial.
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Retry-After", strconv.Itoa(limited.Seconds()))
+		w.WriteHeader(http.StatusTooManyRequests)
+		_ = json.NewEncoder(w).Encode(sdkWire{Type: wireRateLimited, RetryAfter: limited.Seconds()})
+		return
+	}
+	var refusal2 *CredentialRefusal
+	if errors.As(e, &refusal2) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(sdkWire{Type: refusal2.Code, Allowed: refusal2.Allowed})
+		return
+	}
 	var requirements *addons.HostRequirementsRefusal
 	if errors.As(e, &requirements) {
 		w.Header().Set("Content-Type", "application/json")
@@ -565,6 +606,7 @@ const (
 	wirePackage      = "package_unverified"
 	wireNotPermitted = "not_permitted"
 	wireUnreachable  = "resource_unreachable"
+	wireRateLimited  = "rate_limited"
 )
 
 // denialType is the wire type of a denial that callers tell apart, or "".
@@ -599,7 +641,8 @@ func operationCause(e error) string {
 // operation that cross the wire.
 func IsOperationCause(code string) bool {
 	switch code {
-	case addons.CauseLibraryUnavailable, addons.CauseLibraryConflict, addons.CauseReleaseNotFound, addons.CausePackageFetch, addons.CauseInstallStorage:
+	case addons.CauseLibraryUnavailable, addons.CauseLibraryConflict, addons.CauseReleaseNotFound, addons.CausePackageFetch, addons.CauseInstallStorage,
+		addons.CauseFileMissing, addons.CauseVersionNotNewer, addons.CauseDowngradeRefused:
 		return true
 	}
 	return false
@@ -614,6 +657,10 @@ type sdkWire struct {
 	Min            uint64                  `json:"min"`
 	Max            uint64                  `json:"max"`
 	Host           uint64                  `json:"host"`
+	// Allowed and RetryAfter belong to the types resource_not_allowed and
+	// rate_limited.
+	Allowed    []string `json:"allowed,omitempty"`
+	RetryAfter int      `json:"retryAfter,omitempty"`
 }
 
 // SDKRefusalError is the error of a failed operation whose cause is an SDK
@@ -730,6 +777,8 @@ func (c *Carrier) send(ctx context.Context, a contract.Actor, wire wireRequest) 
 	if b, ok := hostops.BindingOf(ctx); ok {
 		m.Chat = &b
 	}
+	// Only a host access call carries the mark, whatever the context holds.
+	m.HumanSurface = wire.HostGrants != nil && HumanSurfaceOf(ctx)
 	m.Sign(c.config.SigningKey)
 	b, _ := json.Marshal(m)
 	req, e := http.NewRequestWithContext(ctx, "POST", c.config.OwnerAddress+"/addons/forward", bytes.NewReader(b))
@@ -775,12 +824,15 @@ func (c *Carrier) send(ctx context.Context, a contract.Actor, wire wireRequest) 
 					return nil, SDKRefusalError(&contract.SDKRefusal{Min: b.Min, Max: b.Max, Host: b.Host})
 				case wirePackage:
 					return nil, fmt.Errorf("%w: %w", addons.ErrOperationFailed, packages.ErrPackage)
-				case addons.CauseLibraryUnavailable, addons.CauseLibraryConflict, addons.CauseReleaseNotFound, addons.CausePackageFetch, addons.CauseInstallStorage:
+				case addons.CauseLibraryUnavailable, addons.CauseLibraryConflict, addons.CauseReleaseNotFound, addons.CausePackageFetch, addons.CauseInstallStorage,
+					addons.CauseFileMissing, addons.CauseVersionNotNewer, addons.CauseDowngradeRefused:
 					return nil, fmt.Errorf("%w: %w", addons.ErrOperationFailed, &addons.FailureCause{Code: b.Type})
 				case wireNotPermitted:
 					return nil, ErrNotPermitted
 				case wireUnreachable:
 					return nil, ErrResourceUnreachable
+				case CodeResourceNotAllowed, CodeNoCredential, CodeWriteNotAllowed, CodeSelectConnection:
+					return nil, &CredentialRefusal{Code: b.Type, Allowed: b.Allowed}
 				}
 			}
 			return nil, ErrForbidden
@@ -792,6 +844,12 @@ func (c *Carrier) send(ctx context.Context, a contract.Actor, wire wireRequest) 
 		}
 		if wire.Resource != nil {
 			return nil, resourceReplyErrorFor(resp.Body, resp.StatusCode, wire.Request)
+		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			var b sdkWire
+			if decode(io.LimitReader(resp.Body, 32768), &b) == nil && b.Type == wireRateLimited {
+				return nil, &contract.ErrRateLimited{RetryAfter: b.RetryAfter}
+			}
 		}
 		if resp.StatusCode == http.StatusBadRequest {
 			// The owner's typed refusal is a decision, not an outage: nothing
@@ -836,7 +894,7 @@ var resourceRead = map[string]bool{"resource-list": true, "resource-grants": tru
 // mutation fails closed: only the known read actions are exempt, so an action
 // added later is reported as an unknown outcome until it is classified.
 func mutation(action string) bool {
-	return action != ActionHostSettingsRead && action != executionBindingAction && action != executionStatusAction && action != "read" && action != "operation-status" && action != "proposal-get" && action != "proposal-reconcile" && action != "proposal-list" && action != "artifact-status" && action != appsListAction && !readManagement[action] && !resourceRead[action] && !libraryRead[action]
+	return action != ActionHostSettingsRead && action != executionBindingAction && action != executionStatusAction && action != "read" && action != "operation-status" && action != "proposal-get" && action != "proposal-reconcile" && action != "proposal-list" && action != "artifact-status" && action != appsListAction && !readManagement[action] && !resourceRead[action] && !libraryRead[action] && !hostGrantsRead[action]
 }
 
 // Act forwards an action call to the owner and waits for its answer, up to the

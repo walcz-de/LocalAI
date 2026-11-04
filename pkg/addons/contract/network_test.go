@@ -13,13 +13,13 @@ import (
 var _ = Describe("The network capability", func() {
 	const bashSchema = `{"type":"object","properties":{"command":{"type":"string"}},"required":["command"],"additionalProperties":false}`
 
-	// withNetwork is a manifest of API 2 that asks for the network-policy
+	// withNetwork is a manifest that asks for the network-policy
 	// control. It runs no command tool unless shadowsBash is set, so what is
 	// drawn can only come from the declared capability.
 	withNetwork := func(n *NetworkCapability, shadowsBash bool) Manifest {
 		m, err := ParseManifest(fixture())
 		Expect(err).NotTo(HaveOccurred())
-		m.API = VersionRange{Min: 1, Max: 2}
+		m.API = VersionRange{Min: 2, Max: 2}
 		m.Capabilities = Capabilities{
 			Service:        true,
 			Network:        n,
@@ -36,21 +36,14 @@ var _ = Describe("The network capability", func() {
 	}
 	host := func() HostCompatibility {
 		h := compatible()
-		h.API, h.APIMin = HostAPIVersion, HostAPIMin
 		h.SDK = HostSDKVersion
 		return h
 	}
 	declared := &NetworkCapability{Kind: NetworkKindEgressCheck, Title: "Runbox network",
 		Presets: []NetworkPreset{{ID: "off", Title: "Closed"}, {ID: "all", Title: "Open"}}}
 
-	It("is valid when the manifest accepts API 2 and lists the egress check", func() {
+	It("is valid when the manifest lists the egress check", func() {
 		Expect(ValidateManifest(withNetwork(declared, false), host())).To(Succeed())
-	})
-
-	It("needs a manifest that accepts API 2", func() {
-		m := withNetwork(declared, false)
-		m.API = VersionRange{Min: 1, Max: 1}
-		Expect(ValidateManifest(m, host())).To(MatchError(ContainSubstring("api 2")))
 	})
 
 	It("needs the egress check among the host operations", func() {
@@ -92,10 +85,8 @@ var _ = Describe("The network capability", func() {
 			Expect(EntitledControls(withNetwork(declared, false), []string{"workspace."})).To(BeEmpty())
 			Expect(EntitledControls(withNetwork(declared, true), nil)).To(BeEmpty())
 		})
-		It("is drawn for a manifest that declares no network and replaces bash, as before", func() {
-			Expect(EntitledControls(withNetwork(nil, true), grants)).To(Equal([]string{ControlNetworkPolicy}))
-		})
-		It("is not drawn for a manifest that declares no network and does not replace bash", func() {
+		It("is not drawn for a manifest that declares no network, whether or not it replaces bash", func() {
+			Expect(EntitledControls(withNetwork(nil, true), grants)).To(BeEmpty())
 			Expect(EntitledControls(withNetwork(nil, false), grants)).To(BeEmpty())
 		})
 		It("does not read the add-on ID", func() {
@@ -127,11 +118,10 @@ var _ = Describe("The network capability", func() {
 			Expect(m.Capabilities.Network).To(Equal(&NetworkCapability{Kind: NetworkKindEgressCheck, Title: "Sandbox"}))
 			Expect(EntitledControls(m, []string{"egress."})).To(ContainElement(ControlNetworkPolicy))
 		})
-		It("keeps the control through its bash tool when an older manifest declares no network", func() {
+		It("loses the control when it declares no network", func() {
 			m := load()
 			m.Capabilities.Network = nil
-			Expect(EntitledControls(m, []string{"egress."})).To(ContainElement(ControlNetworkPolicy))
-			Expect(EntitledControls(m, nil)).NotTo(ContainElement(ControlNetworkPolicy))
+			Expect(EntitledControls(m, []string{"egress."})).NotTo(ContainElement(ControlNetworkPolicy))
 		})
 	})
 })

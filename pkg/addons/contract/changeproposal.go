@@ -105,6 +105,10 @@ type ChangeProposal struct {
 	BaseHash string         `json:"base_hash,omitempty"`
 	Source   ChangeSource   `json:"source,omitzero"`
 	Status   ProposalStatus `json:"status"`
+	// Auto is true when the host applied the change at once because the person
+	// chose so (the memory save setting), not after a confirmation. The change
+	// set is the same and can be undone the same way.
+	Auto bool `json:"auto,omitempty"`
 	// Rev is the workspace change set that applying wrote; RevertRev the one
 	// that reverting wrote. Zero until then.
 	Rev       int64     `json:"rev,omitempty"`
@@ -126,6 +130,9 @@ const (
 	MaxChangesPerHour = 5
 	// MaxChangeBytes is the largest content of a proposal.
 	MaxChangeBytes = 16 << 10
+	// MaxPageChangeBytes is the largest content of a page proposal: all the
+	// files of the page together.
+	MaxPageChangeBytes = 256 << 10
 	// MaxProfileBytes is the largest agent profile.
 	MaxProfileBytes = 4 << 10
 )

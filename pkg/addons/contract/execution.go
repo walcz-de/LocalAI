@@ -6,10 +6,6 @@ import (
 	"slices"
 )
 
-// MinExecutionAPI is the first manifest API version that knows the execution
-// descriptor. A manifest that declares one must accept it.
-const MinExecutionAPI uint64 = 2
-
 // ExecutionClassCommands is the class of a tool that runs shell commands and
 // code: the tool that shadows bash.
 const ExecutionClassCommands = "commands"
@@ -88,8 +84,7 @@ func CommandsTool(defs []ToolDefinition) (ToolDefinition, bool) {
 // IsolatedSkills lists the skills of an add-on that need its own commands
 // provider to report isolated execution: the document-slot skills of an
 // add-on with a commands tool, unless its descriptor says it does not provide
-// the runtime for documents. A commands tool without a descriptor (a manifest
-// of API 1) counts as providing it, so such an add-on keeps the check.
+// the runtime for documents. A commands tool without a descriptor counts as providing it, so such an add-on keeps the check.
 func IsolatedSkills(defs []ToolDefinition, skills []SkillDefinition) []string {
 	tool, ok := CommandsTool(defs)
 	if !ok {
@@ -98,5 +93,11 @@ func IsolatedSkills(defs []ToolDefinition, skills []SkillDefinition) []string {
 	if e := tool.Execution; e != nil && (e.Skills == nil || !slices.Contains(e.Skills.ProvidesRuntimeFor, SkillKindDocuments)) {
 		return nil
 	}
-	return ShadowedSkills(skills)
+	var out []string
+	for _, s := range SlotsOf(skills) {
+		if s.Kind == SlotKindDocuments {
+			out = append(out, s.Name)
+		}
+	}
+	return out
 }

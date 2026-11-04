@@ -134,7 +134,7 @@ export const backendsApi = {
 // Chats API: conversations the server keeps. A message sent while a turn runs
 // waits and reaches the model, with any others, at its next request.
 export const chatsApi = {
-  list: (limit, kind) => fetchJSON(chatsListPath(API_CONFIG.endpoints.chats, limit, kind)),
+  list: (limit, kind, origin) => fetchJSON(chatsListPath(API_CONFIG.endpoints.chats, limit, kind, origin)),
   // With an agent, its model (when it has one) replaces model. With assistant,
   // the chat gets the LocalAI management tools (admin only, setting on).
   // switches are the drafted switches of a new chat (useChatSwitches): the
@@ -371,21 +371,33 @@ export const sharedFoldersApi = {
 // Chat skills: folders with a SKILL.md in four layers, switched per chat.
 const enc2 = encodeURIComponent
 // The query of the draft lists: the model and the agent of the new chat.
-function draftQuery(model, agentId) {
+// switches (draft add-ons only) are the draft's choices so far, as the create
+// request takes them: addons_off, builtins_off and builtins_on, arrays of names.
+function draftQuery(model, agentId, switches) {
   const q = new URLSearchParams()
   if (model) q.set('model', model)
   if (agentId) q.set('agent_id', agentId)
+  for (const k of ['addons_off', 'builtins_off', 'builtins_on']) {
+    if (switches?.[k]?.length) q.set(k, switches[k].join(','))
+  }
+  // The connections enabled for each add-on: one addon:binding pair per binding.
+  const picked = Object.entries(switches?.connections || {}).flatMap(([addon, ids]) => [].concat(ids || []).filter(Boolean).map((id) => `${addon}:${id}`))
+  if (picked.length) q.set('connections', picked.join(','))
   const s = q.toString()
   return s ? `?${s}` : ''
 }
 
+const refQuery = (ref) => (ref.addon ? `?addon=${enc2(ref.addon)}` : ref.agent ? `?agent=${enc2(ref.agent)}` : '')
 export const chatSkillsApi = {
-  list: (chat) => fetchJSON(`/api/chats/skills${chat ? `?chat=${enc2(chat)}` : ''}`),
-  // addon names the add-on of a skill of the addon layer.
-  get: (layer, name, addon) => fetchJSON(`/api/chats/skills/${enc2(layer)}/${enc2(name)}${addon ? `?addon=${enc2(addon)}` : ''}`),
+  // agents: also list the skills of your saved agents (the Skills page); a
+  // chat's own list has the layer of its agent already.
+  list: (chat, { agents = false } = {}) => fetchJSON(`/api/chats/skills${chat ? `?chat=${enc2(chat)}` : agents ? '?agents=true' : ''}`),
+  // ref names the owner of a skill of the addon layer ({ addon }) or of the
+  // agent layer ({ agent }): see skillRef in utils/chatSkills.js.
+  get: (layer, name, ref = {}) => fetchJSON(`/api/chats/skills/${enc2(layer)}/${enc2(name)}${refQuery(ref)}`),
   create: (body) => postJSON('/api/chats/skills', body),
   update: (layer, name, body) => fetchJSON(`/api/chats/skills/${enc2(layer)}/${enc2(name)}`, { method: 'PUT', body: JSON.stringify(body) }),
-  remove: (layer, name) => fetchJSON(`/api/chats/skills/${enc2(layer)}/${enc2(name)}`, { method: 'DELETE' }),
+  remove: (layer, name, ref = {}) => fetchJSON(`/api/chats/skills/${enc2(layer)}/${enc2(name)}${refQuery(ref)}`, { method: 'DELETE' }),
   setOff: (chat, off) => fetchJSON(`/api/chats/${enc2(chat)}/skills`, { method: 'PUT', body: JSON.stringify({ off }) }),
 }
 
@@ -393,8 +405,13 @@ export const chatSkillsApi = {
 export const chatAddonsApi = {
   list: (chat) => fetchJSON(`/api/chats/${enc2(chat)}/addons`),
   // The add-ons of a chat that does not exist yet, on model with the agent.
-  draft: (model, agentId) => fetchJSON(`/api/chats/draft/addons${draftQuery(model, agentId)}`),
+  // switches: the draft's choices ({addons_off, builtins_off, builtins_on}), so the
+  // commands state answers for them (see draftListSwitches).
+  draft: (model, agentId, switches) => fetchJSON(`/api/chats/draft/addons${draftQuery(model, agentId, switches)}`),
   setOff: (chat, off) => fetchJSON(`/api/chats/${enc2(chat)}/addons`, { method: 'PUT', body: JSON.stringify({ off }) }),
+  // The connections the chat may use for an add-on that runs with a credential
+  // (binding IDs); an empty list clears the choice. The answer is the add-on list.
+  setConnections: (chat, addon, connections) => fetchJSON(`/api/chats/${enc2(chat)}/connections`, { method: 'PUT', body: JSON.stringify({ addon, connections }) }),
 }
 
 // The built-in bash on this machine: the answer to the card that asks before a
@@ -464,6 +481,8 @@ export const chatAgentsApi = {
   // agent and says in `warnings` what it changed.
   exportFile: (id) => fetchJSON(`/api/chats/agents/${enc2(id)}/export`),
   importFile: (data) => postJSON('/api/chats/agents/import', data),
+  // The builtin grants an agent can hold: { grants: [{ name, title, description, sensitive }] }.
+  builtinGrants: () => fetchJSON('/api/chats/agents/builtin-grants'),
   templates: () => fetchJSON('/api/chats/agents/templates'),
   fromTemplate: (id, name) => postJSON(`/api/chats/agents/templates/${enc2(id)}/create`, name ? { name } : {}),
   runs: (id, limit) => fetchJSON(`/api/chats/agents/${enc2(id)}/runs${q({ limit })}`),
@@ -519,7 +538,7 @@ export const chatTriggersApi = {
   runs: (id) => fetchJSON(`/api/chats/triggers/${enc2(id)}/runs`),
   preview: (when, tz) => fetchJSON(`/api/chats/triggers/preview${q({ when, tz, n: 3 })}`),
   proposals: (chat) => fetchJSON(`/api/chats/triggers/proposals${q({ chat })}`),
-  // One proposal and what became of it: { state: pending|accepted|declined|undone, trigger, answered_at, can_undo, undo_blocked }.
+  // One proposal and what became of it: { state: pending|accepted|declined|expired|undone, trigger, answered_at, can_undo, undo_blocked }.
   proposal: (id) => fetchJSON(`/api/chats/triggers/proposals/${enc2(id)}`),
   undoProposal: (id) => postJSON(`/api/chats/triggers/proposals/${enc2(id)}/undo`, {}),
   reopenProposal: (id) => postJSON(`/api/chats/triggers/proposals/${enc2(id)}/reopen`, {}),

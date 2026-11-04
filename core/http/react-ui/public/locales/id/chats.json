@@ -22,6 +22,7 @@
       "undone": "Diurungkan:",
       "again": "Jadwalkan lagi",
       "declined": "Ditolak:",
+      "expired": "Kedaluwarsa:",
       "restore": "Pulihkan",
       "blocked": {
         "ran": "Pemicu ini sudah pernah berjalan; hapus dari halaman Pemicu.",
@@ -55,7 +56,8 @@
       "costUnknown_one": "Token per jalan diketahui setelah jalan pertama. Paling banyak {{count}} jalan per hari.",
       "remoteNote": "{{model}} adalah layanan jarak jauh: apa yang dibaca sebuah jalan meninggalkan server ini.",
       "stopWidget": "Jeda dari widget, atau hapus di Pemicu",
-      "stop": "Matikan atau hapus di Pemicu"
+      "stop": "Matikan atau hapus di Pemicu",
+      "actsLabel": "Izin"
     }
   },
   "mcpPage": {
@@ -317,7 +319,8 @@
       "files": "File Anda",
       "media": "Gambar dan audio",
       "collections": "Koleksi",
-      "subagents": "Sub-agen"
+      "subagents": "Sub-agen",
+      "changes": "Perubahan memori dan profil"
     },
     "builtinBy": "{{tools}} · bawaan",
     "builtinByAddon": "{{tools}} · dilayani oleh {{provider}}",
@@ -329,6 +332,48 @@
     "shell": {
       "machine": "Mesin ini",
       "isolated": "Perintah berjalan terisolasi"
+    },
+    "describe": {
+      "shell": "Model dapat menjalankan perintah shell dan skrip. Perintah berjalan di add-on yang mengisolasinya jika ada yang terpasang, jika tidak langsung di mesin ini.",
+      "files": "Model dapat membuat daftar, membaca, menulis, mengedit, memindahkan, menghapus, dan mencari berkas Anda, serta membaca dokumen. Chat agen yang bekerja di satu folder hanya menjangkau folder itu.",
+      "web": "Model dapat mencari di web dan membaca halaman publik dari alamatnya. Alamat di dalam jaringan Anda ditolak kecuali administrator mengizinkannya.",
+      "media": "Model dapat mendeskripsikan gambar atau menyalin rekaman dari berkas Anda menjadi teks dengan model pembantu.",
+      "collections": "Model dapat membuat daftar koleksi Anda dan mencari bagian yang cocok dengan sebuah pertanyaan.",
+      "subagents": "Model dapat memulai sub-agen yang mengerjakan satu tugas dengan sakelar yang sama seperti chat ini, lalu melapor.",
+      "saved_agents": "Model dapat membuat daftar agen tersimpan Anda dan memulai salah satunya sebagai sub-agen, dengan instruksi dan model agen itu.",
+      "triggers": "Model dapat mengusulkan, membuat daftar, mengubah, dan menghapus pemicu: tugas yang berjalan sendiri pada waktu tertentu atau saat berkas masuk ke folder. Pemicu baru atau perubahan menunggu di kartu dalam chat sampai Anda mengonfirmasi; menjeda atau melanjutkan pemicu berlaku langsung dan bisa dibatalkan.",
+      "changes": "Model dapat mengusulkan perubahan pada catatan memori Anda atau aturan tetap sebuah agen, dan membatalkan perubahan yang sudah Anda konfirmasi. Tidak ada yang berubah sampai Anda mengonfirmasi usulan di kartu dalam chat."
+    },
+    "whenOff": {
+      "shell": "Model dapat menulis berkas tetapi tidak dapat menjalankan apa pun.",
+      "files": "Model tidak dapat melihat atau mengubah berkas Anda.",
+      "web": "Model tidak dapat mencari apa pun secara daring.",
+      "media": "Model tidak dapat membaca gambar atau rekaman sendiri.",
+      "collections": "Model tidak dapat membaca koleksi Anda.",
+      "subagents": "Model bekerja sendiri.",
+      "saved_agents": "Model tidak dapat melihat atau memulai agen tersimpan Anda.",
+      "triggers": "Model tidak dapat membuat atau mengelola pemicu. Proses yang dimulai oleh pemicu atau konektor tidak pernah memilikinya.",
+      "changes": "Model tidak dapat mengusulkan perubahan pada memori Anda atau aturan agen."
+    },
+    "addonDescribe_one": "Memberi model {{count}} alat dari add-on ini.",
+    "addonDescribe_other": "Memberi model {{count}} alat dari add-on ini.",
+    "serverDescribe": "Server MCP milik model: alatnya ditawarkan kepada model.",
+    "connectorDescribe": "Salah satu konektor MCP Anda: alatnya ditawarkan kepada model.",
+    "gone": "Tidak tersedia lagi di sini. Matikan untuk menghapusnya.",
+    "grants": "Yang boleh diubah agen",
+    "grantSensitive": "Sensitif: ini mengubah apa yang boleh dilakukan atau dijangkau agen nanti.",
+    "connection": {
+      "label": "Koneksi",
+      "help": "Pilih koneksi yang boleh dipakai chat ini. Asisten hanya bisa memakai yang Anda centang.",
+      "helpMany": "Asisten menyebut koneksi di setiap tindakan dan hanya bisa menyebut yang dicentang.",
+      "sole": "Ini satu-satunya koneksi Anda, jadi dipakai.",
+      "choose": "Pilih setidaknya satu koneksi untuk memakai alat ini",
+      "none": "Belum ada koneksi",
+      "create": "Tambah koneksi",
+      "byAgent": "Agen chat ini menetapkan koneksi. Ubah di agen.",
+      "agentLabel": "Koneksi untuk chat agen ini",
+      "agentHelp": "Chat agen ini hanya boleh memakai koneksi ini dan tidak bisa mengubahnya.",
+      "perChatHelp": "Belum dipilih: setiap chat memilih sendiri."
     }
   },
   "vision": {
@@ -636,6 +681,7 @@
     "failed": "Perubahan tidak dapat disimpan: {{message}}. Masih menunggu Anda.",
     "receipt": {
       "applied": "Diterapkan:",
+      "savedAuto": "Disimpan ke memori:",
       "reverted": "Dibatalkan:",
       "dismissed": "Ditolak:",
       "expired": "Kedaluwarsa:",
@@ -699,5 +745,27 @@
     "clearYes_other": "Hapus {{count}} berkas",
     "cleared_one": "{{count}} berkas dipindahkan ke Tempat Sampah.",
     "cleared_other": "{{count}} berkas dipindahkan ke Tempat Sampah."
+  },
+  "triggerActs": {
+    "help": "Satu jalan dimulai sendiri, jadi tidak ada yang menyetujui langkahnya. Ia bisa membaca dan melapor. Centang apa yang boleh dilakukannya juga. Ia tidak pernah mendapat lebih dari yang dimiliki agennya.",
+    "noAgent": "Belum ada agen yang dipilih, jadi hanya centangan Anda yang membatasinya.",
+    "readOnly": "Hanya baca",
+    "canAct": "Boleh bertindak sendiri",
+    "canActText_one": "Satu jalan boleh memakai {{count}} jenis tindakan tanpa bertanya.",
+    "canActText_other": "Satu jalan boleh memakai {{count}} jenis tindakan tanpa bertanya.",
+    "sensitive": "perlu hati-hati",
+    "addonRow": "Satu jalan boleh memakai tindakan add-on {{id}}.",
+    "blocked": "Agen Anda tidak memiliki izin ini, jadi tidak bisa dicentang. Tambahkan dulu ke agen.",
+    "unused": "Agen Anda tidak memiliki izin ini, jadi satu jalan tidak memakainya.",
+    "unusedList": "Terdaftar, tetapi tidak dipakai karena agen tidak memilikinya: {{names}}.",
+    "writesNote": "Rencananya menyebut berkas {{file}}, jadi satu jalan juga boleh menulis berkas.",
+    "listCan_one": "Bisa bertindak ({{count}})",
+    "listCan_other": "Bisa bertindak ({{count}})",
+    "why": {
+      "no_acts": "Tidak ada izin bertindak, jadi jalannya hanya membaca dan melapor.",
+      "agent": "Agennya tidak memiliki izin yang diminta, jadi jalannya hanya membaca dan melapor.",
+      "declared": "Ini dibuat untuk hanya membaca dan melapor. Centangan di sini tidak mengubahnya.",
+      "binding": "Dibuat oleh koneksi dalam mode hanya baca. Centangan di sini tidak mengubahnya."
+    }
   }
 }

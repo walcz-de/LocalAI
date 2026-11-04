@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/mudler/LocalAI/core/services/studio/agents"
+	"github.com/mudler/LocalAI/core/services/studio/connsets"
 	"github.com/mudler/LocalAI/core/services/studio/session"
 	"github.com/mudler/LocalAI/core/services/studio/store"
 	"github.com/mudler/LocalAI/core/services/studio/workspace"
@@ -136,11 +137,12 @@ func (s *Service) chatTools(ctx context.Context, x session.Access) (session.Turn
 	}
 	// The agent's profile and the index of the user's notes follow the persona.
 	// The first is the user's standing rules for this agent; the second points
-	// the model at memory_read.
+	// the model at context_read.
 	var notes, notesKey string
 	if !sub {
-		notes, notesKey = s.contextTurn(ctx, rec)
-		tools = append(tools, s.contextTools(rec)...)
+		extra := s.addonContextSources(ctx, a.Principal, rec.AddonsOff, sc)
+		notes, notesKey = s.contextTurn(ctx, rec, tools, extra)
+		tools = append(tools, s.contextTools(rec, tools, extra)...)
 	}
 	if lead := joinBlocks(persona, notes); lead != "" {
 		prompt = strings.TrimSpace(lead + "\n\n" + prompt)
@@ -251,6 +253,9 @@ func (s *Service) chatTools(ctx context.Context, x session.Access) (session.Turn
 	// load_skill learns from the final list whether the chat can read a
 	// skill's files and run what a skill needs.
 	tools = s.fitLoadSkill(a, tools)
+	// The action policy of a run that nobody watches: the tools that change
+	// files or run commands on this machine are checked at each call.
+	tools = s.gateBuiltinActs(ctx, rec, tools)
 	return session.TurnTools{Tools: tools, Prompt: prompt, Note: note, WorkFolder: work, RefreshKey: key + "\x00" + rec.Settings.SystemPrompt + "\x00" + personaKey + "\x00" + notesKey}, nil
 }
 
@@ -337,6 +342,11 @@ func (s *Service) spawn(ctx context.Context, x session.Access, raw json.RawMessa
 		if err := s.savedAgentsAllowed(ctx, parent); err != nil {
 			return "", err
 		}
+		if unattended(parent.Origin) {
+			// The chat of a saved agent has no origin, so it would not carry the
+			// rights of this run.
+			return "", ErrSavedAgentUnattended
+		}
 		if agent, err = s.resolveAgent(ctx, a.Principal, ref); err != nil {
 			return "", err
 		}
@@ -376,6 +386,9 @@ func (s *Service) spawn(ctx context.Context, x session.Access, raw json.RawMessa
 	now := parent.Updated
 	rec := session.ChatRecord{ID: childID, Principal: a.Principal, Title: title, Created: now, Updated: now,
 		Kind: session.KindSubAgent, ParentID: a.ChatID, Model: model, AgentID: agent.ID,
+		// The connections the parent chose are the child's: its tools run with
+		// the same credentials, and it chooses none of its own.
+		Connections: connsets.Clone(parent.Connections),
 		// The child is refused, never given the whole home, when the folder
 		// it works in can no longer be found (chatScopes).
 		ScopedAgent: parent.ScopedAgent || agent.HasFolder()}
@@ -440,7 +453,17 @@ func (s *Service) agentFitsScope(ctx context.Context, p string, outer *folderSco
 		return true
 	}
 	inner, err := s.liveFolder(ctx, p, ag)
-	return err == nil && workspace.Within(inner.path, outer.path)
+	if err != nil {
+		return false
+	}
+	// Every folder of the sub-agent is the same as, or inside, one folder of
+	// the chat's agent.
+	for _, f := range inner.folders {
+		if !outer.contains(f.path) {
+			return false
+		}
+	}
+	return true
 }
 
 // subset picks the tools a sub-agent gets from the parent's host tools and
@@ -466,6 +489,8 @@ func (s *Service) subset(ctx context.Context, x session.Access, names *[]string)
 		// Built for a sub-agent: bash on this machine only when no card is
 		// needed, since nobody watches the sub-agent's chat.
 		have = s.applyBuiltins(have, s.builtinsFor(ctx, a, parent, true))
+		// A sub-agent of a run that nobody watches has the rights of that run.
+		have = s.gateBuiltinActs(ctx, parent, have)
 	}
 	if names == nil {
 		kept := have[:0:0]

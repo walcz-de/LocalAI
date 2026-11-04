@@ -2,6 +2,7 @@
 package contract
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"unicode/utf8"
@@ -17,7 +18,7 @@ var _ = Describe("the connector capability", func() {
 		Expect(err).NotTo(HaveOccurred())
 		m, err = ParseManifest(b)
 		Expect(err).NotTo(HaveOccurred())
-		m.Capabilities.UI.SDK = VersionRange{Min: 1, Max: 2}
+		m.Capabilities.UI.SDK = VersionRange{Min: 2, Max: 2}
 		m.Capabilities.UI.Pages = []string{"bot"}
 		m.Capabilities.UI.Navigation = nil
 		m.Capabilities.UI.MainPage = ""
@@ -37,6 +38,16 @@ var _ = Describe("the connector capability", func() {
 		m.Capabilities.Connector.Kinds[0].PreviewMs = MinPreviewMs
 		Expect(ValidateManifest(m, host())).To(Succeed())
 	})
+	It("accepts agentOptional and keeps it through a JSON round trip", func() {
+		m.Capabilities.Connector.Kinds[0].AgentOptional = true
+		Expect(ValidateManifest(m, host())).To(Succeed())
+		raw, err := json.Marshal(m.Capabilities.Connector)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(raw)).To(ContainSubstring(`"agentOptional":true`))
+		m.Capabilities.Connector.Kinds[0].AgentOptional = false
+		raw, _ = json.Marshal(m.Capabilities.Connector)
+		Expect(string(raw)).NotTo(ContainSubstring("agentOptional"))
+	})
 	It("lets an add-on declare nothing but the connector", func() {
 		m.Capabilities.UI = nil
 		m.Capabilities.Connector.Kinds[0].Page = ""
@@ -44,17 +55,12 @@ var _ = Describe("the connector capability", func() {
 	})
 	Describe("the history ability", func() {
 		kind := func() *ConnectorKind { return &m.Capabilities.Connector.Kinds[0] }
-		BeforeEach(func() { m.API = VersionRange{Min: 1, Max: 2} })
+		BeforeEach(func() { m.API = VersionRange{Min: 2, Max: 2} })
 
-		It("accepts a thread history with the manifest api 2", func() {
+		It("accepts a thread history", func() {
 			kind().History = &ConnectorHistory{Thread: true, MaxMessages: 50}
 			Expect(ValidateManifest(m, host())).To(Succeed())
 			Expect(kind().ServesThreadHistory()).To(BeTrue())
-		})
-		It("refuses it under the manifest api 1", func() {
-			m.API = VersionRange{Min: 1, Max: 1}
-			kind().History = &ConnectorHistory{Thread: true}
-			Expect(ValidateManifest(m, host())).NotTo(Succeed())
 		})
 		It("refuses an ability that says nothing and a limit out of bounds", func() {
 			kind().History = &ConnectorHistory{}
@@ -81,17 +87,14 @@ var _ = Describe("the connector capability", func() {
 			return ConnectorOption{ID: "followThreads", Title: "Follow threads", Default: "own",
 				Values: []ConnectorOptionValue{{ID: "own", Title: "Own"}, {ID: "any", Title: "Any"}, {ID: "never", Title: "Never"}}}
 		}
-		BeforeEach(func() { m.API = VersionRange{Min: 1, Max: 2} })
+		BeforeEach(func() { m.API = VersionRange{Min: 2, Max: 2} })
 
 		It("accepts an option with a default among its values", func() {
 			kind().Options = []ConnectorOption{follow()}
 			Expect(ValidateManifest(m, host())).To(Succeed())
 		})
-		It("refuses options under api 1, a bad default, one value, a repeated id and too many", func() {
+		It("refuses a bad default, one value, a repeated id and too many", func() {
 			kind().Options = []ConnectorOption{follow()}
-			m.API = VersionRange{Min: 1, Max: 1}
-			Expect(ValidateManifest(m, host())).NotTo(Succeed())
-			m.API = VersionRange{Min: 1, Max: 2}
 			for _, edit := range []func(*ConnectorOption){
 				func(o *ConnectorOption) { o.Default = "sometimes" },
 				func(o *ConnectorOption) { o.Values = o.Values[:1] },
@@ -151,4 +154,22 @@ var _ = It("cuts a long name on a character boundary", func() {
 	Expect(len(got)).To(BeNumerically("<=", MaxConnectorFileName))
 	Expect(utf8.ValidString(got)).To(BeTrue())
 	Expect(got).To(HaveSuffix(".csv"))
+})
+
+var _ = Describe("the permission of a tool", func() {
+	It("is tools.write for a tool that is not a read, in an add-on that holds a credential", func() {
+		for _, kind := range []string{ToolKindWrite, ToolKindSchema, ToolKindCreate, ToolKindAction} {
+			Expect(ToolPermission(true, ToolDefinition{Kind: kind})).To(Equal(CapToolsWrite), kind)
+		}
+	})
+	It("is empty for a read, and for any tool of an add-on without a credential", func() {
+		Expect(ToolPermission(true, ToolDefinition{Kind: ToolKindRead})).To(BeEmpty())
+		for _, kind := range []string{ToolKindRead, ToolKindWrite, ToolKindSchema, ToolKindCreate, ToolKindAction} {
+			Expect(ToolPermission(false, ToolDefinition{Kind: kind})).To(BeEmpty(), kind)
+		}
+	})
+	It("names a capability in the closed list", func() {
+		Expect(KnownCapability(CapToolsWrite)).To(BeTrue())
+		Expect(SensitiveCapability(CapToolsWrite)).To(BeFalse())
+	})
 })

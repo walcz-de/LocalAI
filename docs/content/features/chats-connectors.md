@@ -7,7 +7,7 @@ url = "/features/chats-connectors/"
 
 The Connectors page of the [chats](/features/chats/) (`/app/chats/connectors`, under **Agents** in the sidebar) lists the messaging bindings you made, and the MCP servers have a page of their own (**MCP connectors** in the sidebar, `/app/mcp-connectors`):
 
-- A **messaging connector** binds a bot of a platform to one of your agents, so a person can talk to it from that platform. The platform comes from a **connector add-on**: the [Telegram add-on](#telegram) or the [Slack add-on](#slack). This is the first half of this page.
+- A **messaging connector** binds a bot of a platform to one of your agents, so a person can talk to it from that platform. The platform comes from a **connector add-on**: the [Telegram add-on](#telegram) or the [Slack add-on](#slack) (the [GitHub add-on](#github) holds a token for your agents instead of carrying messages). This is the first half of this page.
 - An **MCP server** gives your chats and agents more tools. See [MCP servers](#mcp-servers).
 
 ## Connector add-ons
@@ -99,8 +99,8 @@ curl -X POST .../api/chats/connectors/<id>/senders/<sender>/allow   # add a send
 ### What a person can send
 
 - **Text.** Up to 8,000 characters.
-- **Photos.** The add-on downloads the largest size of the photo that is at most 1 MB
-  and attaches it to the chat. The caption is the text of the message. An album is
+- **Photos.** The add-on downloads the largest size of the photo that is within the
+  [file limit](#file-limits) and attaches it to the chat. The caption is the text of the message. An album is
   one message, with all its photos (at most 8; more start a second message, which
   the agent reads after the first). The add-on waits about a second for the rest of
   an album; an album that takes longer to arrive can become two messages.
@@ -111,10 +111,8 @@ curl -X POST .../api/chats/connectors/<id>/senders/<sender>/allow   # add a send
   attached. The add-on checks the bytes of each file, not only its name, and names the
   file itself, for example `photo-AQADxyz.jpg`, so a name that the sender chose never
   reaches your files. Another type gets a sentence that the file could not be read.
-- **Size.** At most 1 MB a file. Telegram lets a bot download at most 20 MB; the
-  add-on hands over less, so that the file fits one call of the connector route. A
-  larger file gets a sentence that it is too large, and the caption still reaches the
-  agent.
+- **Size.** The [file limit](#file-limits) of the binding. A larger file gets a sentence
+  that names the limit and which limit it is, and the caption still reaches the agent.
 - **Limit the kinds (`inbound_media`).** A binding can take only some kinds of file:
   `photo`, `voice`, `audio`, `video_note`, `document` (a file sent as a file). For a
   bot that should hear voice messages but never see receipts or other papers, set
@@ -142,6 +140,38 @@ speech-to-text model is set up") and no turn starts.
 `GET`, `PUT` and `DELETE /api/chats/connectors/{id}` read, replace and delete a
 binding. `POST .../enable` and `.../disable` switch it. You can have 10 bindings.
 A binding says `active: false` and gives a `reason` while its add-on does not run.
+
+## GitHub
+
+The GitHub add-on lets your [saved agents](/features/chats-agents/) read repositories: search code, read files and folders, and read issues, pull requests and their diffs. If you allow it, they can also write: comment on issues and pull requests, open issues, change a title or close an issue, add labels, and comment on a line of a pull request diff. It cannot merge, delete, push code, approve or request changes on a review.
+
+1. Install the **GitHub** add-on from the add-on gallery.
+2. On GitHub, make a **fine-grained personal access token** for only the repositories you want to share. The add-on page has a **Create a token on GitHub** button, and the steps and a table of the permissions are open there until you have a first connection. Give the token read access to Contents, Issues and Pull requests. To let the agent write, also give read and write access to Issues and Pull requests. Classic tokens are not accepted.
+3. On the add-on page, choose **New GitHub connection**. Paste the token and list the repositories, one `owner/name` per line or separated by commas (at most 50). The name of the connection defaults to the first repository; a line that is not `owner/name` is named under the list. Press **Test**: the row shows, for each listed repository, whether the token reaches it and whether it can write.
+
+This connection does not listen for `@mentions` on GitHub yet. An agent works on GitHub only when you ask it in a chat.
+
+The agent field is optional. A connection without an agent shows **Credentials only** in the list: it holds the token, the repository list and the write mode for your chats, and it never answers a message. It cannot be switched on, take an allowlist, send notifications or hold permissions; the server refuses those with a message that asks for an agent. This is the manifest key `agentOptional` of the kind (see [Connector add-ons](/features/addons/)), which the GitHub kind declares; Telegram and Slack bindings always need an agent. Over the API, `agent_id` may be empty for such a kind and the connection reports `credentials_only: true`.
+
+The list is checked by LocalAI before the add-on is called, so an agent is refused any repository that is not on it, even if the token could reach it. The token is kept sealed and is never shown again, and no tool result contains it. A call uses one of the connections that your chat enabled: with one connection it is enabled, with several you tick the ones the chat may use in the **Tools** menu of the chat (or the agent names a set), and until then the GitHub tools are not offered. With two or more enabled, the model names the connection in each call, and only an enabled one is accepted. LocalAI never picks one for you, and the list of the connection that was named is the only one that applies. See [The connections of an add-on](/features/chats/#the-connections-of-an-add-on).
+
+What GitHub returns (issue text, comments, file content) is written by other people. Every result is marked as untrusted data for the model. Long files are cut at 96 KiB and long patches at 64 KiB; the result says what was cut and how to ask for the rest. When GitHub limits the rate of calls, the agent is told how long to wait.
+
+### Writing to GitHub
+
+On the connection you choose what the agent may change. The choice is stored with the connection and enforced by LocalAI before the add-on is called, so a model cannot raise it.
+
+- **Read only** is the default. A write tool is refused and the agent is told to ask you to turn writes on.
+- **Asks you first** stores each change as a proposal. The approval card says what will be done, in which repository and on which issue or pull request (with a link), as which connection, and the exact text that will be posted, and you confirm it in the approvals of the web interface. A chat or an agent cannot confirm it.
+- **Acts without asking** lets a chat of yours make the change at once. A run without you present, such as an agent started by a trigger, still leaves a proposal for you to confirm.
+
+The write tools are `comment-issue`, `comment-pr`, `create-issue`, `edit-issue` (title, close or reopen), `add-labels` and `review-comment-pr`. They work only on the repositories listed on the connection, the same list as for reading. The change is also refused when the target moved after the preview: for example the title changed, the issue is locked, or a pull request has a new commit.
+
+Everything the agent writes is public to everyone who can see the repository. The tool descriptions tell the model so. Text is limited to 16 KiB, and a text that holds the token or something shaped like a secret is refused. Every comment and new issue carries a hidden marker (`<!-- localai-op:... -->`) that lets the add-on find an earlier attempt if GitHub took a change but the answer was lost. In that case the proposal shows an unknown outcome and nothing is sent twice.
+
+Over the API the connection has a `write_mode` field: `off`, `propose` or `auto`. Absent means off for a new connection and unchanged for an update.
+
+This version does not listen for mentions.
 
 ## Slack
 
@@ -207,7 +237,7 @@ curl -X POST .../api/chats/connectors -d '{"kind": "slack", "name": "Team app", 
   lists, code blocks) and split at 4,000 characters, the limit Slack asks for. A turn
   shows a "Working…" message at once, and the answer replaces it in place (see
   [How the bot answers](#how-the-bot-answers)).
-- **Files.** A file attached to a message (up to 1 MiB, at most 8) is downloaded with
+- **Files.** A file attached to a message (within the [file limit](#file-limits), at most 8) is downloaded with
   the bot token and attached to the chat, as an upload on the chat page would be: a
   document is read, an image goes to a model that can see. A larger file gets a
   sentence that it is too large. An audio file is transcribed like a Telegram voice
@@ -260,8 +290,10 @@ gives the same events without one.
 
 - **The agent's tools only.** A message gets exactly the tools the agent grants,
   intersected with what you may use now. It never gets the tool set of a chat, and
-  a message cannot change the agent. A run started by a connector never gets
-  `propose_trigger`.
+  a message cannot change the agent. A run that a trigger started never gets
+  `propose_trigger`. A connector chat gets `propose_trigger` and `list_triggers`
+  only while the binding holds `triggers.propose` (see
+  [Triggers from a connector chat](#triggers-from-a-connector-chat)).
 - **Your account.** The chat acts as you, so the feature gate, the model
   allowlist and your quota apply. If the model refuses the request, the sender
   gets one fixed sentence, for example that your quota is used up.
@@ -277,8 +309,8 @@ gives the same events without one.
   [Slack](#slack)). A file is attached to the chat as if you had attached it on the
   chat page: it is in **Files**, and an image goes to a model that can see. A voice
   message (any audio file) is transcribed, and the transcript is what the agent reads
-  (see [Voice messages](#voice-messages)). A file over 1 MB gets a sentence that it is
-  too large. With the files of the chats turned off, a message with a file gets a
+  (see [Voice messages](#voice-messages)). A file over the [file limit](#file-limits) gets a
+  sentence that it is too large. With the files of the chats turned off, a message with a file gets a
   sentence that files are off, and its text still reaches the agent; a voice message
   is still transcribed. A sticker, a poll or a location gets a sentence that names
   what the bot reads. A message longer than 8,000 characters is refused. A sender may
@@ -293,7 +325,7 @@ gives the same events without one.
   arrives while the agent works waits and is read at the agent's next request, as in
   any chat; the answer of that turn covers it.
 - **An agent with a folder.** When the agent has a
-  [folder](/features/chats-agents/#one-folder-for-an-agent), the chat of each sender
+  [folder](/features/chats-agents/#folders-of-an-agent), the chat of each sender
   reaches only that folder, its own chat folder, the shared folders and the skills,
   and the bot sends only files from those folders (see `send_files`). When the
   folder is deleted, unreadable or not chosen, the agent does not run: each message
@@ -323,10 +355,9 @@ the mention makes a new chat, and gives them to the agent with the first message
 - **It never blocks the answer.** If the platform refuses, is slow or limits the calls,
   the agent answers without the context. The server logs the reason once.
 
-To switch it off for a binding, turn off **Read the earlier messages of a thread** under
-**How it answers**, or send `"thread_context": false`. An update without `thread_context`
-keeps the stored value. The setting has no effect on a platform that cannot give
-earlier messages.
+There is no setting for this. The bot always reads the thread when it is mentioned in
+one, on a platform whose add-on can give the earlier messages; on any other platform it
+reads nothing.
 
 ## How the bot answers
 
@@ -378,14 +409,58 @@ bot follows**). They appear under **How it answers**, and in the API as `options
 map from the option id to a value. The add-on declares the allowed values, and an
 unknown option or value is a 400. An update without `options` keeps the stored values.
 
+### File limits
+
+A file that a person sends to the bot, and a file that the bot sends, has a size
+limit. The limit is the smallest of four layers, and every sentence about it names the
+number and the layer that set it, for example "That file is too large (3 MiB): I can
+read files of up to 1 MiB here (limit of this add-on version)." The layers are the
+limit of this add-on version (the cap of the inline path, 1 MiB), the limit the add-on
+declares for its platform, the limit of the platform (the host ceiling that the
+administrator sets) and the limit that you set for the bot. The agent reads the same
+number in its instructions, so it does not promise a file that cannot go.
+
+An add-on that streams files (Slack and Telegram do) has no inline cap: a file moves in
+chunks, by a short-lived handle, so a 6 MB PDF goes both ways. An add-on that does not
+stream keeps the inline cap of 1 MiB, whatever you set, and the sentence says "limit of
+this add-on version".
+
+What the platforms allow, from their own documentation:
+
+| Platform | Bot reads a file | Bot sends a file |
+|---|---|---|
+| Slack | No separate bot limit is documented. The add-on declares the 1 GB per file that a member can add ([Add files to Slack](https://slack.com/help/articles/201330736-Add-files-to-Slack)); the [upload API](https://docs.slack.dev/reference/methods/files.getUploadURLExternal) states none either. | 1 GB per file, by the external upload flow. |
+| Telegram | 20 MB with `getFile` on the public Bot API ([Bots FAQ](https://core.telegram.org/bots/faq)). | 50 MB for a document, 10 MB for a photo; a larger picture goes as a document ([Bots FAQ](https://core.telegram.org/bots/faq)). |
+
+A local Bot API server lifts the Telegram limits (no download limit, 2000 MB upload,
+[Bot API](https://core.telegram.org/bots/api#using-a-local-bot-api-server)), but the
+Telegram add-on has no setting for another server address, so it declares the limits of
+the public one.
+
+The server holds only one chunk of a file in memory, on both sides. Each transfer writes
+one audit line (direction, binding, size, result, layer, time), with no name and no
+content. The files of one message may add up to three times the limit.
+
+- **Per bot.** The **Files** section of a binding has one field for the largest file the
+  bot reads and one for the largest it sends, in MiB. Leave a field empty to use the
+  limit of the add-on. A value can only lower that limit. The API takes
+  `file_receive_max_bytes` and `file_send_max_bytes` (0 clears), and a value above
+  `files.<direction>.allowed_bytes` is a `400`. A binding and a kind show the limit in
+  effect as `files.receive` and `files.send` with `effective_bytes`, `layer`
+  (`owner`, `addon`, `host` or `inline`), `declared_bytes` and `allowed_bytes`.
+- **For the server.** The add-on owner sets the host ceiling with the policy key
+  `connector_files_ceiling_bytes` (1 KiB to 1 TiB; 0 or unset means 100 MB). It is under
+  **Settings** next to the add-on upgrade setting, as "Largest file a connector may
+  move". No bot goes above it.
+
 ### Files the agent makes (`send_files`)
 
 On by default. After the answer, the files that the turn wrote or changed go to the
 sender: the files listed in the chat's **Files** with the turn's number, not the files
 the sender attached.
 
-- At most 5 files a turn, each of at most 1 MB. A larger file stays in the chat's
-  files, and the sender gets a sentence that names it.
+- At most 5 files a turn, each within the [file limit](#file-limits). A larger file
+  stays in the chat's files, and the sender gets a sentence that names it and the limit.
 - Only documents, data, pictures, sound, video and `.zip` archives go: `.txt`, `.md`,
   `.log`, `.csv`, `.tsv`, `.json`, `.yaml`, `.yml`, `.xml`, `.pdf`, `.docx`, `.xlsx`,
   `.pptx`, `.odt`, `.ods`, `.odp`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.mp3`,
@@ -459,6 +534,193 @@ this with a confirmation. A binding that already has it keeps it on later edits,
 and turning it off needs no confirmation. Use it for a public bot whose agent
 grants nothing you would mind sharing.
 
+### Capabilities, roles and pairing
+
+Three things sit on top of the allowlist. They work the same for every connector
+add-on.
+
+- **Capabilities** (`caps`). The ceiling you enable for a binding, from a closed list
+  (`proposals.confirm`, `memory.write`, `files.upload`, `triggers.propose`,
+  `triggers.run`, `talkback.channels`, `tools.write`, and the sensitive `talkback.new_channel`,
+  `profile.write`, `skills.write`, `pages.write`, `dashboard.write`). The default is
+  no: a binding with none enabled lets a sender talk to the agent, but the agent can
+  not use any of these on the sender's behalf. A binding saved before permissions
+  were enforced has none, so the first start after the upgrade gives it the usual set
+  once, the same six that **Allow the usual** turns on (`proposals.confirm`,
+  `memory.write`, `files.upload`, `triggers.propose`, `triggers.run`,
+  `talkback.channels`; never a sensitive one). It only touches a binding with no
+  capability whose kind lists permissions, and it logs one line for each binding it
+  changes. It runs once for the whole store, also with several frontends, and never
+  again, so a binding you clear later stays cleared. A binding you cleared before that
+  start cannot be told from one never set and gets the set too. To keep the strict
+  state, set `LOCALAI_SKIP_BINDING_CAPS_MIGRATION=true` before the first start.
+- **Roles and grants** (`grants`). An add-on can declare roles, such as the admins of
+  a workspace, and report the roles of each sender. You map a role to capabilities
+  with `grants: [{"role", "caps"}]`. A grant is within `caps`, within what the kind
+  lists as `permissions`, and never a sensitive capability. The kind list
+  (`GET /api/chats/connectors/kinds`) shows each kind's `roles` and `permissions`.
+- **Pairing.** A sender you pair may use the sensitive capabilities. Ask for a code
+  with `POST /api/chats/connectors/<id>/pairing`; send it as a direct message to the
+  bot from an account on the allowlist. The code looks like `LA-` and eight characters,
+  works once and lasts ten minutes. The host checks it before any model turn, so
+  the code never reaches the agent or the sender log. A binding holds at most three
+  paired senders, and a pairing ends after 90 days. End one earlier with
+  `DELETE /api/chats/connectors/<id>/paired/<sender>`. A sender who sends five wrong
+  codes in an hour is ignored for an hour, and every attempt is logged without the
+  code.
+
+Pairing needs only a stable sender ID, so an add-on without roles supports it too.
+
+The host checks these values for every message. A sender may use a capability when
+the capability is in `caps`, the sender is on the allowlist, and the sender is paired
+or has a role that you granted it. A sensitive capability needs a pairing; a role
+never counts. If several people share one turn, the turn gets only what all of them
+may do.
+
+A tool of an add-on that holds your credential and changes something outside
+LocalAI (a comment on an issue, for example) needs `tools.write`. The host reads
+this from the add-on's manifest, so it applies to every add-on of that shape. The
+sender needs the capability as above; the write mode of the connection and the
+confirmation of the change still apply on top of it.
+
+The agent's grants narrow the result: see Builtin grants in
+[Agents](/features/chats-agents/). For `triggers.propose`, `triggers.run`,
+`talkback.channels`, `talkback.new_channel` and `files.upload` the sender must hold
+the capability and the agent must hold the grant.
+
+The check decides which tools the model gets. A tool that the sender may not use is
+not offered, so the model cannot be talked into it. If the model calls one anyway, the
+call is refused with the reason, and the model tells the person. Today this gates the
+agent's change proposals (`memory.write` for a memory note, `profile.write` for a
+profile), files sent to the bot (`files.upload`), the trigger tools
+(`triggers.propose`), and the confirm phrase (`proposals.confirm`). Messages from a
+sender who may not send files get a short refusal and no turn.
+
+A binding that was stored before this check has no capabilities. Enable what you want
+with `caps`, and pair the accounts that need the sensitive ones.
+
+The settings page of every connector add-on edits all of this: a switch for each
+capability, with a description and a mark on the sensitive ones; the role matrix; the
+paired senders, with a button that shows a new code once; the approved channels for
+talk-back; and the access view with the latest decisions. A binding with no capability
+shows a notice that says why the features are off. The button "Allow the usual" turns
+on the everyday capabilities that stay inside LocalAI and are not sensitive. The
+kind list also returns `capabilities`, the closed list with a title, a description
+and the `sensitive` and `usual` flags of each, so a page needs no list of its own.
+
+To see the result, call `GET /api/chats/connectors/<id>/access`. It runs the same check
+for a sender on the allowlist, a paired sender and a sender of each role the kind
+declares, and lists the latest decisions this server made (sender IDs, roles,
+capability and result, never message text or codes). An add-on settings page can show
+it.
+
+## Triggers from a connector chat
+
+When the binding holds the capability `triggers.propose`, the agent can propose a
+trigger from a chat in a messaging app. The agent gets `propose_trigger` and
+`list_triggers` (the list shows only the triggers of that agent). Changing or deleting a
+trigger stays in Studio. Nothing runs before the owner confirms.
+
+- **The proposal is shown in the chat.** LocalAI writes the name, the schedule, what the
+  run will do, where the results go and a four-character code in the chat and thread
+  where the person wrote. The model does not write it.
+- **Answer in plain words.** With the default approval mode (`ask`), the person answers in
+  the same chat and thread with a short word as the whole message: `yes`, `ok`, `sure` to
+  start it, `no`, `cancel`, `stop` to drop it (a few words of other languages work too).
+  LocalAI handles it before any model turn. When several proposals wait in one thread, a
+  bare word is not enough: the bot lists the codes, and the person writes `yes CODE`,
+  `confirm CODE` or `cancel CODE`. Any longer message goes to the agent as usual. It
+  needs the capability `proposals.confirm` for that sender (a paired sender, or a role
+  with the grant); a message from any other sender, or text the agent read, never answers
+  a proposal. A code is used once, and a proposal lapses after 24 hours. Studio always
+  works as well.
+- **Permissions are in the text.** The proposal says what a run may do with nobody
+  present, in plain words: "Permissions: read only", or the `act.*` classes the
+  agent asked for (`acts` of `propose_trigger`, limited to what the agent holds), with
+  the sensitive ones marked. A `yes` grants exactly the listed ones, and the
+  confirmation repeats them. A proposal that asks to act is never set up without a yes,
+  whatever the approval mode. The model cannot change them after the confirmation.
+- **Limits.** A binding can make 3 proposals an hour, and an owner can have 10 waiting.
+- **One-off timers.** For "in 10 minutes" or "at 18:00", the agent proposes a trigger
+  that runs once: `when` is `{"in": "10 minutes"}` or `{"at": "18:00"}` (this one needs a
+  `time_zone`; a time that has passed today means the next day). It must be at least one
+  minute and at most 365 days ahead. It reports to the chat where it was set, runs once,
+  and is then removed, also when the run failed (a failed timer says so at once). A
+  recurring trigger from a chat still runs at most once an hour. The proposal text states
+  the cost: every run is one model run.
+- **Where a run reports.** The proposal sets `delivery`: `inbox` (the default),
+  `origin` (the chat and thread of the proposal) or `channel` (a channel of the binding that
+  the owner approved, named in `delivery.channel`), and a mode: `always`, `on_change` or
+  `on_problem`. LocalAI writes the last message of the run, cut to 4,000 characters,
+  with mentions that notify everyone broken. A final message of exactly `[SILENT]`
+  writes nothing. After three failed runs in a row the chat gets one alert, and not
+  more than one every 6 hours. If the binding is off or the capability is off when a run
+  ends, the Inbox gets the notice. A binding sends 20 of these messages a minute; more
+  wait in a queue and go in order.
+- **Pause.** While `triggers.run` is off for the binding, its triggers do not run. The
+  records stay and are not replayed when the capability comes back.
+
+### Approval modes
+
+The owner chooses, per binding, what happens to a proposal. The choice is on the settings
+page of the connector add-on, or in the `approval` field of the binding
+(`PUT /api/chats/connectors/{id}`), and is the same for every connector.
+
+| `mode` | Behavior |
+|---|---|
+| `ask` (default) | The bot posts the proposal and waits for a plain answer. |
+| `auto` | The trigger is made at once. The bot tells the person what was set up and that `cancel` (within 30 minutes) or `cancel CODE` (any time) removes it. |
+| `auto_readonly` | Like `auto` when the proposal says its runs only read and report (`access: read_only`, no file written); any other proposal asks. The runs of a trigger made this way can use only tools that read: every other tool is refused at the call, whatever the agent holds (see [Action policy of unattended runs](../chats-agents/#action-policy-of-unattended-runs)). |
+
+The automatic modes are bounded by limits of the owner. Anything over a limit is not
+refused but asked instead, and the proposal says why.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `max_pending` | 5 | Timers and triggers made without asking that may be live at once, per binding. |
+| `min_gap_minutes` | 60 | Fewest minutes between runs of a recurring trigger. |
+| `max_runs_per_day` | 10 | Runs a day of all of them together; a recurring trigger also gets this as its daily limit. |
+| `max_lifetime_days` | 30 | How far ahead a timer may be, and how long a recurring trigger lives before it is removed. |
+
+A trigger on files, and one that reports to a channel, always asks. The read-only mode relies on what the proposal says and on
+the grants of the agent; it does not stop a run from using a tool the agent has.
+
+## Writing to a chat on its own (`send_message`)
+
+When the sender of a turn holds the capability `talkback.channels`, the agent gets the
+tool `send_message`. The tool names no platform. The agent can use it to:
+
+- **Write in the conversation.** With no `channel`, the message goes to the chat and
+  thread of the conversation.
+- **Write in a channel.** With `channel`, the message is a new top-level message in a
+  channel that the owner listed for the binding (`channels` in the binding: `id`,
+  `label` and `approved`, at most 10; an add-on settings page or the API sets them). A
+  channel that is not listed is refused, and the error lists the ones that are. `thread`
+  answers in a thread of that channel.
+- **Write in a channel the owner has not approved.** A listed channel with `approved`
+  false needs the sensitive capability `talkback.new_channel` for each message, so only a
+  paired sender can use it. A role never grants it. The owner approves a channel by
+  setting `approved` to true.
+
+The agent cannot add a channel or approve one: only the owner changes the list, so
+text that the agent read in a web page or a file cannot widen where it writes.
+
+A message has at most 4,000 characters, and mentions that notify everyone are broken.
+The message goes through the same queue as other messages that LocalAI writes on its own:
+a binding sends 20 a minute, and more wait in order. Each attempt adds a row to the audit
+of the binding (time, binding, senders, channel, thread, kind, capability, result, length
+and a SHA-256 hash of the text, never the text). `LOCALAI_DISABLE_CONNECTOR_TALKBACK=true`
+turns the tool and the reports to a channel off for every binding; owner notices
+continue.
+
+A trigger can report to an approved channel with `delivery.target` `channel`. The
+proposal is refused if the channel is not listed and approved. When a run ends, LocalAI
+checks again that the binding is on, the capability is on and the channel is still listed
+and approved; if not, the Inbox gets the notice.
+
+Not included yet: sending a file with `send_message`, and mapping a reply in the thread of
+a message that the agent started to a conversation with the same agent.
+
 ## Notifications in Telegram
 
 Set a notification chat ID on a binding to receive your run notifications there
@@ -509,8 +771,7 @@ restart). The JSON store is for one process.
 ### For add-on authors: sending files
 
 A connector add-on does not choose which files reach a person. The host does, and it
-sends each one with the typed `send_file` op: the file is in the request (`name`, `mime`
-and at most 1 MiB of `data`) with the chat and the thread of the message it answers. The
+sends each one with the typed `send_file` op: the request carries a `transfer` handle for the bytes (`name`, `mime` and `size` of the file; see [File abilities and limits](/features/addons/#file-abilities-and-limits)) with the chat and the thread of the message it answers. The
 host chooses the files in two ways:
 
 - The files that the turn made or changed go on their own, after the answer.

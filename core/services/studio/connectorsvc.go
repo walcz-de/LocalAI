@@ -15,8 +15,8 @@ import (
 
 // ConnectorInput is the definition of a connector binding as its owner writes it.
 type ConnectorInput struct {
-	// Kind is the platform of the binding, such as telegram. It is fixed when the
-	// binding is made. Empty means telegram, for clients older than the add-ons.
+	// Kind is the platform of the binding, as a connector add-on declares it. It
+	// is required and fixed when the binding is made.
 	Kind string
 	Name string
 	// Token is the bot token. It is needed to create a binding; an update
@@ -41,13 +41,33 @@ type ConnectorInput struct {
 	// InboundMedia is connectors.Binding.InboundMedia. Nil means none (every
 	// kind) for a new binding and unchanged for an update.
 	InboundMedia *[]string
-	// ThreadContext lets the bot read the earlier messages of the thread in
-	// which it is mentioned. Nil means on for a new binding and unchanged for
-	// an update.
-	ThreadContext *bool
 	// Options are the choices for the options of the kind. Nil means the
 	// defaults for a new binding and unchanged for an update.
 	Options map[string]string
+	// FileReceiveMax and FileSendMax are the owner's limits, in bytes, for the
+	// files the bot reads and sends. Nil: new binding none, update unchanged.
+	// Zero clears the limit. A limit can only lower what the kind allows.
+	FileReceiveMax, FileSendMax *int64
+	// Caps are the capabilities the owner enables for the binding, and
+	// Grants map roles of the kind to capabilities within Caps. Nil: new
+	// binding none, update unchanged. An empty non-nil slice clears.
+	Caps   []string
+	Grants []connectors.RoleGrant
+	// Resources are the external names (such as repositories) that the tools
+	// of the binding's add-on may reach. Nil: new binding none, update
+	// unchanged. An empty list clears it. Duplicates (compared without regard
+	// to case) collapse into the first.
+	Resources []string
+	// Channels are the chats where the agent may write besides the
+	// conversation (see connectors.Channel). Nil: new binding none, update
+	// unchanged. An empty list clears it.
+	Channels []connectors.Channel
+	// WriteMode is one of connectors.WriteOff, WritePropose and WriteAuto. Nil:
+	// new binding off, update unchanged.
+	WriteMode *string
+	// Approval is the owner's choice for the triggers the agent proposes from
+	// a chat of the binding. Nil: new binding asks, update unchanged.
+	Approval *connectors.Approval
 }
 
 // apply sets the fields of the input that an owner writes on a binding.
@@ -69,8 +89,29 @@ func (in ConnectorInput) apply(b *connectors.Binding) {
 	if in.Options != nil {
 		b.Options = maps.Clone(in.Options)
 	}
-	if in.ThreadContext != nil {
-		b.ThreadContextOff = !*in.ThreadContext
+	if in.FileReceiveMax != nil {
+		b.FileReceiveMax = *in.FileReceiveMax
+	}
+	if in.FileSendMax != nil {
+		b.FileSendMax = *in.FileSendMax
+	}
+	if in.Caps != nil {
+		b.Caps = slices.Clone(in.Caps)
+	}
+	if in.Grants != nil {
+		b.Grants = slices.Clone(in.Grants)
+	}
+	if in.Channels != nil {
+		b.Channels = slices.Clone(in.Channels)
+	}
+	if in.Resources != nil {
+		b.Resources = connectors.NewResources(in.Resources)
+	}
+	if in.WriteMode != nil {
+		b.WriteMode = *in.WriteMode
+	}
+	if in.Approval != nil {
+		b.Approval = *in.Approval
 	}
 }
 
@@ -113,10 +154,6 @@ func (c *Connectors) verifyToken(ctx context.Context, b connectors.Binding, toke
 	return c.o.VerifyToken(ctx, b, token)
 }
 
-// legacyTitles name the platforms core served before connectors became
-// add-ons, for a binding whose add-on is not installed.
-var legacyTitles = map[string]string{"telegram": "Telegram"}
-
 // ConnectorInfo is a binding without its token.
 type ConnectorInfo struct {
 	connectors.Binding
@@ -126,6 +163,8 @@ type ConnectorInfo struct {
 	// installed; Reason then says so in plain words.
 	Active bool
 	Reason string
+	// Files are the file limits in effect for the binding.
+	Files FileLimits
 }
 
 func info(b connectors.Binding) ConnectorInfo {
@@ -136,6 +175,7 @@ func info(b connectors.Binding) ConnectorInfo {
 
 // withState marks a binding whose add-on does not run.
 func (c *Connectors) withState(ctx context.Context, i ConnectorInfo) ConnectorInfo {
+	i.Files = c.FileLimits(ctx, i.Binding)
 	kinds, err := c.o.Transport.Kinds(ctx)
 	if err != nil {
 		return i
@@ -143,11 +183,7 @@ func (c *Connectors) withState(ctx context.Context, i ConnectorInfo) ConnectorIn
 	if _, ok := kindFor(kinds, i.Binding); ok {
 		return i
 	}
-	title := legacyTitles[i.Kind]
-	if title == "" {
-		title = i.AddonID
-	}
-	i.Active, i.Reason = false, "install the "+title+" add-on"
+	i.Active, i.Reason = false, "install the "+i.AddonID+" add-on"
 	return i
 }
 
@@ -158,9 +194,6 @@ func (c *Connectors) kindTitle(ctx context.Context, b connectors.Binding) string
 			return k.Title
 		}
 	}
-	if t := legacyTitles[b.Kind]; t != "" {
-		return t
-	}
 	return b.Kind
 }
 
@@ -170,9 +203,7 @@ func (c *Connectors) ConnectorKinds(ctx context.Context) ([]ConnectorKind, error
 	return c.o.Transport.Kinds(ctx)
 }
 
-// resolveAddon finds the add-on that serves a kind. A kind core served before
-// the add-ons keeps its add-on even when it is not installed, so the binding
-// can be made now and starts when the add-on is installed.
+// resolveAddon finds the add-on that serves a kind.
 func (c *Connectors) resolveAddon(ctx context.Context, kind string) (string, error) {
 	kinds, err := c.o.Transport.Kinds(ctx)
 	if err != nil {
@@ -182,9 +213,6 @@ func (c *Connectors) resolveAddon(ctx context.Context, kind string) (string, err
 		if k.ID == kind {
 			return k.AddonID, nil
 		}
-	}
-	if a := connectors.LegacyAddon[kind]; a != "" {
-		return a, nil
 	}
 	return "", connectorBad("no installed add-on serves the kind %q", kind)
 }
@@ -206,6 +234,35 @@ func (c *Connectors) checkOptions(ctx context.Context, b connectors.Binding) err
 	}
 	if _, err := k.ResolveOptions(b.Options); err != nil {
 		return connectorBad("%v", err)
+	}
+	return nil
+}
+
+// checkPermissions refuses a grant to a role that the kind does not declare,
+// or of a capability that the kind does not list as grantable. The generic
+// rules (known names, the ceiling, no sensitive grant) are in
+// connectors.Validate. A kind whose add-on does not run cannot be checked.
+func (c *Connectors) checkPermissions(ctx context.Context, b connectors.Binding) error {
+	if len(b.Grants) == 0 {
+		return nil
+	}
+	kinds, err := c.o.Transport.Kinds(ctx)
+	if err != nil {
+		return nil
+	}
+	k, ok := kindFor(kinds, b)
+	if !ok {
+		return nil
+	}
+	for _, g := range b.Grants {
+		if _, ok := k.Role(g.Role); !ok {
+			return connectorBad("the role %q is not one of this kind", g.Role)
+		}
+		for _, cp := range g.Caps {
+			if !k.Grantable(cp) {
+				return connectorBad("this kind does not let %q go to a role", cp)
+			}
+		}
 	}
 	return nil
 }
@@ -264,6 +321,23 @@ func (c *Connectors) checkAgent(ctx context.Context, owner, agentID string) erro
 	return nil
 }
 
+// checkAgentIfAny is checkAgent for a binding that has an agent. The binding
+// was validated first, so an empty ID here belongs to a kind that declares
+// agentOptional.
+func (c *Connectors) checkAgentIfAny(ctx context.Context, owner, agentID string) error {
+	if agentID == "" {
+		return nil
+	}
+	return c.checkAgent(ctx, owner, agentID)
+}
+
+// agentOptional says whether the running kind of the binding lets it have no
+// agent. A kind whose add-on does not run cannot say, so it needs an agent.
+func (c *Connectors) agentOptional(ctx context.Context, b connectors.Binding) bool {
+	k := c.kindOf(ctx, b)
+	return k != nil && k.AgentOptional
+}
+
 func (c *Connectors) owned(ctx context.Context, user, id string) (connectors.Binding, error) {
 	b, err := c.o.Store.GetBinding(ctx, id)
 	if err != nil || b.Owner != principal(user) {
@@ -277,7 +351,7 @@ func (c *Connectors) CreateConnector(ctx context.Context, user string, in Connec
 	owner := principal(user)
 	kind := in.Kind
 	if kind == "" {
-		kind = connectors.KindTelegram
+		return ConnectorInfo{}, connectorBad("a binding needs a kind")
 	}
 	addon, err := c.resolveAddon(ctx, kind)
 	if err != nil {
@@ -285,16 +359,22 @@ func (c *Connectors) CreateConnector(ctx context.Context, user string, in Connec
 	}
 	b := connectors.Binding{ID: newID(), Owner: owner, Kind: kind, AddonID: addon}
 	in.apply(&b)
-	if err := connectors.Validate(b); err != nil {
+	if err := connectors.ValidateKind(b, c.agentOptional(ctx, b)); err != nil {
 		return ConnectorInfo{}, err
 	}
 	if err := c.checkOptions(ctx, b); err != nil {
 		return ConnectorInfo{}, err
 	}
+	if err := c.checkPermissions(ctx, b); err != nil {
+		return ConnectorInfo{}, err
+	}
+	if err := c.checkOwnerLimits(ctx, b, in); err != nil {
+		return ConnectorInfo{}, err
+	}
 	if strings.TrimSpace(in.Token) == "" {
 		return ConnectorInfo{}, connectorBad("the bot token is required")
 	}
-	if err := c.checkAgent(ctx, owner, in.AgentID); err != nil {
+	if err := c.checkAgentIfAny(ctx, owner, in.AgentID); err != nil {
 		return ConnectorInfo{}, err
 	}
 	// Before the write lock: the check asks the platform.
@@ -310,6 +390,9 @@ func (c *Connectors) CreateConnector(ctx context.Context, user string, in Connec
 	if len(mine) >= connectors.MaxPerUser {
 		return ConnectorInfo{}, connectorBad("you can have at most %d bindings", connectors.MaxPerUser)
 	}
+	if err := checkConnectionName(b, mine); err != nil {
+		return ConnectorInfo{}, err
+	}
 	sealer, err := c.sealerFor(ctx)
 	if err != nil {
 		return ConnectorInfo{}, err
@@ -324,6 +407,28 @@ func (c *Connectors) CreateConnector(ctx context.Context, user string, in Connec
 	}
 	c.Notify()
 	return c.withState(ctx, info(b)), nil
+}
+
+// checkConnectionName refuses a name that another credential-only binding of
+// the same person and add-on already has, compared by handle (case and
+// punctuation do not tell two names apart). The model chooses among the
+// connections of a chat by name, so two connections must never share one. A
+// binding that listens and answers is not offered to a model by name and is not
+// held to this.
+func checkConnectionName(b connectors.Binding, mine []connectors.Binding) error {
+	if !b.CredentialsOnly() {
+		return nil
+	}
+	h := ConnectionHandle(b.Name)
+	if h == "" {
+		return connectorBad("the name needs at least one letter or digit")
+	}
+	for _, o := range mine {
+		if o.ID != b.ID && o.AddonID == b.AddonID && o.CredentialsOnly() && ConnectionHandle(o.Name) == h {
+			return connectorBad("you already have a connection named %q for this add-on; choose another name", o.Name)
+		}
+	}
+	return nil
 }
 
 // UpdateConnector replaces the definition of a binding of the user.
@@ -347,14 +452,29 @@ func (c *Connectors) UpdateConnector(ctx context.Context, user, id string, in Co
 	}
 	b := old
 	in.apply(&b)
-	if err := connectors.Validate(b); err != nil {
+	if err := connectors.ValidateKind(b, c.agentOptional(ctx, b)); err != nil {
 		return ConnectorInfo{}, err
 	}
 	if err := c.checkOptions(ctx, b); err != nil {
 		return ConnectorInfo{}, err
 	}
-	if err := c.checkAgent(ctx, old.Owner, in.AgentID); err != nil {
+	if err := c.checkPermissions(ctx, b); err != nil {
 		return ConnectorInfo{}, err
+	}
+	if err := c.checkOwnerLimits(ctx, b, in); err != nil {
+		return ConnectorInfo{}, err
+	}
+	if err := c.checkAgentIfAny(ctx, old.Owner, in.AgentID); err != nil {
+		return ConnectorInfo{}, err
+	}
+	if b.Name != old.Name {
+		mine, err := c.o.Store.ListBindings(ctx, old.Owner)
+		if err != nil {
+			return ConnectorInfo{}, err
+		}
+		if err := checkConnectionName(b, mine); err != nil {
+			return ConnectorInfo{}, err
+		}
 	}
 	if strings.TrimSpace(in.Token) != "" {
 		sealer, err := c.sealerFor(ctx)
@@ -380,6 +500,9 @@ func (c *Connectors) SetConnectorEnabled(ctx context.Context, user, id string, o
 	b, err := c.owned(ctx, user, id)
 	if err != nil {
 		return ConnectorInfo{}, err
+	}
+	if on && b.CredentialsOnly() {
+		return ConnectorInfo{}, connectorBad("listening needs an agent: a connection without an agent only holds credentials")
 	}
 	b.Enabled, b.Updated = on, c.o.Clock().UTC()
 	if err := c.o.Store.PutBinding(ctx, b); err != nil {

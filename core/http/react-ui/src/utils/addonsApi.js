@@ -18,6 +18,9 @@ export class AddonsError extends Error {
     this.type = info.type || ''
     // The step of a backend install that failed, when the host named one.
     this.phase = info.phase || ''
+    // The rest of a typed refusal (for example the true operation list of a
+    // stale approval), kept as the owner sent it.
+    this.details = info.details || null
   }
 }
 
@@ -56,11 +59,13 @@ export function createAddonsApi({ fetch: fetchImpl, base = p => p } = {}) {
   async function call(path, { method = 'GET', body, signal, headers: extra, classify = classifyResponse } = {}) {
     let response
     try {
+      // A form goes as it is: the browser writes the multipart boundary.
+      const form = typeof FormData !== 'undefined' && body instanceof FormData
       response = await doFetch(base(path), {
         method,
         signal,
-        headers: { ...(body === undefined ? { Accept: 'application/json' } : { Accept: 'application/json', 'Content-Type': 'application/json' }), ...(extra || {}) },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        headers: { ...(body === undefined || form ? { Accept: 'application/json' } : { Accept: 'application/json', 'Content-Type': 'application/json' }), ...(extra || {}) },
+        body: body === undefined ? undefined : form ? body : JSON.stringify(body),
         credentials: 'same-origin',
       })
     } catch (e) {

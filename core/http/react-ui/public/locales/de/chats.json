@@ -22,6 +22,7 @@
       "undone": "Rückgängig gemacht:",
       "again": "Erneut planen",
       "declined": "Abgelehnt:",
+      "expired": "Abgelaufen:",
       "restore": "Wiederherstellen",
       "blocked": {
         "ran": "Er ist schon einmal gelaufen; entferne ihn auf der Seite Trigger.",
@@ -55,7 +56,8 @@
       "costUnknown_other": "Die Tokens eines Laufs sind nach dem ersten Lauf bekannt. Höchstens {{count}} Läufe pro Tag.",
       "remoteNote": "{{model}} ist ein entfernter Dienst: Was ein Lauf liest, verlässt diesen Server.",
       "stopWidget": "Pausiere ihn im Widget oder lösche ihn unter Trigger",
-      "stop": "Schalte ihn aus oder lösche ihn unter Trigger"
+      "stop": "Schalte ihn aus oder lösche ihn unter Trigger",
+      "actsLabel": "Berechtigungen"
     }
   },
   "mcpPage": {
@@ -317,7 +319,8 @@
       "files": "Deine Dateien",
       "media": "Bilder und Audio",
       "collections": "Sammlungen",
-      "subagents": "Sub-Agenten"
+      "subagents": "Sub-Agenten",
+      "changes": "Änderungen an Gedächtnis und Profil"
     },
     "builtinBy": "{{tools}} · eingebaut",
     "builtinByAddon": "{{tools}} · bedient von {{provider}}",
@@ -329,6 +332,48 @@
     "shell": {
       "machine": "Dieser Rechner",
       "isolated": "Befehle laufen isoliert"
+    },
+    "describe": {
+      "shell": "Das Modell kann Shell-Befehle und Skripte ausführen. Sie laufen in einem Add-on, das sie isoliert, wenn eines installiert ist, sonst direkt auf diesem Rechner.",
+      "files": "Das Modell kann deine Dateien auflisten, lesen, schreiben, bearbeiten, verschieben, löschen und durchsuchen und Dokumente lesen. Ein Chat eines Agenten, der in einem Ordner arbeitet, erreicht nur diesen Ordner.",
+      "web": "Das Modell kann im Internet suchen und eine öffentliche Seite über ihre Adresse lesen. Adressen in deinem Netzwerk werden abgelehnt, außer ein Administrator erlaubt sie.",
+      "media": "Das Modell kann ein Bild beschreiben oder eine Aufnahme aus deinen Dateien mit einem Hilfsmodell transkribieren.",
+      "collections": "Das Modell kann deine Sammlungen auflisten und darin nach den Passagen suchen, die zu einer Frage passen.",
+      "subagents": "Das Modell kann einen Sub-Agenten starten, der mit denselben Schaltern wie dieser Chat an einer Aufgabe arbeitet und Bericht erstattet.",
+      "saved_agents": "Das Modell kann deine gespeicherten Agenten auflisten und einen als Sub-Agenten starten, mit dessen eigenen Anweisungen und Modell.",
+      "triggers": "Das Modell kann Trigger vorschlagen, auflisten, ändern und löschen: Aufgaben, die von selbst zu einer festen Zeit oder beim Eintreffen einer Datei in einem Ordner laufen. Ein neuer Trigger oder eine Änderung wartet auf einer Karte im Chat, bis du sie bestätigst; Pausieren oder Fortsetzen gilt sofort und lässt sich rückgängig machen.",
+      "changes": "Das Modell kann eine Änderung an deinen Gedächtnisnotizen oder an den festen Regeln eines Agenten vorschlagen und eine bestätigte Änderung rückgängig machen. Nichts ändert sich, bis du den Vorschlag auf einer Karte im Chat bestätigst."
+    },
+    "whenOff": {
+      "shell": "Das Modell kann Dateien schreiben, aber nichts ausführen.",
+      "files": "Das Modell kann deine Dateien weder sehen noch ändern.",
+      "web": "Das Modell kann nichts online nachschlagen.",
+      "media": "Das Modell kann Bilder oder Aufnahmen nicht selbst lesen.",
+      "collections": "Das Modell kann deine Sammlungen nicht lesen.",
+      "subagents": "Das Modell arbeitet allein.",
+      "saved_agents": "Das Modell kann deine gespeicherten Agenten weder sehen noch starten.",
+      "triggers": "Das Modell kann keine Trigger erstellen oder verwalten. Ein Lauf, den ein Trigger oder ein Connector gestartet hat, hat sie nie.",
+      "changes": "Das Modell kann keine Änderungen an deinem Gedächtnis oder an den Regeln eines Agenten vorschlagen."
+    },
+    "addonDescribe_one": "Gibt dem Modell {{count}} Werkzeug dieses Add-ons.",
+    "addonDescribe_other": "Gibt dem Modell {{count}} Werkzeuge dieses Add-ons.",
+    "serverDescribe": "Ein MCP-Server des Modells: Seine Werkzeuge werden dem Modell angeboten.",
+    "connectorDescribe": "Einer deiner MCP-Connectors: Seine Werkzeuge werden dem Modell angeboten.",
+    "gone": "Hier nicht mehr verfügbar. Schalte es aus, um es zu entfernen.",
+    "grants": "Was der Agent ändern darf",
+    "grantSensitive": "Sensibel: Das ändert, was der Agent später tun oder erreichen darf.",
+    "connection": {
+      "label": "Verbindungen",
+      "help": "Wähle die Verbindungen, die dieser Chat nutzen darf. Der Assistent kann nur die angehakten verwenden.",
+      "helpMany": "Der Assistent nennt bei jeder Aktion die Verbindung und kann nur eine angehakte nennen.",
+      "sole": "Das ist deine einzige Verbindung, daher wird sie verwendet.",
+      "choose": "Wähle mindestens eine Verbindung, um diese Werkzeuge zu nutzen",
+      "none": "Noch keine Verbindung",
+      "create": "Verbindung hinzufügen",
+      "byAgent": "Der Agent dieses Chats legt die Verbindungen fest. Ändere sie beim Agenten.",
+      "agentLabel": "Verbindungen für Chats dieses Agenten",
+      "agentHelp": "Chats dieses Agenten dürfen nur diese Verbindungen nutzen und können sie nicht ändern.",
+      "perChatHelp": "Keine gewählt: Jeder Chat wählt selbst."
     }
   },
   "vision": {
@@ -636,6 +681,7 @@
     "failed": "Die Änderung konnte nicht gespeichert werden: {{message}}. Sie wartet weiter auf dich.",
     "receipt": {
       "applied": "Angewendet:",
+      "savedAuto": "Im Gedächtnis gespeichert:",
       "reverted": "Rückgängig gemacht:",
       "dismissed": "Abgelehnt:",
       "expired": "Abgelaufen:",
@@ -699,5 +745,27 @@
     "clearYes_other": "{{count}} Dateien löschen",
     "cleared_one": "{{count}} Datei in den Papierkorb verschoben.",
     "cleared_other": "{{count}} Dateien in den Papierkorb verschoben."
+  },
+  "triggerActs": {
+    "help": "Ein Lauf startet von selbst, also bestätigt niemand einen Schritt. Er kann lesen und berichten. Hake an, was er zusätzlich tun darf. Er bekommt nie mehr, als sein Agent hat.",
+    "noAgent": "Es ist kein Agent gewählt, daher begrenzt nur das Angehakte den Lauf.",
+    "readOnly": "Nur lesen",
+    "canAct": "Darf selbstständig handeln",
+    "canActText_one": "Ein Lauf darf {{count}} Art von Aktion ohne Rückfrage nutzen.",
+    "canActText_other": "Ein Lauf darf {{count}} Arten von Aktionen ohne Rückfrage nutzen.",
+    "sensitive": "mit Vorsicht",
+    "addonRow": "Ein Lauf darf die Aktionen des Add-ons {{id}} nutzen.",
+    "blocked": "Dein Agent hat dies nicht, daher lässt es sich nicht anhaken. Füge es zuerst dem Agenten hinzu.",
+    "unused": "Dein Agent hat dies nicht, daher nutzt ein Lauf es nicht.",
+    "unusedList": "Aufgeführt, aber nicht genutzt, weil der Agent es nicht hat: {{names}}.",
+    "writesNote": "Sein Plan nennt die Datei {{file}}, daher darf ein Lauf auch Dateien schreiben.",
+    "listCan_one": "Kann handeln ({{count}})",
+    "listCan_other": "Kann handeln ({{count}})",
+    "why": {
+      "no_acts": "Keine Berechtigung zum Handeln gesetzt, daher lesen und berichten seine Läufe nur.",
+      "agent": "Sein Agent hat die verlangten Berechtigungen nicht, daher lesen und berichten seine Läufe nur.",
+      "declared": "Er wurde so eingerichtet, dass er nur liest und berichtet. Nichts, was hier angehakt wird, ändert das.",
+      "binding": "Eine Verbindung im Nur-Lesen-Modus hat ihn erstellt. Nichts, was hier angehakt wird, ändert das."
+    }
   }
 }
