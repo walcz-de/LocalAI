@@ -75,14 +75,14 @@
       "BasicInfo": "Basic info",
       "ModelSettings": "Model",
       "PromptsGoals": "Instructions",
-      "MemorySettings": "Memory",
+      "MemorySettings": "Conocimiento",
       "Skills": "Skills",
       "Addons": "Add-ons",
       "MCP": "MCP servers",
       "export": "Export",
       "Files": "Archivos",
       "Tools": "Herramientas",
-      "Grants": "Permissions"
+      "Notes": "Memoria"
     },
     "name": "Name",
     "description": "Description",
@@ -95,7 +95,7 @@
     "instructionsHelp": "What the agent always follows. Every chat with it starts from this text.",
     "collections": "Collections",
     "collectionsHint": "Collection name",
-    "collectionsHelp": "The memory collections a chat with this agent may search. The list is exact: an empty list grants none.",
+    "collectionsHelp": "Las colecciones en las que un chat con este agente puede buscar. La lista es exacta: una lista vacía no concede ninguna.",
     "skillsHelp": "The skills a chat with this agent may read. The list is exact: an empty list grants none.",
     "noSkills": "No skills yet.",
     "manageSkills": "Write or manage skills",
@@ -137,17 +137,21 @@
       "all": "Todos los sitios públicos"
     },
     "toolsSummary": "{{on}} de {{total}} activas",
-    "toolsHelp": "Elige qué puede usar un chat con este agente. Son los mismos interruptores que el menú Herramientas de un chat. Una herramienta apagada nunca se ofrece al modelo, y un chat con este agente no puede encenderla.",
+    "toolsHelp": "Elige qué puede usar un chat con este agente. Son los mismos interruptores que el menú Herramientas de un chat, con las opciones de cada interruptor debajo. Una herramienta desactivada nunca se ofrece al modelo. Sin ninguna opción marcada, el agente conserva los valores por defecto de sus conexiones de mensajería; al marcar alguna, solo funcionan las marcadas.",
     "toolsHeading": "Herramientas de este agente",
     "skillsLater": "Un chat con este agente solo lee las skills activas.",
     "skillsHeading": "Skills de este agente",
-    "grantsHelp": "What the agent may do beyond its tools. With no permission ticked, the agent keeps the defaults it had before permissions existed. Once you tick any, only the ticked ones work.",
-    "grantsDefault": "Defaults",
-    "countGrants": "{{count}} granted",
-    "grantSensitive": "needs care",
     "grantsNoticeTitle": "Some messaging features will turn off.",
     "grantsNotice": "This agent had no permission list, so it kept these on its messaging connections: {{grants}}. They stop working until you tick them here.",
-    "grantsAddMissing": "Add the missing permissions"
+    "grantsAddMissing": "Add the missing permissions",
+    "grantNames": {
+      "triggers_propose": "Proponer también desde aplicaciones de mensajería",
+      "triggers_run": "Dejar que los disparadores empiecen desde aplicaciones de mensajería",
+      "talkback_channels": "Responder en canales conocidos",
+      "files_upload": "Recibir archivos de aplicaciones de mensajería"
+    },
+    "memoryOffUser": "La memoria está desactivada en tus ajustes, así que este agente no lee ni guarda notas, hagas lo que hagas aquí.",
+    "memoryOffFix": "Ajustes, Memoria"
   },
   "run": {
     "workingLine": "Working"

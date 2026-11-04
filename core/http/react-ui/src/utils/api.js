@@ -156,7 +156,9 @@ export const chatsApi = {
   fork: (id, fromSeq, title) => postJSON(`${API_CONFIG.endpoints.chat(id)}/fork`, {
     ...(fromSeq ? { from_seq: Number(fromSeq) } : {}), ...(title ? { title } : {}),
   }),
-  search: (text, limit) => fetchJSON(`${API_CONFIG.endpoints.chats}/search${q({ q: text, limit })}`),
+  // Search all chats: params are the filters of GET /api/chats/search (agent,
+  // origin, role, since, until, group).
+  search: (text, limit, params = {}) => fetchJSON(`${API_CONFIG.endpoints.chats}/search${q({ q: text, limit, ...params })}`),
   exportUrl: (id, format) => apiUrl(`${API_CONFIG.endpoints.chat(id)}/export${q({ format })}`),
   // chat is the JSON export (GET .../export?format=json); model replaces its model.
   importChat: (chat, model) => postJSON(`${API_CONFIG.endpoints.chats}/import`, { chat, ...(model ? { model } : {}) }),
@@ -475,7 +477,8 @@ export const chatAgentsApi = {
   get: (id) => fetchJSON(`/api/chats/agents/${enc2(id)}`),
   create: (body) => postJSON('/api/chats/agents', body),
   update: (id, body) => fetchJSON(`/api/chats/agents/${enc2(id)}`, { method: 'PUT', body: JSON.stringify(body) }),
-  remove: (id) => fetchJSON(`/api/chats/agents/${enc2(id)}`, { method: 'DELETE' }),
+  // memory says what to do with the agent's own notes: keep (the default) or delete.
+  remove: (id, memory) => fetchJSON(`/api/chats/agents/${enc2(id)}${q({ memory })}`, { method: 'DELETE' }),
   // The agent file of the server (kind localai-agent). Import takes it, the
   // body of a create, or an export of the old agents; it always makes a new
   // agent and says in `warnings` what it changed.
@@ -562,6 +565,14 @@ export const chatChangesApi = {
   dismiss: (id) => postJSON(`/api/chats/changes/${enc2(id)}/dismiss`, {}),
   undo: (id) => postJSON(`/api/chats/changes/${enc2(id)}/undo`, {}),
   contextFiles: () => fetchJSON('/api/chats/context-files'),
+}
+
+// Your memory choices: the On or Off switch for all chats, and how a note is
+// saved. exportUrl is the address that downloads the notes as a zip file.
+export const chatMemoryApi = {
+  get: () => fetchJSON('/api/chats/memory'),
+  set: (body) => fetchJSON('/api/chats/memory', { method: 'PUT', body: JSON.stringify(body) }),
+  exportUrl: (scope, key) => apiUrl(`/api/chats/memory/export${q({ scope, key })}`),
 }
 
 // The inbox: what ended while the user was elsewhere.

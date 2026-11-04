@@ -423,6 +423,8 @@ The generic binary selects no policy automatically.
 | Office | `workspace.export`, `workspace.import` | None |
 | Sandbox | `workspace.changes`, `workspace.commit`, `workspace.materialize` | `egress.audit`, `egress.check`, `workspace.admin` |
 | Web | None | `workspace.admin` |
+| Home Assistant | None | `workspace.admin` |
+| PiKVM | None | `workspace.admin` |
 | Face, Slack, Studio, Tables, Talk, Telegram, Voice | None; omit `hostOperations` | None |
 
 Fine-tuning and Quantization include operation names passed through mutation and undo wrappers.
@@ -436,7 +438,7 @@ Telegram's historical `connector.` deployment grant does not imply a hostclient 
 
 Sandbox's proxy uses the optional egress operations when configured connections need policy decisions.
 Missing grants do not authorize connections; the proxy cannot obtain an allow verdict.
-Sandbox's settings and Web's provider settings use `workspace.admin` to check administrators.
+Sandbox's settings, Web's provider settings, the limits of the Home Assistant add-on and the per-device switches of the PiKVM add-on use `workspace.admin` to check administrators.
 Without that optional operation, these settings refuse changes; ordinary tools can remain available.
 The shipped deployment policy covers every official required operation.
 The package tests compare all twelve manifests with this source audit and the host's registered vocabulary.
@@ -535,6 +537,7 @@ a call may reach. The model never sees or sets either.
 - A manifest with `credentials` must accept `api` 2, declare a connector kind and
   declare read tools only: a change under a credential needs a write mode, which
   this version does not have. Tools of such an add-on name no `resourceId`.
+- A tool with `uiOnly: true` (see the `uiOnly` field of a tool definition) gets no credential and no resource, even in an add-on that declares a slot. It is for the add-on's own page, which has no chat to name a connection, so it works with no connection or with several. The Home Assistant add-on keeps the limits for all its connections this way.
 - An add-on that is rate limited returns `contract.ErrRateLimited{RetryAfter}`.
   The runtime answers HTTP 429 with `Retry-After`; the model gets the code
   `rate_limited`, `retryAfter` in seconds and a note not to retry before then.
@@ -700,7 +703,7 @@ The three roles split the work of a LocalAI process as follows.
 | The carrier | Loopback, with keys made at each start | Served on the network | Client only |
 | Chat turns | Yes | No | Yes |
 | Model loading | In this process, or on workers in distributed mode | No models. In distributed mode it routes loads to workers. | In this process, or on workers in distributed mode |
-| Connector polling (Telegram, Slack) | Yes | No | Yes, on the one leader frontend |
+| Connector polling (Telegram, Slack, Discord) | Yes | No | Yes, on the one leader frontend |
 | Triggers, loops and agent jobs | Yes | No | Yes |
 | API and UI for users | Yes | No. Send users to a frontend. | Yes |
 
@@ -922,6 +925,49 @@ consequences:
   the pins of the Apps entry are shared by all frontends. Without one, each
   frontend keeps its own pins in a file in its own data path, so two frontends can
   show different pins. A frontend logs a warning at start when it has no account database.
+
+## Operations and reads during an upgrade
+
+An install, an upgrade or a removal runs on the owner and can take a minute or
+more: it fetches and checks the package, backs up the data, publishes the new
+generation and starts it. The owner runs one such operation per add-on at a
+time. A second upgrade of an add-on that is already changing is refused with a
+conflict; it is never queued or run in parallel.
+
+Reading never waits for an operation. The apps list, the host access overview
+and the installed list answer from a snapshot of the last journal write, so an
+upgrade in progress does not make the Add-ons page slow or empty. While an
+operation runs, each add-on that it touches carries an `operation` object in
+the apps list:
+
+```json
+{"id": "sandbox", "state": "running", "generation": 5,
+ "operation": {"kind": "upgrade", "phase": "downloading", "since": "2026-11-04T17:18:00Z"}}
+```
+
+`phase` is `queued`, `downloading` (fetch and check the package), `backing-up`,
+`installing`, `migrating`, `starting` or `working`. `state` and `generation` are
+still those of the running add-on until the new generation is published.
+
+A frontend that forwards a read to the owner waits at most eight seconds. When
+the owner does not answer in that time, the route fails closed with the same
+typed `503` from every frontend, and never with an older list of its own:
+
+- `owner_busy`: the owner is up but did not answer in time.
+- `owner_unavailable`: the owner could not be reached at all.
+
+A frontend keeps no copy of the apps list, because two frontends with different
+copies would give different answers for the same request. `GET /api/addons/pins`
+answers the same way instead of returning pins without the add-ons it could not
+check. When the owner is reachable and busy, it still answers from its snapshot,
+so the apps list is a normal `200` with the `operation` fields above.
+
+The Add-ons page keeps the last list it received in the browser (in memory and,
+for a page loaded during an upgrade, in the session storage of the tab). On a
+`503` it keeps showing that list, shows a notice such as "The add-on server is
+busy. Showing the last known state.", and asks again with a growing delay. It
+only says that no add-ons are installed when the owner answered with an empty
+list.
 
 ## The official library
 
@@ -1554,6 +1600,67 @@ needs none of them.
 | `ui.mainPage` | The page the Open action navigates to. It must be one of `ui.pages`. Without it the addon has no Open action. `ui.entry` keeps its meaning: the packaged ES module. |
 | `ui.icon` | A packaged image: `.png`, `.webp`, `.jpg` or `.jpeg`, a normalized package-relative path of at most 256 bytes, at most 256 KiB. A remote URL, a `data:` URL, an absolute path and a traversal are rejected. It cannot also be the module or a stylesheet. |
 | `ui.title`, `ui.description` | Plain text: one string, or a map of BCP 47 language tag to string (at most 16 tags). At most 80 and 280 characters. Markup characters (`<`, `>`), control characters and direction overrides are rejected. |
+
+### Translated text
+
+The English text of a manifest is the source and the fallback. An add-on can
+carry the text that LocalAI shows to people in other languages, so the library
+list and the add-on cards read in the language of the user. Two fields do this.
+
+**The title and the description of the add-on** use the language maps of
+`ui.title` and `ui.description` (see the table above). Write the English text
+under `en`, then one entry for each language:
+
+```json
+"title": { "en": "Tables", "it": "Tabelle", "de": "Tabellen", "pt-BR": "Tabelas" },
+"description": { "en": "Databases of tables.", "it": "Database di tabelle." }
+```
+
+**The kinds of a connector add-on** use the optional top-level field `i18n`.
+It is an optional addition to `api` 2. Its shape is closed on purpose:
+
+```json
+"i18n": {
+  "it": { "kinds": { "telegram": { "title": "Telegram", "description": "Parla con uno dei tuoi agenti salvati da un bot Telegram." } } },
+  "pt-BR": { "kinds": { "telegram": { "title": "Telegram", "description": "Converse com um dos seus agentes salvos por um bot do Telegram." } } }
+}
+```
+
+| Rule | Value |
+|---|---|
+| Language tags | A BCP 47 subset: two or three letters and up to three subtags, such as `it`, `pt-BR`, `zh-CN`. At most 16 languages. A tag is unique whatever its case. `en` is refused: the English fields are the manifest. |
+| Fields | `kinds.<id>.title` and `kinds.<id>.description`. The kind must be declared in `capabilities.connector.kinds`, and a description can be translated only when the English kind has one. An unknown field fails the strict parser, as does a duplicate key. |
+| Text | Plain text, as for `ui.title`: no `<` or `>`, no control characters, no direction overrides, no leading or trailing space. A title has at most 80 characters and a description at most 280. All the translated text of one manifest has at most 12 000 characters. The whole manifest keeps its size limit. |
+| Fallback | A field that a language leaves out, and every language that the manifest does not list, shows the English text. Each field falls back on its own. |
+| Not translatable | Tool descriptions, input schemas and skills are written for the model and stay English. User setting keys and values are identifiers. The text of the add-on's own pages is part of the UI bundle and has its own strings. |
+
+A host that does not know `i18n` refuses a manifest that has it, as it refuses
+any unknown field, so a package with `i18n` needs a host that reads it. The
+language maps of `ui.title` and `ui.description` are older and every host reads them.
+The field is part of the manifest, so the package digest and its signature cover
+it: a changed translation is a new package.
+
+**What the host does with it.** The library index carries the translated title and
+description of each entry (`ui.titles` and `ui.descriptions`, by language), so the library
+lists them before the add-on is installed. The generator of the index
+(`scripts/addons/catalog.sh`) copies them from the manifest, so they are never
+edited in the index. A search matches the English and the translated text.
+
+`GET /api/addons/apps` and `GET /api/chats/connectors/kinds` return the text of every
+language in `titles` and `descriptions`. When the request names a language, each item that
+translates it also has `language` and the resolved `localizedTitle` and
+`localizedDescription` (`localized_title` and `localized_description` for connector kinds). The
+language is the `lang` query parameter; without it, the `Accept-Language` header (quality values
+are honored); without both, English and no extra field. An unknown or malformed `lang` is
+English and the header is not read behind it. `title` and `description` never change, so an
+existing client sees the same answer as before. The UI reads the maps and picks the language of
+the user itself.
+
+**Authoring.** Translate by hand, in the tone of the main locale of the language. Keep product
+names (GitHub, Slack, Telegram, Discord, Jellyfin, Home Assistant, LocalAI) as they are. Keep the
+meaning of the English text; do not add claims to it. The packaging tests require every first-party
+add-on to have the title and the description in `en`, `it`, `de`, `es`, `fr`, `id`, `ko`, `pt-BR`
+and `zh-CN`, and every connector kind to have the same fields as its English kind in each of them.
 
 ### Skills
 
@@ -2451,7 +2558,7 @@ The owner process holds everything about host grants. A frontend stores nothing 
 ## Connector add-ons
 
 A connector add-on carries the messages of a messaging platform between the platform
-and the [chats](/features/chats-connectors/). The Telegram and Slack add-ons are
+and the [chats](/features/chats-connectors/). The Telegram, Slack and Discord add-ons are
 first-party connector add-ons. The host keeps what is the same for every platform (the
 bindings, the sealed bot token, the allowlist, the sender log, one chat for each sender
 or thread, the turn and its notifications), so an add-on holds only the transport and
@@ -2760,9 +2867,11 @@ source, after the grant check.
 ### How a memory note is saved
 
 By default every memory note is a proposal that the person confirms. The person
-can change this for memory notes only, on the page of an add-on that declares a
-[user setting](#user-settings) with the role `memory.save-mode` (the Short memory
-add-on declares one, with the key `save-mode`). The host finds the setting by its
+can change this for memory notes only, in the Memory tab of the account settings,
+where the server keeps the choice as its own setting. A person who chose on the page of an
+add-on that declares a [user setting](#user-settings) with the role `memory.save-mode` (the
+old Short memory add-on declared one, with the key `save-mode`) keeps that choice until they
+choose in the account settings. The host finds the setting by its
 role, so core code names no add-on:
 
 | Value | What happens |
@@ -2855,8 +2964,8 @@ A source has four fields:
 | `path` | The index file, relative to the user's home, ending in `.md`. An `agent` path holds `{agent}` once and a `channel` path holds `{channel}` once. The host fills them from the chat; the model never names them. |
 | `cap` | The most bytes of the index that the prompt carries. Default and maximum: 2 KiB. |
 
-For example, a memory add-on declares three sources: `Memory/index.md` for the user,
-`Memory/agents/{agent}/index.md` for the agent and `Memory/channels/{channel}/index.md`
+For example, an add-on that keeps its own notes declares three sources: `Notes/index.md` for the user,
+`Notes/agents/{agent}/index.md` for the agent and `Notes/channels/{channel}/index.md`
 for the channel. A path with a parent segment, an absolute path, an unknown placeholder
 or a file that does not end in `.md` is refused. A host holds at most 8 sources.
 
@@ -4210,8 +4319,8 @@ The Talk add-on (`talk`) is a packaged add-on, separate from Studio. Install it 
 users with the `addons` feature. The page opens a WebRTC session to a realtime pipeline
 through `/v1/realtime/calls` and reads the pipeline list from `/api/pipeline-models`, with
 the signed-in user's own session; the core keeps both routes. The page uses the MCP servers
-that the person added in the browser, the same list as Chat. The words are the English `talk` locale
-file of the web UI; other languages read the English text.
+that the person added in the browser, the same list as Chat. The words are the `talk` locale
+files of the add-on, in every language of the web UI.
 
 ### The Voice add-on
 
@@ -4731,6 +4840,9 @@ operations.
 
 **Check for updates** in the bar of the list reads the library of every installed add-on
 again; it applies nothing, and an add-on that cannot be checked does not stop the others.
+Add-ons that share a library are all checked, whether they are turned on or off, and every
+one with a newer build is listed together. An installed version that this server can no longer
+run cannot be turned on: the server says so and you upgrade it first.
 
 An upgrade started from the list, the details, **Find add-ons** or **Upgrade all** keeps
 running when you leave the page. It appears in the Activity page under the **Add-ons**
@@ -4822,6 +4934,21 @@ A chat action is `{id, label, icon, open(context)}`, where `id` must be one of
 history, message or send hook, and an add-on cannot intercept submission or override a
 route. An action that is undeclared, duplicated, without a label or without `open` is
 ignored; an error inside `open` never reaches the host.
+
+#### Translating an add-on page
+
+An add-on page reads its words from JSON bundles named `<namespace>.<language>.json` in
+`addons/<id>/ui/src/i18n/`, one for English and one for each language of the web UI
+(`core/http/react-ui/public/locales`). The page follows the language of the web UI, and a key that a bundle
+lacks reads in English. The connector pages (Telegram, Slack, Discord, GitHub, Jellyfin, Home Assistant)
+also share the bundles in `addons/internal/connector-ui/src/i18n/`, which hold the readiness list, the
+permissions, the approval, the pairing and the file limits. A bundle uses `{{name}}` placeholders and
+`_one` / `_other` plural keys. Do not translate product names, identifiers, capability keys or code.
+
+`node addons/internal/i18ncheck/check.mjs` (part of `make test-i18n` and of the UI unit tests in CI) fails
+when a language lacks a bundle, a bundle lacks a key of English or has an extra one, a placeholder differs
+from English, or a value is empty. There is no baseline: add a key to English and every language in the
+same change.
 
 Compile an add-on with classic JSX transformed to `React.createElement` over
 `sdk.React`, inside the `createAddon` factory. Do not import a JSX runtime. The fixture
