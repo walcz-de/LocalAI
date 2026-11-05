@@ -53,6 +53,7 @@
   "proposal.multi": "Hier warten mehrere. Sag, welcher gemeint ist, zum Beispiel \"bestätigen CODE\" oder \"abbrechen CODE\":",
   "change.no_right": "Nur der Eigentümer kann das bestätigen.",
   "change.not_you": "Nur die Person, die gefragt hat, kann das bestätigen.",
+  "change.flagged": "Dieser Text enthält möglicherweise ein Geheimnis und kann deshalb nicht im Chat bestätigt werden. Prüfe den Vorschlag in der Weboberfläche.",
   "change.cannot": "Das konnte nicht rückgängig gemacht werden: {error}",
   "change.saved": "Gespeichert: {summary}. Antworte innerhalb von {minutes} Minuten mit \"rückgängig\", um es zurückzunehmen.",
   "change.done": "Erledigt: {summary}. Antworte innerhalb von {minutes} Minuten mit \"rückgängig\", um es zurückzunehmen.",
@@ -75,7 +76,8 @@
   "change.ask": "Es wird nichts gespeichert, bevor du antwortest. Antworte hier innerhalb von 24 Stunden mit \"ja\", um zu speichern, oder mit \"nein\", um zu verwerfen. Wenn mehrere warten, antworte mit \"bestätigen {code}\" oder \"abbrechen {code}\".",
   "trigger.where.inbox": "in die Inbox von Studio",
   "trigger.where.chat": "in diesen Chat",
-  "trigger.where.channel": "in den Kanal {channel}",
+  "trigger.where.channel": "in den Kanal {channel}, als eigene Nachricht oben im Kanal",
+  "trigger.where.thread": "in diesen Thread",
   "trigger.mode.on_change": ", nur wenn sich das Ergebnis ändert",
   "trigger.mode.on_problem": ", nur wenn ein Lauf fehlschlägt",
   "trigger.cost.once": "ein Modelllauf",
@@ -150,5 +152,9 @@
   "media.kind.audio": "Audiodateien",
   "media.kind.video_note": "Videonachrichten",
   "media.kind.document": "Dateien",
-  "media.kind.other": "Dateien dieser Art"
+  "media.kind.other": "Dateien dieser Art",
+  "refuse.channel": "Dieser Kanal ist auf Nur antworten gestellt, deshalb kann ich das hier nicht für dich tun. Bitte den Besitzer, dich zu den erlaubten Personen hinzuzufügen oder allen in diesem Kanal Aktionen zu erlauben.",
+  "refuse.unlisted": "Das können nur Personen, die der Besitzer diesem Bot hinzugefügt hat, und du gehörst nicht dazu.",
+  "refuse.pairing": "Das können nur Personen, die der Besitzer mit diesem Bot gekoppelt hat.",
+  "refuse.off": "Der Besitzer hat das für diesen Bot nicht eingeschaltet."
 }

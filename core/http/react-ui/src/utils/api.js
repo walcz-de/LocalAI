@@ -151,6 +151,10 @@ export const chatsApi = {
   // turn runs; settings apply from the next turn.
   update: (id, fields) => fetchJSON(API_CONFIG.endpoints.chat(id), { method: 'PATCH', body: JSON.stringify(fields) }),
   // Regenerate and edit start a new turn; both answer 409 while one runs.
+  // Resume goes on from where a failed turn stopped; nothing is removed. It
+  // answers started: false when the chat is not at a failed turn (a second
+  // click, or another window resumed it).
+  resume: (id) => postJSON(`${API_CONFIG.endpoints.chat(id)}/resume`, {}),
   regenerate: (id) => postJSON(`${API_CONFIG.endpoints.chat(id)}/regenerate`, {}),
   editMessage: (id, seq, text) => postJSON(`${API_CONFIG.endpoints.chat(id)}/messages/${Number(seq)}/edit`, { text }),
   fork: (id, fromSeq, title) => postJSON(`${API_CONFIG.endpoints.chat(id)}/fork`, {
@@ -486,6 +490,9 @@ export const chatAgentsApi = {
   importFile: (data) => postJSON('/api/chats/agents/import', data),
   // The builtin grants an agent can hold: { grants: [{ name, title, description, sensitive }] }.
   builtinGrants: () => fetchJSON('/api/chats/agents/builtin-grants'),
+  // The resources of one add-on you may give an agent, with the add-on's own
+  // word for them: { addon_id, noun, noun_plural, language, items: [{ id, name, role }], truncated }.
+  addonResources: (addon) => fetchJSON(`/api/chats/agents/addons/${enc2(addon)}/resources`),
   templates: () => fetchJSON('/api/chats/agents/templates'),
   fromTemplate: (id, name) => postJSON(`/api/chats/agents/templates/${enc2(id)}/create`, name ? { name } : {}),
   runs: (id, limit) => fetchJSON(`/api/chats/agents/${enc2(id)}/runs${q({ limit })}`),
@@ -576,6 +583,9 @@ export const chatMemoryApi = {
   get: () => fetchJSON('/api/chats/memory'),
   set: (body) => fetchJSON('/api/chats/memory', { method: 'PUT', body: JSON.stringify(body) }),
   exportUrl: (scope, key) => apiUrl(`/api/chats/memory/export${q({ scope, key })}`),
+  // Asks the provider that serves to forget notes; with no scope it forgets
+  // everything the provider keeps. Answers { done, proposal }.
+  forget: (scope, key) => fetchJSON(`/api/chats/memory${q({ scope, key })}`, { method: 'DELETE' }),
 }
 
 // The provider slots: a job the host does itself and lets an add-on do in its

@@ -53,6 +53,7 @@
   "proposal.multi": "Plusieurs propositions attendent ici. Précisez laquelle, par exemple « confirmer CODE » ou « annuler CODE » :",
   "change.no_right": "Seul le propriétaire peut confirmer cela.",
   "change.not_you": "Seule la personne qui l'a demandé peut confirmer cela.",
+  "change.flagged": "Ce texte semble contenir un secret, il ne peut donc pas être confirmé depuis un chat. Vérifiez la proposition dans l'interface web.",
   "change.cannot": "L'annulation n'a pas pu se faire : {error}",
   "change.saved": "Enregistré : {summary}. Répondez « annuler la modification » dans les {minutes} minutes pour revenir en arrière.",
   "change.done": "Fait : {summary}. Répondez « annuler la modification » dans les {minutes} minutes pour revenir en arrière.",
@@ -75,7 +76,8 @@
   "change.ask": "Rien n'est enregistré avant votre réponse. Répondez « oui » pour l'enregistrer ou « non » pour l'abandonner, ici, dans les 24 heures. Si plusieurs attendent, répondez « confirmer {code} » ou « annuler {code} ».",
   "trigger.where.inbox": "dans l'Inbox de Studio",
   "trigger.where.chat": "dans cette conversation",
-  "trigger.where.channel": "dans le canal {channel}",
+  "trigger.where.channel": "dans le canal {channel}, au premier niveau du canal",
+  "trigger.where.thread": "dans ce fil",
   "trigger.mode.on_change": ", seulement quand le résultat change",
   "trigger.mode.on_problem": ", seulement quand une exécution échoue",
   "trigger.cost.once": "une exécution du modèle",
@@ -150,5 +152,9 @@
   "media.kind.audio": "fichiers audio",
   "media.kind.video_note": "messages vidéo",
   "media.kind.document": "fichiers",
-  "media.kind.other": "fichiers de ce type"
+  "media.kind.other": "fichiers de ce type",
+  "refuse.channel": "Ce canal est réglé sur réponse seule, je ne peux donc pas le faire pour vous ici. Demandez au propriétaire de vous ajouter aux personnes autorisées, ou de laisser tout le monde dans ce canal demander des actions.",
+  "refuse.unlisted": "Seules les personnes ajoutées à ce bot par le propriétaire peuvent le faire, et vous n'en faites pas partie.",
+  "refuse.pairing": "Seules les personnes que le propriétaire a associées à ce bot peuvent le faire.",
+  "refuse.off": "Le propriétaire n'a pas activé cela pour ce bot."
 }

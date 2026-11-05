@@ -53,6 +53,7 @@
   "proposal.multi": "Qui ce n'è più di uno in attesa. Indica quale, ad esempio \"conferma CODICE\" oppure \"annulla CODICE\":",
   "change.no_right": "Solo il proprietario può confermare.",
   "change.not_you": "Solo la persona che l'ha chiesto può confermare.",
+  "change.flagged": "Questo testo sembra contenere un segreto, quindi non si può confermare da una chat. Controlla la proposta nell'interfaccia web.",
   "change.cannot": "Non è stato possibile annullare la modifica: {error}",
   "change.saved": "Salvato: {summary}. Rispondi \"annulla modifica\" entro {minutes} minuti per tornare indietro.",
   "change.done": "Fatto: {summary}. Rispondi \"annulla modifica\" entro {minutes} minuti per tornare indietro.",
@@ -75,7 +76,8 @@
   "change.ask": "Non viene salvato nulla finché non rispondi. Rispondi \"sì\" per salvare o \"no\" per scartare, qui, entro 24 ore. Se ce n'è più di uno in attesa, rispondi \"conferma {code}\" oppure \"annulla {code}\".",
   "trigger.where.inbox": "nell'Inbox di Studio",
   "trigger.where.chat": "in questa chat",
-  "trigger.where.channel": "nel canale {channel}",
+  "trigger.where.channel": "nel canale {channel}, in cima al canale",
+  "trigger.where.thread": "in questo thread",
   "trigger.mode.on_change": ", solo quando il risultato cambia",
   "trigger.mode.on_problem": ", solo quando un'esecuzione fallisce",
   "trigger.cost.once": "un'esecuzione del modello",
@@ -150,5 +152,9 @@
   "media.kind.audio": "file audio",
   "media.kind.video_note": "videomessaggi",
   "media.kind.document": "file",
-  "media.kind.other": "questo tipo di file"
+  "media.kind.other": "questo tipo di file",
+  "refuse.channel": "Questo canale è impostato su sola risposta, quindi qui non posso farlo per te. Chiedi al proprietario di aggiungerti alle persone consentite, o di far chiedere azioni a tutti in questo canale.",
+  "refuse.unlisted": "Solo le persone aggiunte dal proprietario a questo bot possono farlo, e tu non sei tra loro.",
+  "refuse.pairing": "Solo le persone abbinate a questo bot dal proprietario possono farlo.",
+  "refuse.off": "Il proprietario non ha attivato questa funzione per questo bot."
 }

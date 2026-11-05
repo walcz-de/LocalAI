@@ -53,6 +53,7 @@
   "proposal.multi": "More than one is waiting here. Say which, for example \"confirm CODE\" or \"cancel CODE\":",
   "change.no_right": "Only the owner can confirm this.",
   "change.not_you": "Only the person who asked can confirm this.",
+  "change.flagged": "This text looks like it holds a secret, so it cannot be confirmed from a chat. Open the proposal in the web interface to check it.",
   "change.cannot": "I could not undo it: {error}",
   "change.saved": "Saved: {summary}. Reply \"undo\" within {minutes} minutes to take it back.",
   "change.done": "Done: {summary}. Reply \"undo\" within {minutes} minutes to take it back.",
@@ -75,7 +76,8 @@
   "change.ask": "Nothing is saved until you answer. Reply \"yes\" to save it or \"no\" to drop it, here, within 24 hours. If more than one waits, reply \"confirm {code}\" or \"cancel {code}\".",
   "trigger.where.inbox": "the Inbox in Studio",
   "trigger.where.chat": "this chat",
-  "trigger.where.channel": "the channel {channel}",
+  "trigger.where.channel": "{channel}, at the top of the channel",
+  "trigger.where.thread": "this thread",
   "trigger.mode.on_change": ", only when the result changes",
   "trigger.mode.on_problem": ", only when a run fails",
   "trigger.cost.once": "one model run",
@@ -150,5 +152,9 @@
   "media.kind.audio": "audio files",
   "media.kind.video_note": "video messages",
   "media.kind.document": "files",
-  "media.kind.other": "this kind of file"
+  "media.kind.other": "this kind of file",
+  "refuse.channel": "This channel is set to answer only, so I cannot do that for you here. Ask the owner to add you to the allowed people, or to let everyone in this channel ask for actions.",
+  "refuse.unlisted": "Only people the owner added to this bot can do that, and you are not one of them.",
+  "refuse.pairing": "Only people the owner paired with this bot can do that.",
+  "refuse.off": "The owner has not turned that on for this bot."
 }

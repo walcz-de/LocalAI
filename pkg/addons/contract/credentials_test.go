@@ -56,6 +56,48 @@ var _ = Describe("The credential slot of an add-on", func() {
 			Expect(ValidateManifest(manifest(mod), host())).NotTo(Succeed())
 		}
 	})
+	Describe("wildcard resources", func() {
+		const listSchema = `{"type":"object","properties":{"page":{"type":"integer"}},"additionalProperties":false}`
+		withList := func(wildcard bool, mod func(*ToolDefinition)) Manifest {
+			return manifest(func(m *Manifest) {
+				d := ToolDefinition{Name: "list-repos", Description: "List.", Kind: ToolKindRead, InputSchema: json.RawMessage(listSchema), Enumerates: true}
+				if mod != nil {
+					mod(&d)
+				}
+				m.Capabilities.Tools = append(m.Capabilities.Tools, "list-repos")
+				m.Capabilities.ToolDefinitions = append(m.Capabilities.ToolDefinitions, d)
+				m.Capabilities.Connector.Kinds[0].WildcardResources = wildcard
+			})
+		}
+		It("lets a kind that declares them have a tool that enumerates", func() {
+			Expect(ValidateManifest(withList(true, nil), host())).To(Succeed())
+		})
+		It("refuses an enumerating tool when the kind has no wildcards, or when it is not a plain read tool", func() {
+			Expect(ValidateManifest(withList(false, nil), host())).NotTo(Succeed())
+			Expect(ValidateManifest(withList(true, func(d *ToolDefinition) { d.Kind = ToolKindWrite }), host())).NotTo(Succeed())
+			Expect(ValidateManifest(withList(true, func(d *ToolDefinition) { d.UIOnly = true }), host())).NotTo(Succeed())
+		})
+		It("refuses an enumerating tool that names a resource", func() {
+			s := `{"type":"object","properties":{"repo":{"type":"string"}},"required":["repo"],"additionalProperties":false}`
+			Expect(ValidateManifest(withList(true, func(d *ToolDefinition) { d.InputSchema = json.RawMessage(s) }), host())).NotTo(Succeed())
+		})
+	})
+	Describe("token guards", func() {
+		withGuard := func(g TokenGuard) Manifest {
+			return manifest(func(m *Manifest) {
+				k := &m.Capabilities.Connector.Kinds[0]
+				k.Options = []ConnectorOption{{ID: "classicToken", Title: "Classic", Default: "refuse", Values: []ConnectorOptionValue{{ID: "refuse", Title: "No"}, {ID: "allow", Title: "Yes"}}}}
+				k.TokenGuards = []TokenGuard{g}
+			})
+		}
+		It("name a prefix, an option of the kind and a value it offers", func() {
+			Expect(ValidateManifest(withGuard(TokenGuard{Prefix: "ghp_", Option: "classicToken", Allow: "allow"}), host())).To(Succeed())
+			Expect(ValidateManifest(withGuard(TokenGuard{Prefix: "ghp_", Option: "missing", Allow: "allow"}), host())).NotTo(Succeed())
+			Expect(ValidateManifest(withGuard(TokenGuard{Prefix: "ghp_", Option: "classicToken", Allow: "maybe"}), host())).NotTo(Succeed())
+			Expect(ValidateManifest(withGuard(TokenGuard{Prefix: "", Option: "classicToken", Allow: "allow"}), host())).NotTo(Succeed())
+			Expect(ValidateManifest(withGuard(TokenGuard{Prefix: "a b", Option: "classicToken", Allow: "allow"}), host())).NotTo(Succeed())
+		})
+	})
 	Describe("write tools", func() {
 		const writeSchema = `{"type":"object","properties":{"repo":{"type":"string"},"body":{"type":"string"}},"required":["repo","body"],"additionalProperties":false}`
 		withWrite := func(schema, approval string) Manifest {
@@ -101,6 +143,40 @@ var _ = Describe("The credential slot of an add-on", func() {
 		It("accept the approval field on a write tool only", func() {
 			m := manifest(func(m *Manifest) { m.Capabilities.ToolDefinitions[0].Approval = ApprovalAlways })
 			Expect(ValidateManifest(m, host())).NotTo(Succeed())
+		})
+		Describe("the approval the person may relax", func() {
+			relaxable := func(mod func(*Manifest)) Manifest {
+				m := withWrite(writeSchema, ApprovalAlways)
+				m.Capabilities.ToolDefinitions[len(m.Capabilities.ToolDefinitions)-1].ApprovalOverridable = true
+				m.Capabilities.UserSettings = append(m.Capabilities.UserSettings,
+					UserSetting{Key: ApprovalSettingKey("comment"), Values: []string{ApprovalAsk, ApprovalSkip}, Default: ApprovalAsk})
+				if mod != nil {
+					mod(&m)
+				}
+				return m
+			}
+			It("is accepted with its setting, the values ask and skip and the default ask", func() {
+				Expect(ValidateManifest(relaxable(nil), host())).To(Succeed())
+			})
+			DescribeTable("is refused",
+				func(mod func(*Manifest)) { Expect(ValidateManifest(relaxable(mod), host())).NotTo(Succeed()) },
+				Entry("without the setting", func(m *Manifest) { m.Capabilities.UserSettings = nil }),
+				Entry("when the setting starts at skip", func(m *Manifest) {
+					m.Capabilities.UserSettings[0].Default = ApprovalSkip
+				}),
+				Entry("when the setting has another value", func(m *Manifest) {
+					m.Capabilities.UserSettings[0].Values = []string{ApprovalAsk, ApprovalSkip, "maybe"}
+				}),
+				Entry("when the setting carries a host role", func(m *Manifest) {
+					m.Capabilities.UserSettings[0].Role = UserSettingRoleMemorySave
+				}),
+				Entry("on a tool without approval always", func(m *Manifest) {
+					m.Capabilities.ToolDefinitions[len(m.Capabilities.ToolDefinitions)-1].Approval = ""
+				}),
+				Entry("in an add-on without a credential", func(m *Manifest) {
+					m.Capabilities.Credentials = nil
+				}),
+			)
 		})
 		It("may be checked on their own with ValidateCredentialedToolSchema", func() {
 			Expect(ValidateCredentialedToolSchema(json.RawMessage(writeSchema), ToolKindWrite)).To(Succeed())

@@ -332,7 +332,12 @@
     "bindingsOf": "Bindings of {{name}}",
     "loadFailed": "Could not load your connectors.",
     "waitingTitle": "Waiting for their add-on",
-    "waitingText": "These bindings are kept, but they do not run until their add-on is installed and turned on."
+    "waitingText": "These bindings are kept, but they do not run until their add-on is installed and turned on.",
+    "duplicate": {
+      "text": "This bot is also connected as {{name}}. Both connections will answer the same message.",
+      "turnOff": "Turn this one off",
+      "open": "Open {{name}}"
+    }
   },
   "conversionPage": {
     "title": "Converted from the old chat",
@@ -816,6 +821,11 @@
       "readsLabel": "Reads",
       "writesLabel": "Writes",
       "costLabel": "Cost",
+      "deliveryLabel": "Results go to",
+      "deliveryInbox": "Your Inbox",
+      "deliveryChat": "This chat",
+      "deliveryThread": "This thread",
+      "deliveryChannel": "{{channel}}, at the top of the channel",
       "stopLabel": "To stop it",
       "when": "{{schedule}}, {{zone}}. First run {{when}}.",
       "whenNoFirst": "{{schedule}}, {{zone}}.",
@@ -1122,7 +1132,15 @@
       "label": "Text to add to {{collection}}",
       "size": "{{size}} of at most {{max}}",
       "note": "Nothing is added until you confirm. The text is then split into passages and indexed, and every chat that searches this collection can use it.",
-      "editLabel": "Text to add to {{target}}"
+      "editLabel": "Text to add to {{target}}",
+      "embed_one": "1 passage will be embedded with {{model}}.",
+      "embed_other": "About {{count}} passages will be embedded with {{model}}.",
+      "serverModel": "the server's embedding model"
+    },
+    "warning": {
+      "title": "Check this text before you confirm.",
+      "secret": "It looks like it holds a secret, such as a key, a token or a password. Once it is added, every chat that searches this collection can read it. A messaging chat cannot confirm it; only you can, here.",
+      "other": "The server flagged this text as risky. A messaging chat cannot confirm it; only you can, here."
     }
   },
   "proposalsPage": {
@@ -1303,15 +1321,20 @@
       "title": "As before",
       "body": "This agent was saved before this choice existed. It reads your notes when its add-ons list names Memory, and the model picks where a note is saved. Pick one of the choices below to change that."
     },
-    "saveGrant": "Let it save notes",
-    "saveGrantHelp": "Turns on the permission Remember things. Without it the agent reads notes but cannot save any.",
     "copyNote": "Exporting an agent, or importing it as a new one, keeps this choice and never copies its notes.",
     "summary": {
       "mine_and_own": "Mine and its own",
       "own": "Its own only",
       "mine": "Mine",
       "none": "None",
-      "asBefore": "As before"
+      "asBefore": "As before",
+      "withAuto": "{{choice}}, saves at once",
+      "level": {
+        "off": "Off",
+        "reads": "Reads notes",
+        "saves": "Reads and saves notes"
+      },
+      "combined": "{{level}}, {{choice}}"
     },
     "delete": {
       "title": "Delete {{name}}?",
@@ -1336,7 +1359,11 @@
       "title": "When it wants to save a note",
       "use_mine": {
         "title": "Use my setting",
-        "body": "Currently: {{level}}."
+        "body": "Your setting is <b>{{level}}</b>. <settings>Change it in Settings > Memory.</settings>"
+      },
+      "auto": {
+        "title": "Save it and tell me",
+        "body": "Saves each note at once and tells you in the chat, with an Undo, even when your setting is Ask me first. A long note, or one that looks like a secret, still waits."
       },
       "always": {
         "title": "Always confirm",
@@ -1346,8 +1373,27 @@
         "title": "Never",
         "body": "It reads, never saves."
       },
-      "hint": "An agent can ask more than your setting, never less. \"Save it and tell me\" is not offered here. In a messaging chat a note goes to that conversation first, and reaches this agent's own notes only from a paired sender."
-    }
+      "hint": "In a messaging chat a note goes to that conversation first, and reaches this agent's own notes only from a paired sender. Saving at once in a messaging chat applies only to a paired sender in a one-to-one chat.",
+      "offReason": "The save level does not apply while memory is off.",
+      "readsReason": "The save level does not apply: this agent reads notes but cannot save any."
+    },
+    "level": {
+      "title": "How much it does with notes",
+      "off": {
+        "title": "Off",
+        "body": "Reads and saves no notes."
+      },
+      "reads": {
+        "title": "Reads notes",
+        "body": "Uses your notes to answer. Never saves any."
+      },
+      "saves": {
+        "title": "Reads and saves notes",
+        "body": "Uses notes and saves new ones, as your save level allows."
+      }
+    },
+    "whose": "Whose notes",
+    "whoseOff": "Memory is off for this agent, so there are no notes to choose from."
   },
   "providerPicker": {
     "title": "Provider",
@@ -1372,6 +1418,19 @@
         "builtinBody": "Plain files in your Memory folder. Nothing leaves this machine.",
         "offBody": "Nothing is read, offered, saved or sent. Existing notes are kept."
       }
+    },
+    "healthTitle": "The provider is paused",
+    "forget": {
+      "lede": "Ask {{name}} to forget the notes it keeps for you. Your files in the Memory folder are not touched.",
+      "action": "Forget everything from this provider",
+      "confirmTitle": "Forget everything from {{name}}?",
+      "confirmBody": "{{name}} will be asked to forget every note it keeps for you. It may hold the change until you confirm it on the Add-ons page.",
+      "confirmBodyFinal": "{{name}} will be asked to forget every note it keeps for you. This cannot be undone.",
+      "confirm": "Forget everything",
+      "pending": "Forgetting...",
+      "done": "{{name}} forgot its notes",
+      "waiting": "The change waits for your confirmation on the Add-ons page",
+      "failed": "The provider could not forget: {{message}}"
     }
   }
 }

@@ -36,6 +36,12 @@ and names the model; an administrator gets a button that opens the Models
 page with a search for it. `GET /api/collections` reports the same in
 `embedding_model` and `embedding_model_installed`.
 
+The Knowledge page also shows how a search finds passages, for example
+*Search: semantic*. `GET /api/collections` reports it in `search_mode`: `semantic`
+for the `chromem` engine, and `hybrid` for the `postgres` engine.
+The same answer gives `max_chunk_size` and `chunk_overlap`, the chunking of a
+text in characters.
+
 ## Who sees a collection
 
 - With authentication off, there is one set of collections.
@@ -151,8 +157,19 @@ with these rules:
   Knowledge.
 - **What you see.** The card in **Suggested changes** names the collection and
   shows the first 20 lines of the text and its size against the limit of 64 KiB.
+  It also says how many passages will be embedded and with which model, for
+  example "About 4 passages will be embedded with granite-embedding-107m-multilingual".
+  The count is an estimate from the size of the text and the chunking settings
+  (`max_chunk_size` and `chunk_overlap` in `GET /api/collections`).
   You can edit the text before you confirm. A change waits 24 hours, and you can
   have 10 waiting and an agent can make 5 an hour, as for the other kinds.
+- **A scan for secrets.** Before a text is shown, LocalAI checks it with the same
+  patterns that keep a memory note from being saved at once (private keys, access
+  tokens, `password: ...` lines). A text that matches is not refused: it shows
+  with a warning in the card, and you can still confirm it in the web interface.
+  A messaging chat cannot confirm it. The bot writes nothing about it in the
+  chat, a `yes` there does not confirm it, and a `no` still drops it. The proposal
+  carries the code in `warning` (`secret`).
 - **What happens.** **Confirm** stores the text as one entry of the collection,
   titled with the summary, and the server splits it into passages and embeds it.
   **Undo** deletes that entry again. The embedding model must be installed;

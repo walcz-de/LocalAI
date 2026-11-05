@@ -41,6 +41,11 @@
       "readsLabel": "Liest",
       "writesLabel": "Schreibt",
       "costLabel": "Kosten",
+      "deliveryLabel": "Ergebnisse gehen an",
+      "deliveryInbox": "Dein Posteingang",
+      "deliveryChat": "Dieser Chat",
+      "deliveryThread": "Dieser Thread",
+      "deliveryChannel": "{{channel}}, oben im Kanal",
       "stopLabel": "Zum Beenden",
       "when": "{{schedule}}, {{zone}}. Erster Lauf {{when}}.",
       "whenNoFirst": "{{schedule}}, {{zone}}.",
@@ -268,7 +273,12 @@
   "connectorsPage": {
     "loadFailed": "Ihre Konnektoren konnten nicht geladen werden.",
     "waitingTitle": "Warten auf ihr Add-on",
-    "waitingText": "Diese Verknüpfungen bleiben erhalten, laufen aber erst, wenn ihr Add-on installiert und eingeschaltet ist."
+    "waitingText": "Diese Verknüpfungen bleiben erhalten, laufen aber erst, wenn ihr Add-on installiert und eingeschaltet ist.",
+    "duplicate": {
+      "text": "Dieser Bot ist auch als {{name}} verbunden. Beide Verbindungen beantworten dieselbe Nachricht.",
+      "turnOff": "Diese ausschalten",
+      "open": "{{name}} öffnen"
+    }
   },
   "tools": {
     "commands": {
@@ -800,7 +810,15 @@
       "label": "Text zum Hinzufügen zu {{collection}}",
       "size": "{{size}} von höchstens {{max}}",
       "note": "Nichts wird hinzugefügt, bevor du bestätigst. Der Text wird dann in Abschnitte geteilt und indexiert, und jeder Chat, der diese Sammlung durchsucht, kann ihn nutzen.",
-      "editLabel": "Text zum Hinzufügen zu {{target}}"
+      "editLabel": "Text zum Hinzufügen zu {{target}}",
+      "embed_one": "1 Textstelle wird mit {{model}} eingebettet.",
+      "embed_other": "Etwa {{count}} Textstellen werden mit {{model}} eingebettet.",
+      "serverModel": "dem Einbettungsmodell des Servers"
+    },
+    "warning": {
+      "title": "Prüfe diesen Text, bevor du bestätigst.",
+      "secret": "Er enthält möglicherweise ein Geheimnis, etwa einen Schlüssel, ein Token oder ein Passwort. Nach dem Hinzufügen kann jeder Chat, der diese Sammlung durchsucht, es lesen. Ein Messaging-Chat kann ihn nicht bestätigen; nur du, hier.",
+      "other": "Der Server hat diesen Text als riskant markiert. Ein Messaging-Chat kann ihn nicht bestätigen; nur du, hier."
     }
   },
   "proposalsPage": {
@@ -981,15 +999,20 @@
       "title": "Wie bisher",
       "body": "Dieser Agent wurde gespeichert, bevor es diese Auswahl gab. Er liest deine Notizen, wenn seine Add-on-Liste Memory nennt, und das Modell wählt, wohin eine Notiz gespeichert wird. Wähle unten eine der Optionen, um das zu ändern."
     },
-    "saveGrant": "Notizen speichern lassen",
-    "saveGrantHelp": "Schaltet die Berechtigung „Dinge merken“ ein. Ohne sie liest der Agent Notizen, kann aber keine speichern.",
     "copyNote": "Beim Exportieren eines Agenten oder beim Import als neuen Agenten bleibt diese Auswahl erhalten; seine Notizen werden nie kopiert.",
     "summary": {
       "mine_and_own": "Meine und eigene",
       "own": "Nur eigene",
       "mine": "Meine",
       "none": "Keine",
-      "asBefore": "Wie bisher"
+      "asBefore": "Wie bisher",
+      "withAuto": "{{choice}}, speichert sofort",
+      "level": {
+        "off": "Aus",
+        "reads": "Liest Notizen",
+        "saves": "Liest und speichert Notizen"
+      },
+      "combined": "{{level}}, {{choice}}"
     },
     "delete": {
       "title": "{{name}} löschen?",
@@ -1014,7 +1037,11 @@
       "title": "Wenn er eine Notiz speichern will",
       "use_mine": {
         "title": "Meine Einstellung",
-        "body": "Aktuell: {{level}}."
+        "body": "Deine Einstellung ist <b>{{level}}</b>. <settings>Ändere sie unter Einstellungen > Gedächtnis.</settings>"
+      },
+      "auto": {
+        "title": "Speichern und Bescheid geben",
+        "body": "Speichert jede Notiz sofort und sagt dir im Chat Bescheid, mit Rückgängig, auch wenn deine Einstellung „Erst fragen“ ist. Eine lange Notiz oder eine, die wie ein Geheimnis aussieht, wartet trotzdem."
       },
       "always": {
         "title": "Immer bestätigen",
@@ -1024,8 +1051,27 @@
         "title": "Nie",
         "body": "Liest, speichert nie."
       },
-      "hint": "Ein Agent darf mehr fragen als deine Einstellung, aber nie weniger. „Speichern und Bescheid geben“ gibt es hier nicht. In einem Messaging-Chat geht eine Notiz zuerst in diese Unterhaltung und erreicht die eigenen Notizen dieses Agenten nur von einem gekoppelten Absender."
-    }
+      "hint": "In einem Messaging-Chat geht eine Notiz zuerst in diese Unterhaltung und erreicht die eigenen Notizen dieses Agenten nur von einem gekoppelten Absender. Sofortiges Speichern in einem Messaging-Chat gilt nur für einen gekoppelten Absender in einem Einzelchat.",
+      "offReason": "Die Speicherstufe gilt nicht, solange das Gedächtnis aus ist.",
+      "readsReason": "Die Speicherstufe gilt nicht: Dieser Agent liest Notizen, kann aber keine speichern."
+    },
+    "level": {
+      "title": "Wie viel er mit Notizen macht",
+      "off": {
+        "title": "Aus",
+        "body": "Liest und speichert keine Notizen."
+      },
+      "reads": {
+        "title": "Liest Notizen",
+        "body": "Nutzt deine Notizen für Antworten. Speichert nie welche."
+      },
+      "saves": {
+        "title": "Liest und speichert Notizen",
+        "body": "Nutzt Notizen und speichert neue, soweit deine Speicherstufe es erlaubt."
+      }
+    },
+    "whose": "Wessen Notizen",
+    "whoseOff": "Das Gedächtnis ist für diesen Agenten aus, es gibt also keine Notizen zur Auswahl."
   },
   "providerPicker": {
     "title": "Anbieter",
@@ -1050,6 +1096,19 @@
         "builtinBody": "Einfache Dateien in deinem Ordner „Memory“. Nichts verlässt diesen Rechner.",
         "offBody": "Nichts wird gelesen, angeboten, gespeichert oder gesendet. Vorhandene Notizen bleiben erhalten."
       }
+    },
+    "healthTitle": "Der Anbieter pausiert",
+    "forget": {
+      "lede": "Bitte {{name}}, die Notizen zu vergessen, die er für dich speichert. Deine Dateien im Ordner Memory bleiben unberührt.",
+      "action": "Alles dieses Anbieters vergessen",
+      "confirmTitle": "Alles von {{name}} vergessen?",
+      "confirmBody": "{{name}} wird gebeten, jede Notiz zu vergessen, die er für dich speichert. Er kann die Änderung zurückhalten, bis du sie auf der Seite Add-ons bestätigst.",
+      "confirmBodyFinal": "{{name}} wird gebeten, jede Notiz zu vergessen, die er für dich speichert. Das lässt sich nicht rückgängig machen.",
+      "confirm": "Alles vergessen",
+      "pending": "Wird vergessen...",
+      "done": "{{name}} hat seine Notizen vergessen",
+      "waiting": "Die Änderung wartet auf deine Bestätigung auf der Seite Add-ons",
+      "failed": "Der Anbieter konnte nicht vergessen: {{message}}"
     }
   }
 }

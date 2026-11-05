@@ -61,6 +61,10 @@ const (
 	// ConnectorRequest.Thread of Chat, oldest first. Only a kind with
 	// History serves it; the host never calls it for another kind.
 	ConnectorOpHistory = "history"
+	// ConnectorOpDelete deletes the message MessageID of the bot in Chat. The
+	// host uses it to remove a preview that an answer could not replace. A
+	// kind that cannot delete refuses it; the host then leaves the message.
+	ConnectorOpDelete = "delete"
 )
 
 // Codes of a ConnectorError.
@@ -86,6 +90,8 @@ const (
 	MaxConnectorMedia  = 8
 	MaxPollSeconds     = 25
 	MaxConnectorSender = 64 // the width of the sender column of the stores
+	// MaxAccountIDBytes bounds ConnectorResponse.AccountID.
+	MaxAccountIDBytes = 128
 	// MaxConnectorFileName is the longest file name, in bytes, that the op
 	// send_file takes.
 	MaxConnectorFileName = 128
@@ -158,6 +164,17 @@ type ConnectorKind struct {
 	// the other settings of the binding, keeps the choice, checks it against
 	// this declaration and sends it with the op poll.
 	Options []ConnectorOption `json:"options,omitempty"`
+	// WildcardResources lets a binding of this kind list a wildcard in its
+	// resources: owner/* (every resource under one owner) or * (every resource
+	// the credential reaches). The host matches the wildcard itself, before the
+	// add-on runs. Without it every entry is an exact name. A binding that
+	// lists * must be saved with an explicit confirmation.
+	WildcardResources bool `json:"wildcardResources,omitempty"`
+	// TokenGuards name credentials that are wider than the resource list can
+	// express, such as a classic access token. The host refuses a credential
+	// that starts with a guard's Prefix unless the binding chose Allow for the
+	// guard's Option, and it asks for a confirmation when that choice is made.
+	TokenGuards []TokenGuard `json:"tokenGuards,omitempty"`
 	// Files declares the files the kind can receive and send, with a limit
 	// for each direction. A kind that declares none moves no files; a
 	// direction it leaves out is not served. The bytes travel by handle, never
@@ -172,6 +189,18 @@ type ConnectorKind struct {
 	// path, but it is never granted to a role.
 	Permissions []string `json:"permissions,omitempty"`
 }
+
+// TokenGuard holds back a credential by its prefix until the person chose
+// to allow it. Option is the ID of one of the kind's Options, and Allow the
+// value of that option that lets the credential be used.
+type TokenGuard struct {
+	Prefix string `json:"prefix"`
+	Option string `json:"option"`
+	Allow  string `json:"allow"`
+}
+
+// MaxTokenGuards is the most guards a kind declares.
+const MaxTokenGuards = 4
 
 // ConnectorOption is one choice among a few values.
 type ConnectorOption struct {
@@ -309,6 +338,9 @@ func validateConnector(c *ConnectorCapability, ui *UI) error {
 				return err
 			}
 		}
+		if err := validateTokenGuards(k); err != nil {
+			return err
+		}
 		if err := k.Files.validate(); err != nil {
 			return err
 		}
@@ -383,7 +415,15 @@ type ConnectorMessage struct {
 	SenderID       string `json:"senderId,omitempty"`
 	SenderName     string `json:"senderName,omitempty"`
 	SenderUsername string `json:"senderUsername,omitempty"`
-	Text           string `json:"text,omitempty"`
+	// ChatName is the name of the conversation on the platform (a channel or
+	// a group), when the add-on knows it without an extra permission. The host
+	// shows it in the header of the chat and keeps nothing else of it.
+	ChatName string `json:"chatName,omitempty"`
+	// Link is an https address that opens this message, or its thread, on the
+	// platform, when the add-on can build one without an extra permission. The
+	// host shows it to the owner and drops any other scheme.
+	Link string `json:"link,omitempty"`
+	Text string `json:"text,omitempty"`
 	// Unsupported is a message with no text and no file that the add-on can
 	// hand over, such as a sticker or a poll.
 	Unsupported bool `json:"unsupported,omitempty"`
@@ -475,6 +515,13 @@ type ConnectorResponse struct {
 	// me
 	BotID       string `json:"botId,omitempty"`
 	BotUsername string `json:"botUsername,omitempty"`
+	// AccountID answers the op me: a stable name of the upstream account that
+	// the token belongs to, the same for every token pair of that account (for
+	// example the workspace and the bot user together). The host compares it,
+	// within one kind, to find two connections that are the same bot. It is
+	// optional: an add-on that cannot tell leaves it empty, and its connections
+	// are never compared. At most MaxAccountIDBytes.
+	AccountID string `json:"accountId,omitempty"`
 	// Received answers the op media: the file was written by handle. The host
 	// adds Size and SHA256 from its record.
 	Received *ConnectorReceived `json:"received,omitempty"`
@@ -558,4 +605,23 @@ func SafeFileName(name string) string {
 		stem = stem[:len(stem)-1]
 	}
 	return stem + ext
+}
+
+var tokenPrefix = regexp.MustCompile(`^[A-Za-z0-9_-]{2,16}$`)
+
+// validateTokenGuards checks that each guard names a prefix and an option of
+// the kind, and a value that option offers.
+func validateTokenGuards(k ConnectorKind) error {
+	if len(k.TokenGuards) > MaxTokenGuards {
+		return fmt.Errorf("connector tokenGuards has at most %d entries", MaxTokenGuards)
+	}
+	seen := map[string]bool{}
+	for _, g := range k.TokenGuards {
+		o, ok := k.Option(g.Option)
+		if !tokenPrefix.MatchString(g.Prefix) || seen[g.Prefix] || !ok || !o.allows(g.Allow) {
+			return fmt.Errorf("invalid connector token guard")
+		}
+		seen[g.Prefix] = true
+	}
+	return nil
 }

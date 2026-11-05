@@ -53,6 +53,7 @@
   "proposal.multi": "Hay más de uno esperando aquí. Indica cuál, por ejemplo \"confirmar CODIGO\" o \"cancelar CODIGO\":",
   "change.no_right": "Solo el propietario puede confirmar esto.",
   "change.not_you": "Solo la persona que lo pidió puede confirmar esto.",
+  "change.flagged": "Este texto parece contener un secreto, así que no se puede confirmar desde un chat. Revisa la propuesta en la interfaz web.",
   "change.cannot": "No se pudo deshacer: {error}",
   "change.saved": "Guardado: {summary}. Responde \"deshacer\" en los próximos {minutes} minutos para revertirlo.",
   "change.done": "Hecho: {summary}. Responde \"deshacer\" en los próximos {minutes} minutos para revertirlo.",
@@ -75,7 +76,8 @@
   "change.ask": "No se guarda nada hasta que respondas. Responde \"sí\" para guardarlo o \"no\" para descartarlo, aquí, en un plazo de 24 horas. Si hay más de uno esperando, responde \"confirmar {code}\" o \"cancelar {code}\".",
   "trigger.where.inbox": "a la Inbox de Studio",
   "trigger.where.chat": "a este chat",
-  "trigger.where.channel": "al canal {channel}",
+  "trigger.where.channel": "al canal {channel}, como mensaje nuevo en el nivel principal del canal",
+  "trigger.where.thread": "a este hilo",
   "trigger.mode.on_change": ", solo cuando cambia el resultado",
   "trigger.mode.on_problem": ", solo cuando falla una ejecución",
   "trigger.cost.once": "una ejecución del modelo",
@@ -150,5 +152,9 @@
   "media.kind.audio": "archivos de audio",
   "media.kind.video_note": "mensajes de vídeo",
   "media.kind.document": "archivos",
-  "media.kind.other": "este tipo de archivo"
+  "media.kind.other": "este tipo de archivo",
+  "refuse.channel": "Este canal está en modo solo responder, así que no puedo hacerlo por ti aquí. Pide al propietario que te añada a las personas permitidas, o que deje a todos en este canal pedir acciones.",
+  "refuse.unlisted": "Solo pueden hacerlo las personas que el propietario añadió a este bot, y tú no eres una de ellas.",
+  "refuse.pairing": "Solo pueden hacerlo las personas que el propietario vinculó con este bot.",
+  "refuse.off": "El propietario no ha activado eso para este bot."
 }

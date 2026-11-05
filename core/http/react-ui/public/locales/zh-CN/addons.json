@@ -146,7 +146,8 @@
     "network": "无法连接服务器,请检查网络。",
     "unavailable": "附加组件暂时不可用，请稍后重试。",
     "unknownOutcome": "无法确认结果。请先检查状态,再重试。",
-    "busy": "附加组件服务器正忙，未能及时响应。请稍后再试。"
+    "busy": "附加组件服务器正忙，未能及时响应。请稍后再试。",
+    "needsNewerHost": "此插件需要更新版本的 LocalAI。请更新 LocalAI 后重试。未安装任何内容。"
   },
   "installed": {
     "disabled": "已关闭",
@@ -569,7 +570,8 @@
       "protocol-version": "协议版本不匹配",
       "sdk-version": "界面 SDK 版本不匹配",
       "data-format": "数据格式不匹配",
-      "digest-changed": "此版本的摘要已更改"
+      "digest-changed": "此版本的摘要已更改",
+      "feature-level": "此插件需要更新版本的 LocalAI。"
     },
     "class": {
       "source-unavailable": "无法连接到库。",
@@ -864,6 +866,7 @@
     "keepOwnNamed": "将 {{name}} 的统一授权保留为我的授权",
     "loadError": "主机访问未能加载",
     "loading": "正在读取此插件的请求...",
+    "loadingSlow": "仍在进行。正在下载软件包并检查其签名，然后才能显示权限。较大的插件可能需要一些时间。",
     "loadingPage": "正在加载主机访问",
     "locked": "部署已关闭对主机访问的修改。你可以查看此页面，但不能修改。",
     "lockedNoAuth": "登录已关闭，任何能访问此服务器的人都可能修改这些设置；它们由管理员在策略文件中设定。",

@@ -518,7 +518,7 @@
       "ko": "에이전트가 선택한 저장소의 코드, 이슈, 풀 리퀘스트를 읽고, 허용하면 그곳에 쓸 수 있게 합니다."
       "pt-BR": "Deixe seus agentes lerem o código, as issues e os pull requests dos repositórios que você escolher, e escreverem neles se você permitir."
       "zh-CN": "让你的智能体读取你所选仓库的代码、Issue 和 Pull Request，并在你允许时向其中写入。"
-  toolCount: 14
+  toolCount: 15
   tools:
     - "search-code"
     - "read-file"
@@ -528,6 +528,7 @@
     - "get-pr"
     - "get-pr-diff"
     - "check"
+    - "list-repos"
     - "comment-issue"
     - "comment-pr"
     - "create-issue"
@@ -570,7 +571,7 @@
       "ko": "에이전트가 선택한 저장소의 코드, 이슈, 풀 리퀘스트를 읽고, 허용하면 그곳에 쓸 수 있게 합니다."
       "pt-BR": "Deixe seus agentes lerem o código, as issues e os pull requests dos repositórios que você escolher, e escreverem neles se você permitir."
       "zh-CN": "让你的智能体读取你所选仓库的代码、Issue 和 Pull Request，并在你允许时向其中写入。"
-  toolCount: 14
+  toolCount: 15
   tools:
     - "search-code"
     - "read-file"
@@ -580,6 +581,7 @@
     - "get-pr"
     - "get-pr-diff"
     - "check"
+    - "list-repos"
     - "comment-issue"
     - "comment-pr"
     - "create-issue"
@@ -622,7 +624,7 @@
       "ko": "에이전트가 선택한 저장소의 코드, 이슈, 풀 리퀘스트를 읽고, 허용하면 그곳에 쓸 수 있게 합니다."
       "pt-BR": "Deixe seus agentes lerem o código, as issues e os pull requests dos repositórios que você escolher, e escreverem neles se você permitir."
       "zh-CN": "让你的智能体读取你所选仓库的代码、Issue 和 Pull Request，并在你允许时向其中写入。"
-  toolCount: 14
+  toolCount: 15
   tools:
     - "search-code"
     - "read-file"
@@ -632,6 +634,7 @@
     - "get-pr"
     - "get-pr-diff"
     - "check"
+    - "list-repos"
     - "comment-issue"
     - "comment-pr"
     - "create-issue"
@@ -674,7 +677,7 @@
       "ko": "에이전트가 선택한 저장소의 코드, 이슈, 풀 리퀘스트를 읽고, 허용하면 그곳에 쓸 수 있게 합니다."
       "pt-BR": "Deixe seus agentes lerem o código, as issues e os pull requests dos repositórios que você escolher, e escreverem neles se você permitir."
       "zh-CN": "让你的智能体读取你所选仓库的代码、Issue 和 Pull Request，并在你允许时向其中写入。"
-  toolCount: 14
+  toolCount: 15
   tools:
     - "search-code"
     - "read-file"
@@ -684,6 +687,7 @@
     - "get-pr"
     - "get-pr-diff"
     - "check"
+    - "list-repos"
     - "comment-issue"
     - "comment-pr"
     - "create-issue"
@@ -1102,150 +1106,6 @@
     - "mark-played"
     - "set-favorite"
     - "add-to-playlist"
-- id: "memory"
-  name: Short memory
-  description: "Your chats keep short notes about you and read them before they answer. By default a new note is saved only after you confirm it; you can choose to have it saved at once with an Undo, or never."
-  version: "0.0.0-development"
-  channel: "development"
-  artifact: "oci://quay.io/go-skynet/local-ai-addons:memory-development"
-  mutable: true
-  os: "darwin"
-  arch: "amd64"
-  policy:
-    requireSignature: true
-    issuer: "https://token.actions.githubusercontent.com"
-    identity: "https://github.com/mudler/LocalAI/.github/workflows/addons-package.yml@refs/heads/master"
-  ui:
-    title: "Short memory"
-    description: "Your chats keep short notes about you and read them before they answer. By default a new note is saved only after you confirm it; you can choose to have it saved at once with an Undo, or never."
-    mainPage: "memory"
-    icon: "ui/icon.png"
-    titles:
-      "de": "Kurzzeitgedächtnis"
-      "es": "Memoria breve"
-      "fr": "Mémoire courte"
-      "id": "Memori singkat"
-      "it": "Memoria breve"
-      "ko": "짧은 기억"
-      "pt-BR": "Memória curta"
-      "zh-CN": "简短记忆"
-    descriptions:
-      "de": "Ihre Chats führen kurze Notizen über Sie und lesen sie, bevor sie antworten. Standardmäßig wird eine neue Notiz erst nach Ihrer Bestätigung gespeichert; Sie können sie auch sofort mit Rückgängig-Option speichern lassen oder nie."
-      "es": "Tus chats guardan notas breves sobre ti y las leen antes de responder. De forma predeterminada, una nota nueva se guarda solo después de que la confirmes; puedes elegir que se guarde al instante con la opción de deshacer, o que nunca se guarde."
-      "fr": "Vos conversations gardent de courtes notes sur vous et les lisent avant de répondre. Par défaut, une nouvelle note n'est enregistrée qu'après votre confirmation ; vous pouvez choisir de l'enregistrer immédiatement avec une option Annuler, ou jamais."
-      "id": "Obrolan Anda menyimpan catatan singkat tentang Anda dan membacanya sebelum menjawab. Secara bawaan, catatan baru disimpan hanya setelah Anda mengonfirmasinya; Anda dapat memilih agar langsung disimpan dengan opsi Urungkan, atau tidak pernah."
-      "it": "Le tue chat conservano brevi note su di te e le leggono prima di rispondere. Di norma una nuova nota viene salvata solo dopo la tua conferma; puoi scegliere di salvarla subito con un Annulla, oppure mai."
-      "ko": "채팅이 나에 대한 짧은 메모를 보관하고, 답하기 전에 읽습니다. 기본적으로 새 메모는 확인한 후에만 저장되며, 실행 취소와 함께 바로 저장하거나 저장하지 않도록 선택할 수 있습니다."
-      "pt-BR": "Seus chats guardam notas curtas sobre você e as leem antes de responder. Por padrão, uma nova nota só é salva depois que você a confirma; você pode escolher salvá-la na hora, com a opção de desfazer, ou nunca."
-      "zh-CN": "你的聊天会记下关于你的简短笔记，并在回答前读取它们。默认情况下，新笔记须经你确认后才会保存；你也可以选择立即保存并提供撤销，或从不保存。"
-- id: "memory"
-  name: Short memory
-  description: "Your chats keep short notes about you and read them before they answer. By default a new note is saved only after you confirm it; you can choose to have it saved at once with an Undo, or never."
-  version: "0.0.0-development"
-  channel: "development"
-  artifact: "oci://quay.io/go-skynet/local-ai-addons:memory-development"
-  mutable: true
-  os: "darwin"
-  arch: "arm64"
-  policy:
-    requireSignature: true
-    issuer: "https://token.actions.githubusercontent.com"
-    identity: "https://github.com/mudler/LocalAI/.github/workflows/addons-package.yml@refs/heads/master"
-  ui:
-    title: "Short memory"
-    description: "Your chats keep short notes about you and read them before they answer. By default a new note is saved only after you confirm it; you can choose to have it saved at once with an Undo, or never."
-    mainPage: "memory"
-    icon: "ui/icon.png"
-    titles:
-      "de": "Kurzzeitgedächtnis"
-      "es": "Memoria breve"
-      "fr": "Mémoire courte"
-      "id": "Memori singkat"
-      "it": "Memoria breve"
-      "ko": "짧은 기억"
-      "pt-BR": "Memória curta"
-      "zh-CN": "简短记忆"
-    descriptions:
-      "de": "Ihre Chats führen kurze Notizen über Sie und lesen sie, bevor sie antworten. Standardmäßig wird eine neue Notiz erst nach Ihrer Bestätigung gespeichert; Sie können sie auch sofort mit Rückgängig-Option speichern lassen oder nie."
-      "es": "Tus chats guardan notas breves sobre ti y las leen antes de responder. De forma predeterminada, una nota nueva se guarda solo después de que la confirmes; puedes elegir que se guarde al instante con la opción de deshacer, o que nunca se guarde."
-      "fr": "Vos conversations gardent de courtes notes sur vous et les lisent avant de répondre. Par défaut, une nouvelle note n'est enregistrée qu'après votre confirmation ; vous pouvez choisir de l'enregistrer immédiatement avec une option Annuler, ou jamais."
-      "id": "Obrolan Anda menyimpan catatan singkat tentang Anda dan membacanya sebelum menjawab. Secara bawaan, catatan baru disimpan hanya setelah Anda mengonfirmasinya; Anda dapat memilih agar langsung disimpan dengan opsi Urungkan, atau tidak pernah."
-      "it": "Le tue chat conservano brevi note su di te e le leggono prima di rispondere. Di norma una nuova nota viene salvata solo dopo la tua conferma; puoi scegliere di salvarla subito con un Annulla, oppure mai."
-      "ko": "채팅이 나에 대한 짧은 메모를 보관하고, 답하기 전에 읽습니다. 기본적으로 새 메모는 확인한 후에만 저장되며, 실행 취소와 함께 바로 저장하거나 저장하지 않도록 선택할 수 있습니다."
-      "pt-BR": "Seus chats guardam notas curtas sobre você e as leem antes de responder. Por padrão, uma nova nota só é salva depois que você a confirma; você pode escolher salvá-la na hora, com a opção de desfazer, ou nunca."
-      "zh-CN": "你的聊天会记下关于你的简短笔记，并在回答前读取它们。默认情况下，新笔记须经你确认后才会保存；你也可以选择立即保存并提供撤销，或从不保存。"
-- id: "memory"
-  name: Short memory
-  description: "Your chats keep short notes about you and read them before they answer. By default a new note is saved only after you confirm it; you can choose to have it saved at once with an Undo, or never."
-  version: "0.0.0-development"
-  channel: "development"
-  artifact: "oci://quay.io/go-skynet/local-ai-addons:memory-development"
-  mutable: true
-  os: "linux"
-  arch: "amd64"
-  policy:
-    requireSignature: true
-    issuer: "https://token.actions.githubusercontent.com"
-    identity: "https://github.com/mudler/LocalAI/.github/workflows/addons-package.yml@refs/heads/master"
-  ui:
-    title: "Short memory"
-    description: "Your chats keep short notes about you and read them before they answer. By default a new note is saved only after you confirm it; you can choose to have it saved at once with an Undo, or never."
-    mainPage: "memory"
-    icon: "ui/icon.png"
-    titles:
-      "de": "Kurzzeitgedächtnis"
-      "es": "Memoria breve"
-      "fr": "Mémoire courte"
-      "id": "Memori singkat"
-      "it": "Memoria breve"
-      "ko": "짧은 기억"
-      "pt-BR": "Memória curta"
-      "zh-CN": "简短记忆"
-    descriptions:
-      "de": "Ihre Chats führen kurze Notizen über Sie und lesen sie, bevor sie antworten. Standardmäßig wird eine neue Notiz erst nach Ihrer Bestätigung gespeichert; Sie können sie auch sofort mit Rückgängig-Option speichern lassen oder nie."
-      "es": "Tus chats guardan notas breves sobre ti y las leen antes de responder. De forma predeterminada, una nota nueva se guarda solo después de que la confirmes; puedes elegir que se guarde al instante con la opción de deshacer, o que nunca se guarde."
-      "fr": "Vos conversations gardent de courtes notes sur vous et les lisent avant de répondre. Par défaut, une nouvelle note n'est enregistrée qu'après votre confirmation ; vous pouvez choisir de l'enregistrer immédiatement avec une option Annuler, ou jamais."
-      "id": "Obrolan Anda menyimpan catatan singkat tentang Anda dan membacanya sebelum menjawab. Secara bawaan, catatan baru disimpan hanya setelah Anda mengonfirmasinya; Anda dapat memilih agar langsung disimpan dengan opsi Urungkan, atau tidak pernah."
-      "it": "Le tue chat conservano brevi note su di te e le leggono prima di rispondere. Di norma una nuova nota viene salvata solo dopo la tua conferma; puoi scegliere di salvarla subito con un Annulla, oppure mai."
-      "ko": "채팅이 나에 대한 짧은 메모를 보관하고, 답하기 전에 읽습니다. 기본적으로 새 메모는 확인한 후에만 저장되며, 실행 취소와 함께 바로 저장하거나 저장하지 않도록 선택할 수 있습니다."
-      "pt-BR": "Seus chats guardam notas curtas sobre você e as leem antes de responder. Por padrão, uma nova nota só é salva depois que você a confirma; você pode escolher salvá-la na hora, com a opção de desfazer, ou nunca."
-      "zh-CN": "你的聊天会记下关于你的简短笔记，并在回答前读取它们。默认情况下，新笔记须经你确认后才会保存；你也可以选择立即保存并提供撤销，或从不保存。"
-- id: "memory"
-  name: Short memory
-  description: "Your chats keep short notes about you and read them before they answer. By default a new note is saved only after you confirm it; you can choose to have it saved at once with an Undo, or never."
-  version: "0.0.0-development"
-  channel: "development"
-  artifact: "oci://quay.io/go-skynet/local-ai-addons:memory-development"
-  mutable: true
-  os: "linux"
-  arch: "arm64"
-  policy:
-    requireSignature: true
-    issuer: "https://token.actions.githubusercontent.com"
-    identity: "https://github.com/mudler/LocalAI/.github/workflows/addons-package.yml@refs/heads/master"
-  ui:
-    title: "Short memory"
-    description: "Your chats keep short notes about you and read them before they answer. By default a new note is saved only after you confirm it; you can choose to have it saved at once with an Undo, or never."
-    mainPage: "memory"
-    icon: "ui/icon.png"
-    titles:
-      "de": "Kurzzeitgedächtnis"
-      "es": "Memoria breve"
-      "fr": "Mémoire courte"
-      "id": "Memori singkat"
-      "it": "Memoria breve"
-      "ko": "짧은 기억"
-      "pt-BR": "Memória curta"
-      "zh-CN": "简短记忆"
-    descriptions:
-      "de": "Ihre Chats führen kurze Notizen über Sie und lesen sie, bevor sie antworten. Standardmäßig wird eine neue Notiz erst nach Ihrer Bestätigung gespeichert; Sie können sie auch sofort mit Rückgängig-Option speichern lassen oder nie."
-      "es": "Tus chats guardan notas breves sobre ti y las leen antes de responder. De forma predeterminada, una nota nueva se guarda solo después de que la confirmes; puedes elegir que se guarde al instante con la opción de deshacer, o que nunca se guarde."
-      "fr": "Vos conversations gardent de courtes notes sur vous et les lisent avant de répondre. Par défaut, une nouvelle note n'est enregistrée qu'après votre confirmation ; vous pouvez choisir de l'enregistrer immédiatement avec une option Annuler, ou jamais."
-      "id": "Obrolan Anda menyimpan catatan singkat tentang Anda dan membacanya sebelum menjawab. Secara bawaan, catatan baru disimpan hanya setelah Anda mengonfirmasinya; Anda dapat memilih agar langsung disimpan dengan opsi Urungkan, atau tidak pernah."
-      "it": "Le tue chat conservano brevi note su di te e le leggono prima di rispondere. Di norma una nuova nota viene salvata solo dopo la tua conferma; puoi scegliere di salvarla subito con un Annulla, oppure mai."
-      "ko": "채팅이 나에 대한 짧은 메모를 보관하고, 답하기 전에 읽습니다. 기본적으로 새 메모는 확인한 후에만 저장되며, 실행 취소와 함께 바로 저장하거나 저장하지 않도록 선택할 수 있습니다."
-      "pt-BR": "Seus chats guardam notas curtas sobre você e as leem antes de responder. Por padrão, uma nova nota só é salva depois que você a confirma; você pode escolher salvá-la na hora, com a opção de desfazer, ou nunca."
-      "zh-CN": "你的聊天会记下关于你的简短笔记，并在回答前读取它们。默认情况下，新笔记须经你确认后才会保存；你也可以选择立即保存并提供撤销，或从不保存。"
 - id: "office"
   name: Simple Office
   description: "Lightweight basic Word, Excel, PowerPoint and PDF file work from your chats, without requiring Sandbox."
@@ -1464,7 +1324,7 @@
     - "pdf"
 - id: "pikvm"
   name: PiKVM
-  description: "Let your chats and agents check a PiKVM and, if you allow it, press power buttons and type on the machine it controls, with a confirmation every time."
+  description: "Let your chats and agents check a PiKVM and, if you allow it, press power buttons and type on the machine it controls, asking you to confirm each time unless you say otherwise."
   version: "0.0.0-development"
   channel: "development"
   artifact: "oci://quay.io/go-skynet/local-ai-addons:pikvm-development"
@@ -1477,7 +1337,7 @@
     identity: "https://github.com/mudler/LocalAI/.github/workflows/addons-package.yml@refs/heads/master"
   ui:
     title: "PiKVM"
-    description: "Let your chats and agents check a PiKVM and, if you allow it, press power buttons and type on the machine it controls, with a confirmation every time."
+    description: "Let your chats and agents check a PiKVM and, if you allow it, press power buttons and type on the machine it controls, asking you to confirm each time unless you say otherwise."
     mainPage: "apps"
     icon: "ui/icon.png"
     titles:
@@ -1490,14 +1350,14 @@
       "pt-BR": "PiKVM"
       "zh-CN": "PiKVM"
     descriptions:
-      "de": "Lassen Sie Ihre Chats und Agenten einen PiKVM prüfen und, wenn Sie es erlauben, Einschalttasten drücken und auf dem gesteuerten Rechner tippen, jedes Mal mit einer Bestätigung."
-      "es": "Permite que tus chats y agentes revisen un PiKVM y, si lo autorizas, pulsen los botones de encendido y escriban en la máquina que controla, con una confirmación cada vez."
-      "fr": "Laissez vos conversations et vos agents consulter un PiKVM et, si vous l'autorisez, appuyer sur les boutons d'alimentation et taper sur la machine qu'il pilote, avec une confirmation à chaque fois."
-      "id": "Izinkan obrolan dan agen Anda memeriksa PiKVM dan, jika Anda mengizinkan, menekan tombol daya dan mengetik di mesin yang dikendalikannya, dengan konfirmasi setiap kali."
-      "it": "Lascia che le tue chat e i tuoi agenti controllino un PiKVM e, se lo permetti, premano i pulsanti di accensione e scrivano sulla macchina che governa, con una conferma ogni volta."
-      "ko": "채팅과 에이전트가 PiKVM을 확인하고, 허용하면 전원 버튼을 누르고 PiKVM이 제어하는 기기에 입력할 수 있게 합니다. 매번 확인을 거칩니다."
-      "pt-BR": "Deixe seus chats e agentes verificarem um PiKVM e, se você permitir, pressionarem os botões de energia e digitarem na máquina que ele controla, com uma confirmação a cada vez."
-      "zh-CN": "让你的聊天和智能体查看 PiKVM，并在你允许时按下电源按钮、在它所控制的机器上输入内容，每次都需要确认。"
+      "de": "Lassen Sie Ihre Chats und Agenten einen PiKVM prüfen und, wenn Sie es erlauben, Einschalttasten drücken und auf dem gesteuerten Rechner tippen, mit einer Bestätigung bei jedem Mal, sofern Sie nichts anderes festlegen."
+      "es": "Permite que tus chats y agentes revisen un PiKVM y, si lo autorizas, pulsen los botones de encendido y escriban en la máquina que controla, pidiendo confirmación cada vez, salvo que decidas otra cosa."
+      "fr": "Laissez vos conversations et vos agents consulter un PiKVM et, si vous l'autorisez, appuyer sur les boutons d'alimentation et taper sur la machine qu'il pilote, en demandant une confirmation à chaque fois, sauf si vous en décidez autrement."
+      "id": "Izinkan obrolan dan agen Anda memeriksa PiKVM dan, jika Anda mengizinkan, menekan tombol daya dan mengetik di mesin yang dikendalikannya, dengan meminta konfirmasi setiap kali kecuali Anda menentukan lain."
+      "it": "Lascia che le tue chat e i tuoi agenti controllino un PiKVM e, se lo permetti, premano i pulsanti di accensione e scrivano sulla macchina che governa, chiedendo conferma ogni volta, salvo che tu decida diversamente."
+      "ko": "채팅과 에이전트가 PiKVM을 확인하고, 허용하면 전원 버튼을 누르고 PiKVM이 제어하는 기기에 입력할 수 있게 합니다. 별도로 설정하지 않으면 매번 확인을 거칩니다."
+      "pt-BR": "Deixe seus chats e agentes verificarem um PiKVM e, se você permitir, pressionarem os botões de energia e digitarem na máquina que ele controla, pedindo confirmação a cada vez, a menos que você decida o contrário."
+      "zh-CN": "让你的聊天和智能体查看 PiKVM，并在你允许时按下电源按钮、在它所控制的机器上输入内容，每次都需要确认，除非你另行设置。"
   toolCount: 8
   tools:
     - "get-info"
@@ -1510,7 +1370,7 @@
     - "set-settings"
 - id: "pikvm"
   name: PiKVM
-  description: "Let your chats and agents check a PiKVM and, if you allow it, press power buttons and type on the machine it controls, with a confirmation every time."
+  description: "Let your chats and agents check a PiKVM and, if you allow it, press power buttons and type on the machine it controls, asking you to confirm each time unless you say otherwise."
   version: "0.0.0-development"
   channel: "development"
   artifact: "oci://quay.io/go-skynet/local-ai-addons:pikvm-development"
@@ -1523,7 +1383,7 @@
     identity: "https://github.com/mudler/LocalAI/.github/workflows/addons-package.yml@refs/heads/master"
   ui:
     title: "PiKVM"
-    description: "Let your chats and agents check a PiKVM and, if you allow it, press power buttons and type on the machine it controls, with a confirmation every time."
+    description: "Let your chats and agents check a PiKVM and, if you allow it, press power buttons and type on the machine it controls, asking you to confirm each time unless you say otherwise."
     mainPage: "apps"
     icon: "ui/icon.png"
     titles:
@@ -1536,14 +1396,14 @@
       "pt-BR": "PiKVM"
       "zh-CN": "PiKVM"
     descriptions:
-      "de": "Lassen Sie Ihre Chats und Agenten einen PiKVM prüfen und, wenn Sie es erlauben, Einschalttasten drücken und auf dem gesteuerten Rechner tippen, jedes Mal mit einer Bestätigung."
-      "es": "Permite que tus chats y agentes revisen un PiKVM y, si lo autorizas, pulsen los botones de encendido y escriban en la máquina que controla, con una confirmación cada vez."
-      "fr": "Laissez vos conversations et vos agents consulter un PiKVM et, si vous l'autorisez, appuyer sur les boutons d'alimentation et taper sur la machine qu'il pilote, avec une confirmation à chaque fois."
-      "id": "Izinkan obrolan dan agen Anda memeriksa PiKVM dan, jika Anda mengizinkan, menekan tombol daya dan mengetik di mesin yang dikendalikannya, dengan konfirmasi setiap kali."
-      "it": "Lascia che le tue chat e i tuoi agenti controllino un PiKVM e, se lo permetti, premano i pulsanti di accensione e scrivano sulla macchina che governa, con una conferma ogni volta."
-      "ko": "채팅과 에이전트가 PiKVM을 확인하고, 허용하면 전원 버튼을 누르고 PiKVM이 제어하는 기기에 입력할 수 있게 합니다. 매번 확인을 거칩니다."
-      "pt-BR": "Deixe seus chats e agentes verificarem um PiKVM e, se você permitir, pressionarem os botões de energia e digitarem na máquina que ele controla, com uma confirmação a cada vez."
-      "zh-CN": "让你的聊天和智能体查看 PiKVM，并在你允许时按下电源按钮、在它所控制的机器上输入内容，每次都需要确认。"
+      "de": "Lassen Sie Ihre Chats und Agenten einen PiKVM prüfen und, wenn Sie es erlauben, Einschalttasten drücken und auf dem gesteuerten Rechner tippen, mit einer Bestätigung bei jedem Mal, sofern Sie nichts anderes festlegen."
+      "es": "Permite que tus chats y agentes revisen un PiKVM y, si lo autorizas, pulsen los botones de encendido y escriban en la máquina que controla, pidiendo confirmación cada vez, salvo que decidas otra cosa."
+      "fr": "Laissez vos conversations et vos agents consulter un PiKVM et, si vous l'autorisez, appuyer sur les boutons d'alimentation et taper sur la machine qu'il pilote, en demandant une confirmation à chaque fois, sauf si vous en décidez autrement."
+      "id": "Izinkan obrolan dan agen Anda memeriksa PiKVM dan, jika Anda mengizinkan, menekan tombol daya dan mengetik di mesin yang dikendalikannya, dengan meminta konfirmasi setiap kali kecuali Anda menentukan lain."
+      "it": "Lascia che le tue chat e i tuoi agenti controllino un PiKVM e, se lo permetti, premano i pulsanti di accensione e scrivano sulla macchina che governa, chiedendo conferma ogni volta, salvo che tu decida diversamente."
+      "ko": "채팅과 에이전트가 PiKVM을 확인하고, 허용하면 전원 버튼을 누르고 PiKVM이 제어하는 기기에 입력할 수 있게 합니다. 별도로 설정하지 않으면 매번 확인을 거칩니다."
+      "pt-BR": "Deixe seus chats e agentes verificarem um PiKVM e, se você permitir, pressionarem os botões de energia e digitarem na máquina que ele controla, pedindo confirmação a cada vez, a menos que você decida o contrário."
+      "zh-CN": "让你的聊天和智能体查看 PiKVM，并在你允许时按下电源按钮、在它所控制的机器上输入内容，每次都需要确认，除非你另行设置。"
   toolCount: 8
   tools:
     - "get-info"
@@ -1556,7 +1416,7 @@
     - "set-settings"
 - id: "pikvm"
   name: PiKVM
-  description: "Let your chats and agents check a PiKVM and, if you allow it, press power buttons and type on the machine it controls, with a confirmation every time."
+  description: "Let your chats and agents check a PiKVM and, if you allow it, press power buttons and type on the machine it controls, asking you to confirm each time unless you say otherwise."
   version: "0.0.0-development"
   channel: "development"
   artifact: "oci://quay.io/go-skynet/local-ai-addons:pikvm-development"
@@ -1569,7 +1429,7 @@
     identity: "https://github.com/mudler/LocalAI/.github/workflows/addons-package.yml@refs/heads/master"
   ui:
     title: "PiKVM"
-    description: "Let your chats and agents check a PiKVM and, if you allow it, press power buttons and type on the machine it controls, with a confirmation every time."
+    description: "Let your chats and agents check a PiKVM and, if you allow it, press power buttons and type on the machine it controls, asking you to confirm each time unless you say otherwise."
     mainPage: "apps"
     icon: "ui/icon.png"
     titles:
@@ -1582,14 +1442,14 @@
       "pt-BR": "PiKVM"
       "zh-CN": "PiKVM"
     descriptions:
-      "de": "Lassen Sie Ihre Chats und Agenten einen PiKVM prüfen und, wenn Sie es erlauben, Einschalttasten drücken und auf dem gesteuerten Rechner tippen, jedes Mal mit einer Bestätigung."
-      "es": "Permite que tus chats y agentes revisen un PiKVM y, si lo autorizas, pulsen los botones de encendido y escriban en la máquina que controla, con una confirmación cada vez."
-      "fr": "Laissez vos conversations et vos agents consulter un PiKVM et, si vous l'autorisez, appuyer sur les boutons d'alimentation et taper sur la machine qu'il pilote, avec une confirmation à chaque fois."
-      "id": "Izinkan obrolan dan agen Anda memeriksa PiKVM dan, jika Anda mengizinkan, menekan tombol daya dan mengetik di mesin yang dikendalikannya, dengan konfirmasi setiap kali."
-      "it": "Lascia che le tue chat e i tuoi agenti controllino un PiKVM e, se lo permetti, premano i pulsanti di accensione e scrivano sulla macchina che governa, con una conferma ogni volta."
-      "ko": "채팅과 에이전트가 PiKVM을 확인하고, 허용하면 전원 버튼을 누르고 PiKVM이 제어하는 기기에 입력할 수 있게 합니다. 매번 확인을 거칩니다."
-      "pt-BR": "Deixe seus chats e agentes verificarem um PiKVM e, se você permitir, pressionarem os botões de energia e digitarem na máquina que ele controla, com uma confirmação a cada vez."
-      "zh-CN": "让你的聊天和智能体查看 PiKVM，并在你允许时按下电源按钮、在它所控制的机器上输入内容，每次都需要确认。"
+      "de": "Lassen Sie Ihre Chats und Agenten einen PiKVM prüfen und, wenn Sie es erlauben, Einschalttasten drücken und auf dem gesteuerten Rechner tippen, mit einer Bestätigung bei jedem Mal, sofern Sie nichts anderes festlegen."
+      "es": "Permite que tus chats y agentes revisen un PiKVM y, si lo autorizas, pulsen los botones de encendido y escriban en la máquina que controla, pidiendo confirmación cada vez, salvo que decidas otra cosa."
+      "fr": "Laissez vos conversations et vos agents consulter un PiKVM et, si vous l'autorisez, appuyer sur les boutons d'alimentation et taper sur la machine qu'il pilote, en demandant une confirmation à chaque fois, sauf si vous en décidez autrement."
+      "id": "Izinkan obrolan dan agen Anda memeriksa PiKVM dan, jika Anda mengizinkan, menekan tombol daya dan mengetik di mesin yang dikendalikannya, dengan meminta konfirmasi setiap kali kecuali Anda menentukan lain."
+      "it": "Lascia che le tue chat e i tuoi agenti controllino un PiKVM e, se lo permetti, premano i pulsanti di accensione e scrivano sulla macchina che governa, chiedendo conferma ogni volta, salvo che tu decida diversamente."
+      "ko": "채팅과 에이전트가 PiKVM을 확인하고, 허용하면 전원 버튼을 누르고 PiKVM이 제어하는 기기에 입력할 수 있게 합니다. 별도로 설정하지 않으면 매번 확인을 거칩니다."
+      "pt-BR": "Deixe seus chats e agentes verificarem um PiKVM e, se você permitir, pressionarem os botões de energia e digitarem na máquina que ele controla, pedindo confirmação a cada vez, a menos que você decida o contrário."
+      "zh-CN": "让你的聊天和智能体查看 PiKVM，并在你允许时按下电源按钮、在它所控制的机器上输入内容，每次都需要确认，除非你另行设置。"
   toolCount: 8
   tools:
     - "get-info"
@@ -1602,7 +1462,7 @@
     - "set-settings"
 - id: "pikvm"
   name: PiKVM
-  description: "Let your chats and agents check a PiKVM and, if you allow it, press power buttons and type on the machine it controls, with a confirmation every time."
+  description: "Let your chats and agents check a PiKVM and, if you allow it, press power buttons and type on the machine it controls, asking you to confirm each time unless you say otherwise."
   version: "0.0.0-development"
   channel: "development"
   artifact: "oci://quay.io/go-skynet/local-ai-addons:pikvm-development"
@@ -1615,7 +1475,7 @@
     identity: "https://github.com/mudler/LocalAI/.github/workflows/addons-package.yml@refs/heads/master"
   ui:
     title: "PiKVM"
-    description: "Let your chats and agents check a PiKVM and, if you allow it, press power buttons and type on the machine it controls, with a confirmation every time."
+    description: "Let your chats and agents check a PiKVM and, if you allow it, press power buttons and type on the machine it controls, asking you to confirm each time unless you say otherwise."
     mainPage: "apps"
     icon: "ui/icon.png"
     titles:
@@ -1628,14 +1488,14 @@
       "pt-BR": "PiKVM"
       "zh-CN": "PiKVM"
     descriptions:
-      "de": "Lassen Sie Ihre Chats und Agenten einen PiKVM prüfen und, wenn Sie es erlauben, Einschalttasten drücken und auf dem gesteuerten Rechner tippen, jedes Mal mit einer Bestätigung."
-      "es": "Permite que tus chats y agentes revisen un PiKVM y, si lo autorizas, pulsen los botones de encendido y escriban en la máquina que controla, con una confirmación cada vez."
-      "fr": "Laissez vos conversations et vos agents consulter un PiKVM et, si vous l'autorisez, appuyer sur les boutons d'alimentation et taper sur la machine qu'il pilote, avec une confirmation à chaque fois."
-      "id": "Izinkan obrolan dan agen Anda memeriksa PiKVM dan, jika Anda mengizinkan, menekan tombol daya dan mengetik di mesin yang dikendalikannya, dengan konfirmasi setiap kali."
-      "it": "Lascia che le tue chat e i tuoi agenti controllino un PiKVM e, se lo permetti, premano i pulsanti di accensione e scrivano sulla macchina che governa, con una conferma ogni volta."
-      "ko": "채팅과 에이전트가 PiKVM을 확인하고, 허용하면 전원 버튼을 누르고 PiKVM이 제어하는 기기에 입력할 수 있게 합니다. 매번 확인을 거칩니다."
-      "pt-BR": "Deixe seus chats e agentes verificarem um PiKVM e, se você permitir, pressionarem os botões de energia e digitarem na máquina que ele controla, com uma confirmação a cada vez."
-      "zh-CN": "让你的聊天和智能体查看 PiKVM，并在你允许时按下电源按钮、在它所控制的机器上输入内容，每次都需要确认。"
+      "de": "Lassen Sie Ihre Chats und Agenten einen PiKVM prüfen und, wenn Sie es erlauben, Einschalttasten drücken und auf dem gesteuerten Rechner tippen, mit einer Bestätigung bei jedem Mal, sofern Sie nichts anderes festlegen."
+      "es": "Permite que tus chats y agentes revisen un PiKVM y, si lo autorizas, pulsen los botones de encendido y escriban en la máquina que controla, pidiendo confirmación cada vez, salvo que decidas otra cosa."
+      "fr": "Laissez vos conversations et vos agents consulter un PiKVM et, si vous l'autorisez, appuyer sur les boutons d'alimentation et taper sur la machine qu'il pilote, en demandant une confirmation à chaque fois, sauf si vous en décidez autrement."
+      "id": "Izinkan obrolan dan agen Anda memeriksa PiKVM dan, jika Anda mengizinkan, menekan tombol daya dan mengetik di mesin yang dikendalikannya, dengan meminta konfirmasi setiap kali kecuali Anda menentukan lain."
+      "it": "Lascia che le tue chat e i tuoi agenti controllino un PiKVM e, se lo permetti, premano i pulsanti di accensione e scrivano sulla macchina che governa, chiedendo conferma ogni volta, salvo che tu decida diversamente."
+      "ko": "채팅과 에이전트가 PiKVM을 확인하고, 허용하면 전원 버튼을 누르고 PiKVM이 제어하는 기기에 입력할 수 있게 합니다. 별도로 설정하지 않으면 매번 확인을 거칩니다."
+      "pt-BR": "Deixe seus chats e agentes verificarem um PiKVM e, se você permitir, pressionarem os botões de energia e digitarem na máquina que ele controla, pedindo confirmação a cada vez, a menos que você decida o contrário."
+      "zh-CN": "让你的聊天和智能体查看 PiKVM，并在你允许时按下电源按钮、在它所控制的机器上输入内容，每次都需要确认，除非你另行设置。"
   toolCount: 8
   tools:
     - "get-info"

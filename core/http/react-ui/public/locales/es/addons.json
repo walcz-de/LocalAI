@@ -146,7 +146,8 @@
     "network": "No se pudo contactar con el servidor. Revisa tu conexión.",
     "unavailable": "Los complementos no están disponibles ahora. Inténtalo de nuevo en un momento.",
     "unknownOutcome": "No se pudo confirmar el resultado. Comprueba el estado antes de volver a intentarlo.",
-    "busy": "El servidor de complementos está ocupado y no respondió a tiempo. Inténtalo de nuevo en un momento."
+    "busy": "El servidor de complementos está ocupado y no respondió a tiempo. Inténtalo de nuevo en un momento.",
+    "needsNewerHost": "Este complemento necesita un LocalAI más reciente. Actualiza LocalAI y vuelve a intentarlo. No se instaló nada."
   },
   "installed": {
     "disabled": "Desactivado",
@@ -569,7 +570,8 @@
       "protocol-version": "La versión del protocolo no encaja",
       "sdk-version": "La versión del SDK de la interfaz no encaja",
       "data-format": "El formato de datos no encaja",
-      "digest-changed": "El digest de esta versión cambió"
+      "digest-changed": "El digest de esta versión cambió",
+      "feature-level": "Este complemento necesita un LocalAI más reciente."
     },
     "class": {
       "source-unavailable": "No se puede acceder a la biblioteca.",
@@ -864,6 +866,7 @@
     "keepOwnNamed": "Conservar como míos los permisos generales de {{name}}",
     "loadError": "El acceso al host no se cargó",
     "loading": "Leyendo lo que pide este complemento...",
+    "loadingSlow": "Sigue en curso. Se está descargando el paquete y comprobando su firma antes de poder mostrar los permisos. Un complemento grande puede tardar un poco.",
     "loadingPage": "Cargando el acceso al host",
     "locked": "El despliegue desactivó los cambios en el acceso al host. Puedes leer esta página, pero no cambiarla.",
     "lockedNoAuth": "El inicio de sesión está desactivado, así que cualquiera que llegue a este servidor podría cambiar esto; el administrador lo define en el archivo de políticas.",

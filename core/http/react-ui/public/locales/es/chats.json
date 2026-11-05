@@ -41,6 +41,11 @@
       "readsLabel": "Lee",
       "writesLabel": "Escribe",
       "costLabel": "Coste",
+      "deliveryLabel": "Los resultados van a",
+      "deliveryInbox": "Tu bandeja de entrada",
+      "deliveryChat": "Este chat",
+      "deliveryThread": "Este hilo",
+      "deliveryChannel": "{{channel}}, en el nivel principal del canal",
       "stopLabel": "Para detenerlo",
       "when": "{{schedule}}, {{zone}}. Primera ejecución {{when}}.",
       "whenNoFirst": "{{schedule}}, {{zone}}.",
@@ -268,7 +273,12 @@
   "connectorsPage": {
     "loadFailed": "No se pudieron cargar tus conectores.",
     "waitingTitle": "Esperando su complemento",
-    "waitingText": "Estos enlaces se conservan, pero no funcionan hasta que su complemento esté instalado y activado."
+    "waitingText": "Estos enlaces se conservan, pero no funcionan hasta que su complemento esté instalado y activado.",
+    "duplicate": {
+      "text": "Este bot también está conectado como {{name}}. Ambas conexiones responderán al mismo mensaje.",
+      "turnOff": "Desactivar esta",
+      "open": "Abrir {{name}}"
+    }
   },
   "tools": {
     "commands": {
@@ -800,7 +810,15 @@
       "label": "Texto para añadir a {{collection}}",
       "size": "{{size}} de un máximo de {{max}}",
       "note": "No se añade nada hasta que confirmes. Después el texto se divide en pasajes y se indexa, y cualquier chat que busque en esta colección puede usarlo.",
-      "editLabel": "Texto para añadir a {{target}}"
+      "editLabel": "Texto para añadir a {{target}}",
+      "embed_one": "Se incrustará 1 pasaje con {{model}}.",
+      "embed_other": "Se incrustarán unos {{count}} pasajes con {{model}}.",
+      "serverModel": "el modelo de embeddings del servidor"
+    },
+    "warning": {
+      "title": "Revisa este texto antes de confirmar.",
+      "secret": "Parece contener un secreto, como una clave, un token o una contraseña. Una vez añadido, cualquier chat que busque en esta colección podrá leerlo. Un chat de mensajería no puede confirmarlo; solo tú, aquí.",
+      "other": "El servidor marcó este texto como arriesgado. Un chat de mensajería no puede confirmarlo; solo tú, aquí."
     }
   },
   "proposalsPage": {
@@ -981,15 +999,20 @@
       "title": "Como antes",
       "body": "Este agente se guardó antes de que existiera esta opción. Lee tus notas si su lista de complementos nombra Memory, y el modelo elige dónde se guarda una nota. Elige una de las opciones de abajo para cambiarlo."
     },
-    "saveGrant": "Dejar que guarde notas",
-    "saveGrantHelp": "Activa el permiso Recordar cosas. Sin él, el agente lee notas pero no puede guardar ninguna.",
     "copyNote": "Exportar un agente, o importarlo como nuevo, conserva esta opción y nunca copia sus notas.",
     "summary": {
       "mine_and_own": "Mías y propias",
       "own": "Solo propias",
       "mine": "Mías",
       "none": "Ninguna",
-      "asBefore": "Como antes"
+      "asBefore": "Como antes",
+      "withAuto": "{{choice}}, guarda al momento",
+      "level": {
+        "off": "Desactivada",
+        "reads": "Lee notas",
+        "saves": "Lee y guarda notas"
+      },
+      "combined": "{{level}}, {{choice}}"
     },
     "delete": {
       "title": "¿Eliminar {{name}}?",
@@ -1014,7 +1037,11 @@
       "title": "Cuando quiere guardar una nota",
       "use_mine": {
         "title": "Usar mi ajuste",
-        "body": "Ahora: {{level}}."
+        "body": "Tu ajuste es <b>{{level}}</b>. <settings>Cámbialo en Ajustes > Memoria.</settings>"
+      },
+      "auto": {
+        "title": "Guardar y avisarme",
+        "body": "Guarda cada nota al momento y te avisa en el chat, con Deshacer, aunque tu ajuste sea Preguntarme antes. Una nota larga, o una que parezca un secreto, sigue esperando."
       },
       "always": {
         "title": "Confirmar siempre",
@@ -1024,8 +1051,27 @@
         "title": "Nunca",
         "body": "Lee, nunca guarda."
       },
-      "hint": "Un agente puede preguntar más que tu ajuste, nunca menos. «Guardar y avisarme» no se ofrece aquí. En un chat de mensajería la nota va primero a esa conversación y llega a las notas propias de este agente solo desde un remitente emparejado."
-    }
+      "hint": "En un chat de mensajería la nota va primero a esa conversación y llega a las notas propias de este agente solo desde un remitente emparejado. Guardar al momento en un chat de mensajería solo vale para un remitente emparejado en un chat uno a uno.",
+      "offReason": "El nivel de guardado no se aplica mientras la memoria está desactivada.",
+      "readsReason": "El nivel de guardado no se aplica: este agente lee notas pero no puede guardar ninguna."
+    },
+    "level": {
+      "title": "Qué hace con las notas",
+      "off": {
+        "title": "Desactivada",
+        "body": "No lee ni guarda notas."
+      },
+      "reads": {
+        "title": "Lee notas",
+        "body": "Usa tus notas para responder. Nunca guarda ninguna."
+      },
+      "saves": {
+        "title": "Lee y guarda notas",
+        "body": "Usa notas y guarda nuevas, según tu nivel de guardado."
+      }
+    },
+    "whose": "De quién son las notas",
+    "whoseOff": "La memoria está desactivada para este agente, así que no hay notas que elegir."
   },
   "providerPicker": {
     "title": "Proveedor",
@@ -1050,6 +1096,19 @@
         "builtinBody": "Archivos simples en tu carpeta Memory. Nada sale de esta máquina.",
         "offBody": "No se lee, ofrece, guarda ni envía nada. Las notas existentes se conservan."
       }
+    },
+    "healthTitle": "El proveedor está en pausa",
+    "forget": {
+      "lede": "Pide a {{name}} que olvide las notas que guarda para ti. Tus archivos de la carpeta Memory no se tocan.",
+      "action": "Olvidar todo de este proveedor",
+      "confirmTitle": "¿Olvidar todo de {{name}}?",
+      "confirmBody": "Se pedirá a {{name}} que olvide cada nota que guarda para ti. Puede retener el cambio hasta que lo confirmes en la página de Add-ons.",
+      "confirmBodyFinal": "Se pedirá a {{name}} que olvide cada nota que guarda para ti. No se puede deshacer.",
+      "confirm": "Olvidar todo",
+      "pending": "Olvidando...",
+      "done": "{{name}} olvidó sus notas",
+      "waiting": "El cambio espera tu confirmación en la página de Add-ons",
+      "failed": "El proveedor no pudo olvidar: {{message}}"
     }
   }
 }

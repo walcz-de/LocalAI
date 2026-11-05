@@ -306,6 +306,33 @@ func (s *Service) memoryReads(ctx context.Context, rec session.ChatRecord, sc *s
 	return sc == nil || sc.memory != "" || sc.addons[MemoryAddonID]
 }
 
+// personalNotesOpen says whether a chat may read the owner's personal notes
+// (the user and agent scopes of the notes). The agent profile is not one of
+// them: it holds the standing rules of the agent, like its instructions, and
+// every sender gets it. A chat
+// outside a messaging app always may. A messaging chat may only when the
+// sender is paired with the bot; an allowlisted sender who is not paired, a
+// sender let in through a channel, a turn with no known sender and a grant
+// that expired all read none. The notes of the conversation itself (the
+// channel scope) are not personal notes and are never held back here. This is
+// the read side of the rule that memoryChatScopes enforces on writes.
+func (s *Service) personalNotesOpen(rec session.ChatRecord) bool {
+	if rec.Origin != session.OriginConnector {
+		return true
+	}
+	_, paired := s.messagingFacts(rec.ID)
+	return paired
+}
+
+// withoutPersonalNotes drops the user and agent index files of the notes from
+// a list of sources, for the ids that serve the notes. The channel files and
+// the sources of other add-ons stay.
+func withoutPersonalNotes(sources []contextfiles.Source, ids ...string) []contextfiles.Source {
+	return slices.DeleteFunc(slices.Clone(sources), func(src contextfiles.Source) bool {
+		return src.Scope != contextfiles.ScopeChannel && slices.Contains(ids, src.ID)
+	})
+}
+
 // agentMemory is the choice of notes of a saved agent: one of the agents.Memory
 // values, or empty for a chat without an agent, an agent that cannot be read
 // and an agent saved before the choice ("as before").
@@ -404,11 +431,24 @@ func (s *Service) memoryChatScopes(ctx context.Context, c builtins.Chat) []strin
 // when the chat does not read the notes: a skill that says "read your notes"
 // has no use then, and the model must not look for them. The skills of the
 // built-in provider are off whenever another provider serves.
+//
+// It also records, on the scope of a saved agent, the skills that the host
+// grants for this chat: the skills of the active memory provider, whenever the
+// chat reads the notes and may read the personal ones. A sender who is not
+// paired in a messaging chat gets no personal notes, so it gets no skills that
+// teach reading them. The scope is built for this call, so it is set here and
+// read by grantsSkill; a caller must call this before it resolves the skills.
 func (s *Service) memorySkillsOff(ctx context.Context, rec session.ChatRecord, sc *scope, off []string) []string {
 	legacy := legacyMemoryOf(s.addonContextSets(ctx, rec.Principal))
 	prov := s.memoryProviderFor(ctx, rec.Principal, legacy)
 	builtin := prov.ID() == BuiltinMemoryID
-	reads := s.memoryReads(ctx, rec, sc, legacy)
+	reads := s.memoryReads(ctx, rec, sc, legacy) && s.personalNotesOpen(rec)
+	if reads && sc != nil {
+		sc.hostSkills = set(prov.Skills())
+		if !builtin {
+			sc.hostSkillAddon = prov.ID()
+		}
+	}
 	if builtin && reads {
 		return off
 	}
@@ -416,10 +456,22 @@ func (s *Service) memorySkillsOff(ctx context.Context, rec session.ChatRecord, s
 	if !builtin || !reads {
 		out = append(out, s.memory.Skills()...)
 	}
-	if !builtin && !s.memoryState(ctx, rec, legacy).On {
+	if !builtin && !reads {
 		out = append(out, prov.Skills()...)
 	}
 	return out
+}
+
+// memoryProviderSkills returns the skills that the active memory provider of
+// the user ships, for the skill lists: the names, and the add-on that ships
+// them ("" for the built-in provider).
+func (s *Service) memoryProviderSkills(ctx context.Context, user string) ([]string, string) {
+	legacy := legacyMemoryOf(s.addonContextSets(ctx, user))
+	prov := s.memoryProviderFor(ctx, user, legacy)
+	if prov.ID() == BuiltinMemoryID {
+		return prov.Skills(), ""
+	}
+	return prov.Skills(), prov.ID()
 }
 
 // memoryWritable says whether a chat may propose a memory note: memory is on

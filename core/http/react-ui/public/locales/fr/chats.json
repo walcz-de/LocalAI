@@ -41,6 +41,11 @@
       "readsLabel": "Lit",
       "writesLabel": "Écrit",
       "costLabel": "Coût",
+      "deliveryLabel": "Les résultats vont dans",
+      "deliveryInbox": "Votre boîte de réception",
+      "deliveryChat": "Cette conversation",
+      "deliveryThread": "Ce fil",
+      "deliveryChannel": "{{channel}}, au premier niveau du canal",
       "stopLabel": "Pour l’arrêter",
       "when": "{{schedule}}, {{zone}}. Première exécution {{when}}.",
       "whenNoFirst": "{{schedule}}, {{zone}}.",
@@ -268,7 +273,12 @@
   "connectorsPage": {
     "loadFailed": "Impossible de charger vos connecteurs.",
     "waitingTitle": "En attente de leur module",
-    "waitingText": "Ces liaisons sont conservées, mais elles ne fonctionnent qu'une fois leur module installé et activé."
+    "waitingText": "Ces liaisons sont conservées, mais elles ne fonctionnent qu'une fois leur module installé et activé.",
+    "duplicate": {
+      "text": "Ce bot est aussi connecté sous le nom {{name}}. Les deux connexions répondront au même message.",
+      "turnOff": "Désactiver celle-ci",
+      "open": "Ouvrir {{name}}"
+    }
   },
   "tools": {
     "commands": {
@@ -800,7 +810,15 @@
       "label": "Texte à ajouter à {{collection}}",
       "size": "{{size}} sur {{max}} au maximum",
       "note": "Rien n'est ajouté tant que vous n'avez pas confirmé. Le texte est ensuite découpé en passages et indexé, et tout chat qui interroge cette collection peut l'utiliser.",
-      "editLabel": "Texte à ajouter à {{target}}"
+      "editLabel": "Texte à ajouter à {{target}}",
+      "embed_one": "1 passage sera vectorisé avec {{model}}.",
+      "embed_other": "Environ {{count}} passages seront vectorisés avec {{model}}.",
+      "serverModel": "le modèle d'embeddings du serveur"
+    },
+    "warning": {
+      "title": "Vérifiez ce texte avant de confirmer.",
+      "secret": "Il semble contenir un secret, comme une clé, un jeton ou un mot de passe. Une fois ajouté, tout chat qui interroge cette collection peut le lire. Un chat de messagerie ne peut pas le confirmer ; vous seul le pouvez, ici.",
+      "other": "Le serveur a signalé ce texte comme risqué. Un chat de messagerie ne peut pas le confirmer ; vous seul le pouvez, ici."
     }
   },
   "proposalsPage": {
@@ -981,15 +999,20 @@
       "title": "Comme avant",
       "body": "Cet agent a été enregistré avant que ce choix existe. Il lit vos notes si sa liste de modules nomme Memory, et le modèle choisit où une note est enregistrée. Choisissez une option ci-dessous pour changer cela."
     },
-    "saveGrant": "Autoriser l'enregistrement de notes",
-    "saveGrantHelp": "Active l'autorisation Retenir des choses. Sans elle, l'agent lit les notes mais ne peut pas en enregistrer.",
     "copyNote": "Exporter un agent, ou l'importer comme nouvel agent, garde ce choix et ne copie jamais ses notes.",
     "summary": {
       "mine_and_own": "Les miennes et les siennes",
       "own": "Les siennes seulement",
       "mine": "Les miennes",
       "none": "Aucune",
-      "asBefore": "Comme avant"
+      "asBefore": "Comme avant",
+      "withAuto": "{{choice}}, enregistre aussitôt",
+      "level": {
+        "off": "Désactivée",
+        "reads": "Lit les notes",
+        "saves": "Lit et enregistre les notes"
+      },
+      "combined": "{{level}}, {{choice}}"
     },
     "delete": {
       "title": "Supprimer {{name}} ?",
@@ -1014,7 +1037,11 @@
       "title": "Quand il veut enregistrer une note",
       "use_mine": {
         "title": "Utiliser mon réglage",
-        "body": "Actuellement : {{level}}."
+        "body": "Votre réglage est <b>{{level}}</b>. <settings>Modifiez-le dans Réglages > Mémoire.</settings>"
+      },
+      "auto": {
+        "title": "Enregistrer et me prévenir",
+        "body": "Enregistre chaque note aussitôt et vous prévient dans la conversation, avec Annuler, même si votre réglage est Me demander d'abord. Une note longue, ou qui ressemble à un secret, attend toujours."
       },
       "always": {
         "title": "Toujours confirmer",
@@ -1024,8 +1051,27 @@
         "title": "Jamais",
         "body": "Il lit, n'enregistre jamais."
       },
-      "hint": "Un agent peut demander plus que votre réglage, jamais moins. « Enregistrer et me prévenir » n'est pas proposé ici. Dans une conversation de messagerie, la note va d'abord à cette conversation et n'atteint les notes propres de cet agent que depuis un expéditeur associé."
-    }
+      "hint": "Dans une conversation de messagerie, la note va d'abord à cette conversation et n'atteint les notes propres de cet agent que depuis un expéditeur associé. L'enregistrement immédiat dans une conversation de messagerie ne vaut que pour un expéditeur associé dans une conversation privée.",
+      "offReason": "Le niveau d'enregistrement ne s'applique pas tant que la mémoire est désactivée.",
+      "readsReason": "Le niveau d'enregistrement ne s'applique pas : cet agent lit les notes mais ne peut en enregistrer aucune."
+    },
+    "level": {
+      "title": "Ce qu'il fait des notes",
+      "off": {
+        "title": "Désactivée",
+        "body": "Ne lit ni n'enregistre de notes."
+      },
+      "reads": {
+        "title": "Lit les notes",
+        "body": "Utilise vos notes pour répondre. N'en enregistre jamais."
+      },
+      "saves": {
+        "title": "Lit et enregistre les notes",
+        "body": "Utilise les notes et en enregistre de nouvelles, selon votre niveau d'enregistrement."
+      }
+    },
+    "whose": "De qui sont les notes",
+    "whoseOff": "La mémoire est désactivée pour cet agent, il n'y a donc pas de notes à choisir."
   },
   "providerPicker": {
     "title": "Fournisseur",
@@ -1050,6 +1096,19 @@
         "builtinBody": "Des fichiers simples dans votre dossier Memory. Rien ne quitte cette machine.",
         "offBody": "Rien n'est lu, proposé, enregistré ni envoyé. Les notes existantes sont conservées."
       }
+    },
+    "healthTitle": "Le fournisseur est en pause",
+    "forget": {
+      "lede": "Demandez à {{name}} d'oublier les notes qu'il garde pour vous. Vos fichiers du dossier Memory ne sont pas touchés.",
+      "action": "Tout oublier chez ce fournisseur",
+      "confirmTitle": "Tout oublier chez {{name}} ?",
+      "confirmBody": "{{name}} devra oublier chaque note qu'il garde pour vous. Il peut retenir le changement jusqu'à ce que vous le confirmiez sur la page Add-ons.",
+      "confirmBodyFinal": "{{name}} devra oublier chaque note qu'il garde pour vous. Cette action est irréversible.",
+      "confirm": "Tout oublier",
+      "pending": "Oubli en cours...",
+      "done": "{{name}} a oublié ses notes",
+      "waiting": "Le changement attend votre confirmation sur la page Add-ons",
+      "failed": "Le fournisseur n'a pas pu oublier : {{message}}"
     }
   }
 }

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/mudler/LocalAI/core/services/studio/agents"
@@ -103,6 +104,11 @@ func (s *Service) providerContext(ctx context.Context, rec session.ChatRecord, s
 		scopes = append(scopes, string(contract.ScopeChannel))
 	}
 	scopes = scopesOfChoice(scopes, choice, rec.AgentID != "")
+	if !s.personalNotesOpen(rec) {
+		// Only the notes of this conversation: the provider is not asked for
+		// the owner's.
+		scopes = slices.DeleteFunc(scopes, func(sc string) bool { return sc != string(contract.ScopeChannel) })
+	}
 	if len(scopes) == 0 {
 		return "", ""
 	}
@@ -192,7 +198,7 @@ func (s *Service) gateMemoryWrite(rec session.ChatRecord, t session.Tool, ref pr
 	}
 	if rec.Origin == session.OriginConnector {
 		var ok bool
-		if t, ok = s.gateAddonTool(t, contract.CapMemoryWrite, rec.ID); !ok {
+		if t, ok, _ = s.gateAddonTool(t, contract.CapMemoryWrite, rec.ID, false); !ok {
 			return t, false
 		}
 	}

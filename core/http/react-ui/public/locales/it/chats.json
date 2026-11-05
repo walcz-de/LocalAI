@@ -41,6 +41,11 @@
       "readsLabel": "Legge",
       "writesLabel": "Scrive",
       "costLabel": "Costo",
+      "deliveryLabel": "I risultati vanno a",
+      "deliveryInbox": "La tua Inbox",
+      "deliveryChat": "Questa chat",
+      "deliveryThread": "Questo thread",
+      "deliveryChannel": "{{channel}}, in cima al canale",
       "stopLabel": "Per fermarlo",
       "when": "{{schedule}}, {{zone}}. Prima esecuzione {{when}}.",
       "whenNoFirst": "{{schedule}}, {{zone}}.",
@@ -268,7 +273,12 @@
   "connectorsPage": {
     "loadFailed": "Impossibile caricare i tuoi connettori.",
     "waitingTitle": "In attesa del loro add-on",
-    "waitingText": "Questi collegamenti restano salvati, ma non funzionano finché il loro add-on non è installato e attivo."
+    "waitingText": "Questi collegamenti restano salvati, ma non funzionano finché il loro add-on non è installato e attivo.",
+    "duplicate": {
+      "text": "Questo bot è collegato anche come {{name}}. Entrambe le connessioni risponderanno allo stesso messaggio.",
+      "turnOff": "Disattiva questa",
+      "open": "Apri {{name}}"
+    }
   },
   "tools": {
     "commands": {
@@ -800,7 +810,15 @@
       "label": "Testo da aggiungere a {{collection}}",
       "size": "{{size}} su un massimo di {{max}}",
       "note": "Non viene aggiunto nulla finché non confermi. Poi il testo viene diviso in passaggi e indicizzato, e ogni chat che cerca in questa raccolta può usarlo.",
-      "editLabel": "Testo da aggiungere a {{target}}"
+      "editLabel": "Testo da aggiungere a {{target}}",
+      "embed_one": "1 passaggio verrà incorporato con {{model}}.",
+      "embed_other": "Circa {{count}} passaggi verranno incorporati con {{model}}.",
+      "serverModel": "il modello di embedding del server"
+    },
+    "warning": {
+      "title": "Controlla questo testo prima di confermare.",
+      "secret": "Sembra contenere un segreto, come una chiave, un token o una password. Una volta aggiunto, ogni chat che cerca in questa raccolta può leggerlo. Una chat di messaggistica non può confermarlo; solo tu, qui.",
+      "other": "Il server ha segnalato questo testo come rischioso. Una chat di messaggistica non può confermarlo; solo tu, qui."
     }
   },
   "proposalsPage": {
@@ -981,15 +999,20 @@
       "title": "Come prima",
       "body": "Questo agente è stato salvato prima che esistesse questa scelta. Legge le tue note se il suo elenco di componenti aggiuntivi nomina Memory, e il modello sceglie dove salvare una nota. Scegli una delle opzioni qui sotto per cambiarlo."
     },
-    "saveGrant": "Lascia che salvi note",
-    "saveGrantHelp": "Attiva il permesso Ricordare cose. Senza di esso l'agente legge le note ma non può salvarne.",
     "copyNote": "Esportare un agente, o importarlo come nuovo, mantiene questa scelta e non copia mai le sue note.",
     "summary": {
       "mine_and_own": "Mie e sue",
       "own": "Solo sue",
       "mine": "Mie",
       "none": "Nessuna",
-      "asBefore": "Come prima"
+      "asBefore": "Come prima",
+      "withAuto": "{{choice}}, salva subito",
+      "level": {
+        "off": "Disattivata",
+        "reads": "Legge le note",
+        "saves": "Legge e salva le note"
+      },
+      "combined": "{{level}}, {{choice}}"
     },
     "delete": {
       "title": "Eliminare {{name}}?",
@@ -1014,7 +1037,11 @@
       "title": "Quando vuole salvare una nota",
       "use_mine": {
         "title": "Usa la mia impostazione",
-        "body": "Ora: {{level}}."
+        "body": "La tua impostazione è <b>{{level}}</b>. <settings>Cambiala in Impostazioni > Memoria.</settings>"
+      },
+      "auto": {
+        "title": "Salva e avvisami",
+        "body": "Salva ogni nota subito e te lo dice in chat, con Annulla, anche se la tua impostazione è Chiedimi prima. Una nota lunga, o che sembra un segreto, aspetta comunque."
       },
       "always": {
         "title": "Conferma sempre",
@@ -1024,8 +1051,27 @@
         "title": "Mai",
         "body": "Legge, non salva mai."
       },
-      "hint": "Un agente può chiedere di più della tua impostazione, mai di meno. «Salva e avvisami» qui non è offerto. In una chat di messaggistica la nota va prima in quella conversazione e arriva alle note proprie di questo agente solo da un mittente abbinato."
-    }
+      "hint": "In una chat di messaggistica la nota va prima in quella conversazione e arriva alle note proprie di questo agente solo da un mittente abbinato. Il salvataggio immediato in una chat di messaggistica vale solo per un mittente abbinato in una chat uno a uno.",
+      "offReason": "Il livello di salvataggio non vale finché la memoria è disattivata.",
+      "readsReason": "Il livello di salvataggio non vale: questo agente legge le note ma non può salvarne."
+    },
+    "level": {
+      "title": "Cosa fa con le note",
+      "off": {
+        "title": "Disattivata",
+        "body": "Non legge e non salva note."
+      },
+      "reads": {
+        "title": "Legge le note",
+        "body": "Usa le tue note per rispondere. Non ne salva mai."
+      },
+      "saves": {
+        "title": "Legge e salva le note",
+        "body": "Usa le note e ne salva di nuove, secondo il tuo livello di salvataggio."
+      }
+    },
+    "whose": "Di chi sono le note",
+    "whoseOff": "La memoria è disattivata per questo agente, quindi non ci sono note da scegliere."
   },
   "providerPicker": {
     "title": "Fornitore",
@@ -1050,6 +1096,19 @@
         "builtinBody": "File semplici nella tua cartella Memory. Niente lascia questa macchina.",
         "offBody": "Non viene letto, offerto, salvato né inviato nulla. Le note esistenti restano."
       }
+    },
+    "healthTitle": "Il fornitore è in pausa",
+    "forget": {
+      "lede": "Chiedi a {{name}} di dimenticare le note che conserva per te. I tuoi file nella cartella Memory non vengono toccati.",
+      "action": "Dimentica tutto di questo fornitore",
+      "confirmTitle": "Dimenticare tutto di {{name}}?",
+      "confirmBody": "A {{name}} verrà chiesto di dimenticare ogni nota che conserva per te. Può trattenere la modifica finché non la confermi nella pagina Add-ons.",
+      "confirmBodyFinal": "A {{name}} verrà chiesto di dimenticare ogni nota che conserva per te. Non si può annullare.",
+      "confirm": "Dimentica tutto",
+      "pending": "Sto dimenticando...",
+      "done": "{{name}} ha dimenticato le sue note",
+      "waiting": "La modifica attende la tua conferma nella pagina Add-ons",
+      "failed": "Il fornitore non ha potuto dimenticare: {{message}}"
     }
   }
 }

@@ -55,6 +55,17 @@ const (
 	// CodeKnowledgeNoEmbedding: the model that indexes Knowledge is not
 	// installed on the server.
 	CodeKnowledgeNoEmbedding = "knowledge_no_embedding"
+	// CodeAgentResourcesNone: every add-on of the agent that changes things
+	// works on resources the agent lists, and the list is empty, so there is
+	// nothing the bot may change.
+	CodeAgentResourcesNone = "agent_resources_none"
+	// CodeAgentResourcesReadOnly: the agent lists resources, but only to read.
+	CodeAgentResourcesReadOnly = "agent_resources_read_only"
+	// CodeDuplicateConnection: another enabled connection of the owner is the
+	// same bot, so both answer the same message. It is not a refusal of a
+	// capability: the sentence names the other connection with {other}, and
+	// DuplicateMessage fills it.
+	CodeDuplicateConnection = "duplicate_connection"
 )
 
 // BlockCodes lists every code, in the order of the chain.
@@ -62,7 +73,7 @@ func BlockCodes() []string {
 	return []string{CodeNoAgent, CodeUnknownCapability, CodeServerSettingOff, CodeToolsSwitchOff, CodeAgentPermissionOff,
 		CodeAgentUnavailable, CodeConnectionPermissionOff, CodeSenderNotListed, CodeSenderNeedsPairing,
 		CodeChannelNotTrusted, CodeRoleNotGranted, CodeKindNotRunning, CodeContextRule,
-		CodeKnowledgeNone, CodeKnowledgeNoEmbedding}
+		CodeKnowledgeNone, CodeKnowledgeNoEmbedding, CodeAgentResourcesNone, CodeAgentResourcesReadOnly, CodeDuplicateConnection}
 }
 
 // Who holds the link of the chain that refused.
@@ -159,7 +170,7 @@ var blockTable = map[string]blockInfo{
 		"This person needs to be paired with this bot before the bot can {action} for them.",
 		"You need to be paired with this bot by the owner before it can {action} for you."},
 	CodeChannelNotTrusted: {BySender,
-		"People in a channel are not trusted one by one, so the bot cannot {action} for them. Add the person to the allowed people.",
+		"This channel is set to Answer only, so the bot cannot {action} for its members. Add the person, or set it to Let everyone here ask for actions.",
 		"This bot can {action} only for people the owner added by name or paired, and you are not one of them."},
 	CodeRoleNotGranted: {BySender,
 		"The role of this person does not let the bot {action}. Allow it for that role on the connection.",
@@ -173,6 +184,15 @@ var blockTable = map[string]blockInfo{
 	CodeKnowledgeNoEmbedding: {ByServer,
 		"The embedding model for Knowledge is not installed, so the bot cannot {action}. Install it in Models.",
 		"The server cannot index new texts right now, so the bot cannot {action}."},
+	CodeAgentResourcesNone: {ByAgent,
+		"No resource is on the list of the agent, so the bot cannot {action}. Add one to the agent.",
+		"The owner gave this bot no resource to work on, so it cannot {action}."},
+	CodeAgentResourcesReadOnly: {ByAgent,
+		"Every resource on the list of the agent is read only, so the bot cannot {action}. Allow changes for one of them in the agent.",
+		"The owner let this bot read what it works on, not change it, so it cannot {action}."},
+	CodeDuplicateConnection: {ByConnection,
+		"This bot is also connected as {other}. Both connections will answer the same message.",
+		"This bot is connected twice, so a second copy may answer too."},
 	CodeContextRule: {ByConnection,
 		"The bot cannot {action} in this place.",
 		"This bot cannot {action} in this place."},
@@ -204,6 +224,11 @@ var capabilityWords = map[string]capabilityPhrase{
 // actionOf is the verb phrase of a capability, "do this" for a name that is
 // not on the list.
 func actionOf(capability string) string {
+	// The read rule of the personal notes is not a capability of the closed
+	// list, but it is refused with the same texts.
+	if capability == NotesReadCapability {
+		return "read the owner's personal notes"
+	}
 	if w, ok := capabilityWords[capability]; ok {
 		return w.Action
 	}
@@ -261,3 +286,7 @@ func chainRank(code string) int {
 	}
 	return slices.Index(chain, row.By)
 }
+
+// BlockOwnerMessage is the English sentence the owner reads for a code: the
+// source of the translations that connectortext holds by the same code.
+func BlockOwnerMessage(code, capability string) string { return blockMessage(code, capability) }

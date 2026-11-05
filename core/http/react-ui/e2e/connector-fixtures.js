@@ -30,9 +30,9 @@ export const CAPABILITIES = [
   { name: 'files.upload', title: 'Receive files', description: 'The agent may read files that senders attach to a message.', sensitive: false, usual: true },
   { name: 'memory.write', title: 'Save to memory', description: 'The agent may remember what a sender asks it to remember.', sensitive: false, usual: true },
   { name: 'proposals.confirm', title: 'Confirm changes from the chat', description: 'A sender can confirm a trigger or a change that the agent proposed (a memory note, the agent rules, a skill, a page or the dashboard) by answering yes or no in the same chat. Changes to the rules, skills, pages and dashboard need a paired sender.', sensitive: false, usual: true },
-  { name: 'talkback.channels', title: 'Post to approved channels', description: 'The agent may write to the approved channels when a sender asks.', sensitive: false, usual: true },
+  { name: 'talkback.channels', title: 'Post to other channels', description: 'The agent may write to the channels listed under Where it may post when a sender asks.', sensitive: false, usual: true },
   { name: 'talkback.new_channel', title: 'Post to a new channel', description: 'The agent may write to a channel that is not approved yet.', sensitive: true, usual: false },
-  { name: 'tools.write', title: 'Change things outside LocalAI', description: 'An add-on tool may change something with the credential of the binding.', sensitive: false, usual: false },
+  { name: 'tools.write', title: 'Let people who are not paired change things with add-on tools', description: 'Paired people already use the write tools of the add-ons the agent is connected to. Turn this on for people on the allowlist who are not paired.', sensitive: false, usual: false },
   { name: 'triggers.propose', title: 'Propose triggers', description: 'The agent may propose a timer or an event trigger when a sender asks for one.', sensitive: false, usual: true },
   { name: 'triggers.run', title: 'Fire event triggers', description: 'A message from a sender may start a run of an event trigger.', sensitive: false, usual: true },
 ]
@@ -89,7 +89,8 @@ export function previewFor(body, roles = []) {
 }
 
 export function connectorApi(page, initial = [], kind = 'telegram', senders = [NEWCOMER], files = ONE_MIB, { capabilities = CAPABILITIES, kindExtra = {}, access = null, preview = null, previewDelay = 0, previewStatus = 200 } = {}) {
-  const s = { items: structuredClone(initial), calls: [], senders: structuredClone(senders), previews: [] }
+  const s = { items: structuredClone(initial), calls: [], senders: structuredClone(senders), previews: [], urls: [] }
+  page.on('request', r => { if (r.url().includes('/api/chats/connectors/')) s.urls.push(r.url()) })
   const rec = (method, url, body) => s.calls.push({ method, url: new URL(url).pathname, body })
   return {
     s,
@@ -100,14 +101,14 @@ export function connectorApi(page, initial = [], kind = 'telegram', senders = [N
         s.senders = s.senders.map(x => ({ ...x, allowed: true }))
         return r.fulfill({ json: s.items[0] })
       })
-      await page.route(/\/api\/chats\/connectors\/[^/?]+\/access\/preview$/, async r => {
+      await page.route(/\/api\/chats\/connectors\/[^/?]+\/access\/preview(\?.*)?$/, async r => {
         const body = r.request().postDataJSON()
         s.previews.push({ id: decodeURIComponent(new URL(r.request().url()).pathname.split('/').at(-3)), body })
         if (previewDelay) await new Promise(ok => setTimeout(ok, previewDelay))
         if (previewStatus !== 200) return r.fulfill({ status: previewStatus, json: { error: { message: 'The check is not available right now.' } } })
         return r.fulfill({ json: typeof preview === 'function' ? preview(body) : preview || previewFor(body, kindExtra.roles || []) })
       })
-      await page.route(/\/api\/chats\/connectors\/[^/?]+\/access$/, r => r.fulfill({ json: access || { binding: 'b1', subjects: [], recent: [] } }))
+      await page.route(/\/api\/chats\/connectors\/[^/?]+\/access(\?.*)?$/, r => r.fulfill({ json: access || { binding: 'b1', subjects: [], recent: [] } }))
       await page.route(/\/api\/chats\/connectors\/[^/?]+\/pairing$/, r => {
         rec('POST', r.request().url(), null)
         return r.fulfill({ json: { code: 'LA-K7M2QX9P', expires: new Date(Date.now() + 10 * 60 * 1000).toISOString() } })
@@ -146,7 +147,7 @@ export function connectorApi(page, initial = [], kind = 'telegram', senders = [N
       await page.route(/\/api\/chats(\?.*)?$/, r => r.fulfill({ json: { conversations: [], persistent: true, files: true } }))
       await page.route('**/api/chats/notifications*', r => r.fulfill({ json: { notifications: [], unread: 0 } }))
       // Registered last, so it answers before the route of one binding.
-      await page.route(/\/api\/chats\/connectors\/kinds$/, r => r.fulfill({ json: { kinds: [{ addon: kind, kind, title: kind, files, ...kindExtra }], capabilities } }))
+      await page.route(/\/api\/chats\/connectors\/kinds(\?.*)?$/, r => r.fulfill({ json: { kinds: [{ addon: kind, kind, title: kind, files, ...kindExtra }], capabilities } }))
     },
   }
 }

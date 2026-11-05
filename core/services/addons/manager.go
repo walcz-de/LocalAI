@@ -89,6 +89,9 @@ const (
 	// protocol or data format this host no longer runs. It cannot be turned
 	// on; an upgrade to a compatible release can.
 	CauseInstalledIncompatible = "installed_incompatible"
+	// CauseNeedsNewerHost: the add-on needs a higher feature level than this
+	// host has (see contract.HostFeatureLevel).
+	CauseNeedsNewerHost = "needs_newer_host"
 )
 
 // FailureCause is the typed cause of a failed operation. Its text is fixed and
@@ -169,6 +172,8 @@ type Manager struct {
 	autoFailures map[string]string
 	// heldUpgrades holds, per add-on, an upgrade that waits for approval.
 	heldUpgrades map[string]heldUpgrade
+	// previews keeps the verified answer of the host access preview per release.
+	previews previewCache
 	// skillSync keeps the chats' skill layer in step with the installed
 	// packages. Nil until the chats' files exist (see SetSkillSync).
 	skillSync SkillSync
@@ -664,6 +669,10 @@ func (m *Manager) submit(ctx context.Context, actor contract.Actor, cmd Lifecycl
 			if stageErr != nil {
 				if errors.Is(stageErr, uploads.ErrNotFound) {
 					return fail(stageErr, &FailureCause{Code: CauseFileMissing, detail: stageErr})
+				}
+				var level *contract.FeatureLevelRefusal
+				if errors.As(stageErr, &level) {
+					return fail(stageErr, &FailureCause{Code: CauseNeedsNewerHost, detail: stageErr})
 				}
 				return fail(stageErr, &FailureCause{Code: CausePackageFetch, detail: stageErr})
 			}
