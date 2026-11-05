@@ -423,6 +423,10 @@
         "title": "修改仪表板",
         "description": "模型可以提议你首页仪表板的新布局。每次修改由你确认。"
       },
+      "knowledge_write": {
+        "title": "添加到知识库",
+        "description": "允许模型为你的知识库中的某个集合提出一段文本。每一条都由你确认，绝不会立即添加。"
+      },
       "triggers_propose": {
         "title": "也可从消息应用提议",
         "description": "有人在消息应用中提出请求时，模型可以提议触发器。由你确认。"
@@ -725,7 +729,8 @@
       "profile": "配置文件",
       "skill": "技能",
       "page": "页面",
-      "dashboard": "仪表板"
+      "dashboard": "仪表板",
+      "knowledge": "知识库"
     },
     "scope": {
       "user": "你的所有聊天",
@@ -738,7 +743,8 @@
       "kind": "类型",
       "target": "文件",
       "source": "来源",
-      "expires": "剩余时间"
+      "expires": "剩余时间",
+      "collection": "集合"
     },
     "source": {
       "chat": "聊天",
@@ -787,6 +793,12 @@
       "dismissed": "更改已拒绝。",
       "undone": "更改已撤销。",
       "asked": "已请助手重新提议。"
+    },
+    "knowledge": {
+      "label": "要添加到 {{collection}} 的文本",
+      "size": "{{size}}，上限 {{max}}",
+      "note": "确认之前不会添加任何内容。确认后文本会被切分为段落并建立索引，所有搜索此集合的聊天都能使用它。",
+      "editLabel": "要添加到 {{target}} 的文本"
     }
   },
   "proposalsPage": {
@@ -841,6 +853,7 @@
       "mine": "我的",
       "deleted": "已删除的智能体",
       "channels": "对话",
+      "channelsNote": "Notes saved from chats in messaging apps. Open a note to read it, or delete it. A note from a sender who is not paired with you always waits for your approval.",
       "export": "导出这些笔记",
       "clearAgent": "删除此智能体的笔记",
       "clearDeleted": "删除这些笔记"
@@ -931,7 +944,8 @@
       "chat": "这是私密聊天：不读取也不保存任何内容，你的笔记不受影响。可在工具菜单中开启。",
       "user": "没有任何聊天或智能体会读取或保存笔记，你的笔记不受影响。",
       "agent": "此聊天的智能体已关闭记忆。",
-      "files": "笔记是文件，而此服务器已关闭文件。"
+      "files": "笔记是文件，而此服务器已关闭文件。",
+      "provider": "提供记忆的附加组件不可用，因此不会读取或保存任何内容。请在设置的“记忆”中选择提供方。"
     },
     "chip": "记忆已关",
     "chipPrivate": "私密聊天",
@@ -1009,6 +1023,31 @@
         "body": "只读取，从不保存。"
       },
       "hint": "智能体可以比你的设置问得更多，但不会更少。这里不提供“保存并告知我”。在消息聊天中，笔记先存入该对话，只有已配对的发送者才能写入这个智能体自己的笔记。"
+    }
+  },
+  "providerPicker": {
+    "title": "提供方",
+    "lede": "同一时间只有一个提供方在服务。切换时，你现有的数据保持原样。",
+    "off": "关闭",
+    "unavailable": "不可用",
+    "loadError": "无法加载提供方",
+    "saveFailed": "无法更改提供方",
+    "failedTitle": "{{name}}不可用",
+    "failedReason": "在你选择提供方之前，这项功能保持关闭。没有任何内容转移到内置提供方，因此不会在你未选择的地方保存任何内容。",
+    "useBuiltin": "使用内置提供方",
+    "facts": {
+      "local": "本地",
+      "remote": "远程",
+      "undoHost": "在此撤销",
+      "undoProvider": "由服务撤销",
+      "undoNone": "无法撤销"
+    },
+    "slots": {
+      "memory": {
+        "builtin": "内置",
+        "builtinBody": "你的 Memory 文件夹中的普通文件。数据不会离开这台机器。",
+        "offBody": "不读取、不提供、不保存也不发送任何内容。现有笔记保留不变。"
+      }
     }
   }
 }

@@ -17,18 +17,14 @@ test.describe('Agent form', () => {
     await page.getByLabel('Name', { exact: false }).first().fill('Reviewer')
     await page.getByLabel('Description').fill('Checks a change')
 
-    await fold(page, 'PromptsGoals').locator('.ag-fold__button').click()
     await page.getByLabel('Instructions').fill('Answer in French.')
 
-    await fold(page, 'MemorySettings').locator('.ag-fold__button').click()
     await page.getByRole('combobox', { name: 'Collections +' }).fill('handbook')
     await page.getByRole('combobox', { name: 'Collections +' }).press('Enter')
     await expect(page.getByTestId('agent-collections').getByRole('listitem')).toHaveText(['handbook'])
 
-    await fold(page, 'Skills').locator('.ag-fold__button').click()
     await page.getByTestId('agent-skills-panel').getByRole('switch', { name: /citations/ }).click()
 
-    await fold(page, 'Tools').locator('.ag-fold__button').click()
     await page.getByTestId('agent-tools-panel').getByRole('switch', { name: /Docs/ }).click()
 
     await page.getByRole('button', { name: 'Create Agent' }).first().click()
@@ -44,7 +40,6 @@ test.describe('Agent form', () => {
   test('warns when the first option turns off the messaging defaults, and adds the missing ones in one click', async ({ page }) => {
     const s = await installAgents(page)
     await page.goto('/app/agents/a2/edit')
-    await fold(page, 'Tools').locator('.ag-fold__button').click()
     await expect(page.getByTestId('agent-grants-notice')).toHaveCount(0)
     await page.getByTestId('agent-tools-panel').getByRole('switch', { name: 'Remember things' }).click()
     const notice = page.getByTestId('agent-grants-notice')
@@ -60,7 +55,6 @@ test.describe('Agent form', () => {
   test('shows no warning for an agent that already had permissions', async ({ page }) => {
     await installAgents(page, { agents: [{ ...AGENTS[1], builtins: ['memory.write'] }] })
     await page.goto('/app/agents/a2/edit')
-    await fold(page, 'Tools').locator('.ag-fold__button').click()
     await page.getByTestId('agent-tools-panel').getByRole('switch', { name: 'Also propose from messaging apps' }).click()
     await expect(page.getByTestId('agent-grants-notice')).toHaveCount(0)
   })
@@ -68,7 +62,6 @@ test.describe('Agent form', () => {
   test('each capability is one switch with its options under it, greyed with a reason while the switch is off', async ({ page }) => {
     const s = await installAgents(page, { agents: [{ ...AGENTS[1], builtins: ['triggers.propose', 'act.files'], builtins_off: ['triggers'] }] })
     await page.goto('/app/agents/a2/edit')
-    await fold(page, 'Tools').locator('.ag-fold__button').click()
     const panel = page.getByTestId('agent-tools-panel')
     // The three trigger switches have names that cannot be mixed up.
     const triggers = panel.getByRole('switch', { name: 'Create and manage triggers' })
@@ -95,10 +88,25 @@ test.describe('Agent form', () => {
     await expect.poll(() => s.calls.find(c => c.method === 'PUT')?.body).toMatchObject({ builtins_off: [], builtins: ['triggers.propose', 'act.files', 'triggers.run'] })
   })
 
+  test('adding to knowledge is a sensitive option under the Knowledge switch, off until the owner turns it on', async ({ page }) => {
+    const s = await installAgents(page, { agents: [{ ...AGENTS[1], builtins: ['memory.write'] }] })
+    await page.goto('/app/agents/a2/edit')
+    const panel = page.getByTestId('agent-tools-panel')
+    const options = panel.getByRole('group', { name: 'Options of Knowledge' })
+    await expect(options).toBeVisible()
+    const add = options.getByRole('switch', { name: 'Add to knowledge' })
+    await expect(add).not.toBeChecked()
+    await expect(options).toContainText('Sensitive')
+    // It is not also listed in the Suggested changes options or a section of its own.
+    await expect(panel.getByRole('switch', { name: 'Add to knowledge' })).toHaveCount(1)
+    await add.click()
+    await page.getByRole('button', { name: 'Save changes' }).first().click()
+    await expect.poll(() => s.calls.find(c => c.method === 'PUT')?.body.builtins).toEqual(['memory.write', 'knowledge.write'])
+  })
+
   test('saved agents is one switch: turning it off takes the grant away too, turning it on adds only the group', async ({ page }) => {
     const s = await installAgents(page, { agents: [{ ...AGENTS[1], builtins: ['memory.write', 'saved_agents'] }, { ...AGENTS[0], id: 'a9', name: 'plain' }] })
     await page.goto('/app/agents/a2/edit')
-    await fold(page, 'Tools').locator('.ag-fold__button').click()
     const sw = page.getByTestId('agent-tools-panel').getByRole('switch', { name: 'Saved agents' })
     await expect(sw).toBeChecked()
     await expect(page.getByTestId('agent-tools-panel').getByText('Call your saved agents')).toHaveCount(0)
@@ -106,7 +114,6 @@ test.describe('Agent form', () => {
     await page.getByRole('button', { name: 'Save changes' }).first().click()
     await expect.poll(() => s.calls.find(c => c.method === 'PUT')?.body).toMatchObject({ builtins: ['memory.write'], builtins_on: [] })
     await page.goto('/app/agents/a9/edit')
-    await fold(page, 'Tools').locator('.ag-fold__button').click()
     await page.getByTestId('agent-tools-panel').getByRole('switch', { name: 'Saved agents' }).click()
     await page.getByRole('button', { name: 'Save changes' }).first().click()
     await expect.poll(() => s.calls.filter(c => c.method === 'PUT').at(-1)?.body).toMatchObject({ builtins: [], builtins_on: ['saved_agents'] })
@@ -120,7 +127,6 @@ test.describe('Agent form', () => {
     ]
     await installAgents(page, { bindings, agents: [{ ...AGENTS[1], builtins: ['triggers.propose', 'memory.write'] }] })
     await page.goto('/app/agents/a2/edit')
-    await fold(page, 'Tools').locator('.ag-fold__button').click()
     const panel = page.getByTestId('agent-tools-panel')
     const notes = panel.getByTestId('agent-tools-conn-note')
     await expect(notes).toHaveCount(3)
@@ -137,7 +143,6 @@ test.describe('Agent form', () => {
     const s = await installAgents(page)
     await page.goto('/app/agents/new')
     await page.getByLabel('Name', { exact: false }).first().fill('Builder')
-    await fold(page, 'Tools').locator('.ag-fold__button').click()
     await expect(page.getByTestId('agent-network')).toHaveValue('off')
     await page.getByTestId('agent-network').selectOption('registries')
     await page.getByRole('button', { name: 'Create Agent' }).first().click()
@@ -148,7 +153,7 @@ test.describe('Agent form', () => {
   test('needs a name, and says so on the fold', async ({ page }) => {
     const s = await installAgents(page)
     await page.goto('/app/agents/new')
-    await expect(fold(page, 'BasicInfo')).toContainText('Needs a name')
+    await expect(page.locator('[data-group="identity"]')).toContainText('Needs a name')
     await page.getByRole('button', { name: 'Create Agent' }).first().click()
     expect(s.calls.some(c => c.method === 'POST')).toBe(false)
   })
@@ -166,7 +171,7 @@ test.describe('Agent form', () => {
     await page.goto('/app/agents/a1/edit')
     await expect(page.getByLabel('Name', { exact: false }).first()).toHaveValue('research-assistant')
     await page.getByLabel('Description').fill('Searches and cites.')
-    await expect(fold(page, 'BasicInfo')).toContainText('1 changed')
+    await expect(page.locator('[data-group="identity"]')).toContainText('1 changed')
 
     await page.getByTestId('agent-preview-open').click()
     const sheet = page.getByTestId('agent-preview')
@@ -185,11 +190,9 @@ test.describe('Agent form', () => {
   test('the tools list is the list of the chat: connectors by name, one that was deleted stays, and the servers are free text', async ({ page }) => {
     const s = await installAgents(page)
     await page.goto('/app/agents/a1/edit')
-    await fold(page, 'Tools').locator('.ag-fold__button').click()
     const picker = page.getByTestId('agent-tools-panel')
     await expect(picker.getByRole('switch', { name: /Docs/ })).toBeChecked()
     await expect(picker.getByRole('switch', { name: /Parked/ })).not.toBeChecked()
-    await fold(page, 'MCP').locator('.ag-fold__button').click()
     await expect(page.getByTestId('agent-mcp').getByRole('listitem')).toHaveText(['crm'])
     await expect(page.locator('datalist option[value="mail"]')).toHaveCount(1)
     await expect(picker.getByTestId('agent-tools-item').filter({ hasText: 'Parked' })).toContainText('off')
@@ -203,13 +206,12 @@ test.describe('Agent form', () => {
   test('every switch of the tools list says what it does, and the switches are saved with the agent', async ({ page }) => {
     const s = await installAgents(page)
     await page.goto('/app/agents/a1/edit')
-    await fold(page, 'Tools').locator('.ag-fold__button').click()
     const panel = page.getByTestId('agent-tools-panel')
     // The same words as the Tools menu of a chat: a title, a description, and
-    // the add-on's declared title instead of its id. Eight rows are the built-in
+    // the add-on's declared title instead of its id. Nine rows are the built-in
     // groups and add-ons; the others are the options and permissions under them.
     const rows = panel.getByTestId('agent-tools-item')
-    await expect(rows).toHaveCount(22)
+    await expect(rows).toHaveCount(24)
     for (const row of await rows.all()) await expect(row.getByTestId('agent-tools-blurb')).not.toBeEmpty()
     await expect(panel.getByRole('switch', { name: 'Suggested changes' })).toBeChecked()
     await expect(panel.getByRole('switch', { name: 'Office' })).toBeChecked()
@@ -290,7 +292,6 @@ test.describe('Agent form', () => {
   test('the Export fold downloads the definition of a saved agent', async ({ page }) => {
     await installAgents(page)
     await page.goto('/app/agents/a1/edit')
-    await fold(page, 'export').locator('.ag-fold__button').click()
     const download = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Export agent' }).click()
     expect((await download).suggestedFilename()).toBe('research-assistant.json')
@@ -307,7 +308,6 @@ test.describe('Agent folder', () => {
     const s = await installAgents(page, { files: HOME_FOLDERS })
     await page.goto('/app/agents/a2/edit')
     await expect(fold(page, 'Files')).toContainText('All my files')
-    await fold(page, 'Files').locator('.ag-fold__button').click()
     await page.getByTestId('agent-folder-scope-one').click()
     // Nothing chosen yet: the fold needs the person, and Save says so.
     await expect(fold(page, 'Files')).toContainText('Choose a folder, or pick All my files.')
@@ -339,7 +339,6 @@ test.describe('Agent folder', () => {
     await expect(chip.locator('[data-icon="lock"]')).toHaveCount(1)
 
     await page.goto('/app/agents/a2/edit')
-    await fold(page, 'Files').locator('.ag-fold__button').click()
     await expect(page.getByTestId('agent-folder-mode-0-read')).toHaveAttribute('aria-pressed', 'true')
     await page.getByTestId('agent-folder-mode-0-write').click()
     await expect(fold(page, 'Files')).toContainText('1 changed')
@@ -360,7 +359,6 @@ test.describe('Agent folder', () => {
     expect(s.calls.find(c => c.method === 'PUT').body).not.toHaveProperty('folders')
 
     await page.goto('/app/agents/a2/edit')
-    await fold(page, 'Files').locator('.ag-fold__button').click()
     await page.getByTestId('agent-folder-scope-all').click()
     await page.getByRole('button', { name: 'Save changes' }).first().click()
     await expect(page).toHaveURL(/\/app\/agents$/)
@@ -381,7 +379,6 @@ test.describe('Agent folder', () => {
 
     // The fold says so; the save of another field keeps working and keeps it.
     await expect(fold(page, 'Files')).toContainText('Folder missing')
-    await fold(page, 'Files').locator('.ag-fold__button').click()
     await expect(page.getByTestId('agent-folder-missing')).toContainText('This folder is gone. Choose another folder to use this agent.')
     await page.getByLabel('Description').fill('Still saves.')
     await page.getByRole('button', { name: 'Save changes' }).first().click()
@@ -390,7 +387,6 @@ test.describe('Agent folder', () => {
 
     // Choosing another folder sends it with the mode the agent had.
     await page.goto('/app/agents/a2/edit')
-    await fold(page, 'Files').locator('.ag-fold__button').click()
     await page.getByTestId('agent-folder-missing').getByRole('button', { name: 'Choose another folder' }).click()
     await page.getByTestId('agent-folder-dialog').getByRole('button', { name: 'Projects' }).click()
     await page.getByTestId('agent-folder-use').click()
@@ -403,7 +399,6 @@ test.describe('Agent folder', () => {
     const s = await installAgents(page, { files: HOME_FOLDERS })
     await page.goto('/app/agents/new')
     await page.getByLabel('Name', { exact: false }).first().fill('Reader')
-    await fold(page, 'Files').locator('.ag-fold__button').click()
     await page.getByTestId('agent-folder-scope-one').click()
     await page.getByTestId('agent-folder-choose').click()
     const dialog = page.getByTestId('agent-folder-dialog')
@@ -430,7 +425,6 @@ test.describe('Agent folder', () => {
     const s = await installAgents(page, { files })
     await page.goto('/app/agents/new')
     await page.getByLabel('Name', { exact: false }).first().fill('Many')
-    await fold(page, 'Files').locator('.ag-fold__button').click()
     await page.getByTestId('agent-folder-scope-one').click()
     const pick = async (name, choose) => {
       await choose.click()
@@ -473,7 +467,6 @@ test.describe('Agent folder', () => {
   test('a row added and cancelled goes away, and a folder inside another shows the outer mode', async ({ page }) => {
     await installAgents(page, { files: HOME_FOLDERS, agents: withFolder(ACME_READ) })
     await page.goto('/app/agents/a2/edit')
-    await fold(page, 'Files').locator('.ag-fold__button').click()
     await page.getByTestId('agent-folder-add').click()
     await page.getByTestId('agent-folder-dialog').getByRole('button', { name: 'Cancel' }).first().click()
     await expect(page.getByTestId('agent-folder-row')).toHaveCount(1)
@@ -492,7 +485,6 @@ test.describe('Agent folder', () => {
     const s = await installAgents(page, { files: HOME_FOLDERS, agents: withFolder(ACME_READ).map(a => (a.id === 'a2' ? { ...a, folders: rows } : a)) })
     await page.goto('/app/agents/a2/edit')
     await expect(fold(page, 'Files')).toContainText('2 folders')
-    await fold(page, 'Files').locator('.ag-fold__button').click()
     await expect(page.getByTestId('agent-folder-row')).toHaveCount(2)
     await page.getByTestId('agent-folder-add').click()
     await page.getByTestId('agent-folder-dialog').getByRole('button', { name: 'Cancel' }).first().click()
@@ -510,7 +502,6 @@ test.describe('Agent folder', () => {
       return route.fallback()
     })
     await page.goto('/app/agents/new')
-    await fold(page, 'Files').locator('.ag-fold__button').click()
     await page.getByTestId('agent-folder-scope-one').click()
     await page.getByTestId('agent-folder-choose').click()
     const dialog = page.getByTestId('agent-folder-dialog')
@@ -524,7 +515,6 @@ test.describe('Agent folder', () => {
   test('the Export fold says that the file names the folder', async ({ page }) => {
     const s = await installAgents(page, { files: HOME_FOLDERS, agents: withFolder(ACME_READ) })
     await page.goto('/app/agents/a2/edit')
-    await fold(page, 'export').locator('.ag-fold__button').click()
     await expect(page.getByTestId('agent-export-folder')).toContainText('The file names the folder /Projects/Acme.')
     const download = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Export agent' }).click()
@@ -536,7 +526,6 @@ test.describe('Agent folder', () => {
   test('no copy of the folder fold names an internal path', async ({ page }) => {
     await installAgents(page, { files: HOME_FOLDERS, agents: withFolder(ACME_READ) })
     await page.goto('/app/agents/a2/edit')
-    await fold(page, 'Files').locator('.ag-fold__button').click()
     await page.getByTestId('agent-folder').getByRole('button', { name: 'Change', exact: true }).click()
     await expect(page.getByTestId('folder-picker')).toBeVisible()
     const text = await page.locator('body').innerText()
@@ -554,7 +543,6 @@ const aliasModels = [
   { id: 'chained', capabilities: [] },
 ]
 const openModel = async page => {
-  await fold(page, 'ModelSettings').locator('.ag-fold__button').click()
   return page.getByTestId('home-model-chip')
 }
 
@@ -569,7 +557,8 @@ test('create uses the chat picker, filters unusable models and persists the alia
   await chip.click()
   const options = page.getByRole('listbox').getByRole('option')
   await expect(options.locator('code')).toHaveText(['Any model (the chat picks one)', 'production', 'alternate'])
-  await expect(options.locator('small')).toHaveText(['not loaded', 'not loaded'])
+  // The agent picker now draws the rich row (state and capabilities), so the state is the bold line.
+  await expect(options.locator('.home-menu__state b')).toHaveText(['not loaded', 'not loaded'])
   await options.filter({ has: page.getByText('production', { exact: true }) }).click()
   await page.getByRole('button', { name: 'Create Agent' }).first().click()
   await expect(page).toHaveURL(/\/app\/agents$/)

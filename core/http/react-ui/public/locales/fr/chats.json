@@ -423,6 +423,10 @@
         "title": "Changer le tableau de bord",
         "description": "Le modèle peut proposer une nouvelle disposition de votre tableau de bord d'accueil. Vous confirmez chaque changement."
       },
+      "knowledge_write": {
+        "title": "Ajouter à la connaissance",
+        "description": "Permet au modèle de proposer un texte pour une collection de votre Connaissance. Vous confirmez chaque texte ; il n'est jamais ajouté immédiatement."
+      },
       "triggers_propose": {
         "title": "Proposer aussi depuis les applications de messagerie",
         "description": "Le modèle peut proposer un déclencheur quand quelqu'un le demande dans une application de messagerie. Vous le confirmez."
@@ -725,7 +729,8 @@
       "profile": "Profil",
       "skill": "Skill",
       "page": "Page",
-      "dashboard": "Tableau de bord"
+      "dashboard": "Tableau de bord",
+      "knowledge": "Connaissance"
     },
     "scope": {
       "user": "Toutes vos conversations",
@@ -738,7 +743,8 @@
       "kind": "Type",
       "target": "Fichier",
       "source": "De",
-      "expires": "Expire dans"
+      "expires": "Expire dans",
+      "collection": "Collection"
     },
     "source": {
       "chat": "Une conversation",
@@ -787,6 +793,12 @@
       "dismissed": "Modification refusée.",
       "undone": "Modification annulée.",
       "asked": "L'assistant a été prié de la proposer à nouveau."
+    },
+    "knowledge": {
+      "label": "Texte à ajouter à {{collection}}",
+      "size": "{{size}} sur {{max}} au maximum",
+      "note": "Rien n'est ajouté tant que vous n'avez pas confirmé. Le texte est ensuite découpé en passages et indexé, et tout chat qui interroge cette collection peut l'utiliser.",
+      "editLabel": "Texte à ajouter à {{target}}"
     }
   },
   "proposalsPage": {
@@ -841,6 +853,7 @@
       "mine": "Les miennes",
       "deleted": "Agents supprimés",
       "channels": "Conversations",
+      "channelsNote": "Notes saved from chats in messaging apps. Open a note to read it, or delete it. A note from a sender who is not paired with you always waits for your approval.",
       "export": "Exporter ces notes",
       "clearAgent": "Supprimer les notes de cet agent",
       "clearDeleted": "Supprimer ces notes"
@@ -931,7 +944,8 @@
       "chat": "C'est une conversation privée : rien n'est lu ni enregistré. Vos notes ne sont pas touchées. Activez-la dans le menu des outils.",
       "user": "Aucune conversation ni aucun agent ne lit ou n'enregistre de notes, et vos notes ne sont pas touchées.",
       "agent": "L'agent de cette conversation a désactivé la mémoire.",
-      "files": "Les notes sont des fichiers, et les fichiers sont désactivés sur ce serveur."
+      "files": "Les notes sont des fichiers, et les fichiers sont désactivés sur ce serveur.",
+      "provider": "Le module complémentaire qui fournit la mémoire n'est pas disponible : rien n'est lu ni enregistré. Choisissez un fournisseur dans Paramètres, Mémoire."
     },
     "chip": "Mémoire off",
     "chipPrivate": "Conversation privée",
@@ -1009,6 +1023,31 @@
         "body": "Il lit, n'enregistre jamais."
       },
       "hint": "Un agent peut demander plus que votre réglage, jamais moins. « Enregistrer et me prévenir » n'est pas proposé ici. Dans une conversation de messagerie, la note va d'abord à cette conversation et n'atteint les notes propres de cet agent que depuis un expéditeur associé."
+    }
+  },
+  "providerPicker": {
+    "title": "Fournisseur",
+    "lede": "Un seul fournisseur sert à la fois. Vos données existantes restent où elles sont quand vous changez.",
+    "off": "Désactivé",
+    "unavailable": "Indisponible",
+    "loadError": "Impossible de charger les fournisseurs",
+    "saveFailed": "Impossible de changer le fournisseur",
+    "failedTitle": "{{name}} n'est pas disponible",
+    "failedReason": "Cela reste désactivé jusqu'à ce que vous choisissiez un fournisseur. Rien n'a été déplacé vers le fournisseur intégré : rien n'est enregistré là où vous ne l'avez pas choisi.",
+    "useBuiltin": "Utiliser le fournisseur intégré",
+    "facts": {
+      "local": "Local",
+      "remote": "Distant",
+      "undoHost": "Annuler ici",
+      "undoProvider": "Annulation par le service",
+      "undoNone": "Impossible à annuler"
+    },
+    "slots": {
+      "memory": {
+        "builtin": "Intégré",
+        "builtinBody": "Des fichiers simples dans votre dossier Memory. Rien ne quitte cette machine.",
+        "offBody": "Rien n'est lu, proposé, enregistré ni envoyé. Les notes existantes sont conservées."
+      }
     }
   }
 }

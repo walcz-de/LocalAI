@@ -354,8 +354,15 @@ type Service struct {
 	connectors *Connectors    // set once by SetConnectors
 	capGate    CapabilityGate // set once by SetCapabilityGate; nil denies
 	ctxfiles   *contextfiles.Loader
-	memory     MemoryProvider   // the notes of the chats; see memory.go
-	conversion ConversionSource // set once by SetConversion
+	memory     MemoryProvider // the notes of the chats; see memory.go
+	// slotWirings is what each provider slot brings to providerslots.go.
+	slotWirings map[string]slotWiring
+	// providerHealth is the circuit breaker of the providers and
+	// providerTimings the limits of the host's own calls to them (see
+	// providercalls.go). Per instance, by design.
+	providerHealth  *providerHealth
+	providerTimings providerTimings
+	conversion      ConversionSource // set once by SetConversion
 
 	videos   map[string][]string                // videos for the next model request of a turn, by conversation
 	children map[string]map[string]*child       // running sub-agents, by parent conversation
@@ -483,6 +490,8 @@ func New(d Deps) (*Service, error) {
 		return nil, err
 	}
 	s.memory = builtinMemory{}
+	s.providerHealth, s.providerTimings = newProviderHealth(), defaultProviderTimings()
+	s.registerMemorySlot()
 	s.ctxfiles = contextfiles.NewLoader(contextfiles.NewRegistry(), homeReader{f: d.Files}, log)
 	s.shared = sharedfolders.New(sharedfolders.Options{Files: d.Files, Consents: d.PageConsents, Audit: d.SharedFolderAudit, Users: s.folderUsers()})
 	// A chat mounts the shared folders of its owner at /workspace/shared-<name>.

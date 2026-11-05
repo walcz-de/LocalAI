@@ -423,6 +423,10 @@
         "title": "Mengubah dasbor",
         "description": "Model dapat mengusulkan tata letak baru untuk dasbor Beranda Anda. Anda mengonfirmasi setiap perubahan."
       },
+      "knowledge_write": {
+        "title": "Tambahkan ke pengetahuan",
+        "description": "Memungkinkan model mengusulkan teks untuk koleksi Pengetahuan Anda. Anda mengonfirmasi setiap teks; teks tidak pernah ditambahkan langsung."
+      },
       "triggers_propose": {
         "title": "Usulkan juga dari aplikasi pesan",
         "description": "Model dapat mengusulkan pemicu saat seseorang memintanya di aplikasi pesan. Anda mengonfirmasinya."
@@ -725,7 +729,8 @@
       "profile": "Profil",
       "skill": "Skill",
       "page": "Halaman",
-      "dashboard": "Dasbor"
+      "dashboard": "Dasbor",
+      "knowledge": "Pengetahuan"
     },
     "scope": {
       "user": "Semua obrolan Anda",
@@ -738,7 +743,8 @@
       "kind": "Jenis",
       "target": "Berkas",
       "source": "Dari",
-      "expires": "Kedaluwarsa dalam"
+      "expires": "Kedaluwarsa dalam",
+      "collection": "Koleksi"
     },
     "source": {
       "chat": "Obrolan",
@@ -787,6 +793,12 @@
       "dismissed": "Perubahan ditolak.",
       "undone": "Perubahan dibatalkan.",
       "asked": "Asisten diminta mengusulkannya lagi."
+    },
+    "knowledge": {
+      "label": "Teks untuk ditambahkan ke {{collection}}",
+      "size": "{{size}} dari maksimal {{max}}",
+      "note": "Tidak ada yang ditambahkan sebelum Anda mengonfirmasi. Teks lalu dipecah menjadi bagian dan diindeks, dan setiap chat yang mencari di koleksi ini dapat memakainya.",
+      "editLabel": "Teks untuk ditambahkan ke {{target}}"
     }
   },
   "proposalsPage": {
@@ -841,6 +853,7 @@
       "mine": "Milik saya",
       "deleted": "Agen yang dihapus",
       "channels": "Percakapan",
+      "channelsNote": "Notes saved from chats in messaging apps. Open a note to read it, or delete it. A note from a sender who is not paired with you always waits for your approval.",
       "export": "Ekspor catatan ini",
       "clearAgent": "Hapus catatan agen ini",
       "clearDeleted": "Hapus catatan ini"
@@ -931,7 +944,8 @@
       "chat": "Ini obrolan pribadi: tidak ada yang dibaca atau disimpan. Catatan Anda tidak disentuh. Aktifkan di menu Alat.",
       "user": "Tidak ada obrolan atau agen yang membaca atau menyimpan catatan, dan catatan Anda tidak disentuh.",
       "agent": "Agen obrolan ini menonaktifkan memori.",
-      "files": "Catatan adalah berkas, dan berkas dinonaktifkan di server ini."
+      "files": "Catatan adalah berkas, dan berkas dinonaktifkan di server ini.",
+      "provider": "Add-on yang melayani memori tidak tersedia, jadi tidak ada yang dibaca atau disimpan. Pilih penyedia di Pengaturan, Memori."
     },
     "chip": "Memori mati",
     "chipPrivate": "Obrolan pribadi",
@@ -1009,6 +1023,31 @@
         "body": "Membaca, tidak pernah menyimpan."
       },
       "hint": "Agen boleh bertanya lebih banyak dari pengaturan Anda, tidak pernah lebih sedikit. \"Simpan dan beri tahu saya\" tidak ditawarkan di sini. Di obrolan aplikasi pesan, catatan masuk ke percakapan itu dulu, dan sampai ke catatan milik agen ini hanya dari pengirim yang dipasangkan."
+    }
+  },
+  "providerPicker": {
+    "title": "Penyedia",
+    "lede": "Hanya satu penyedia yang melayani pada satu waktu. Data Anda yang ada tetap di tempatnya saat Anda beralih.",
+    "off": "Mati",
+    "unavailable": "Tidak tersedia",
+    "loadError": "Penyedia tidak dapat dimuat",
+    "saveFailed": "Penyedia tidak dapat diubah",
+    "failedTitle": "{{name}} tidak tersedia",
+    "failedReason": "Ini tetap mati sampai Anda memilih penyedia. Tidak ada yang dipindahkan ke penyedia bawaan, jadi tidak ada yang disimpan di tempat yang tidak Anda pilih.",
+    "useBuiltin": "Gunakan penyedia bawaan",
+    "facts": {
+      "local": "Lokal",
+      "remote": "Jarak jauh",
+      "undoHost": "Urungkan di sini",
+      "undoProvider": "Diurungkan oleh layanan",
+      "undoNone": "Tidak dapat diurungkan"
+    },
+    "slots": {
+      "memory": {
+        "builtin": "Bawaan",
+        "builtinBody": "File biasa di folder Memory Anda. Tidak ada yang keluar dari mesin ini.",
+        "offBody": "Tidak ada yang dibaca, ditawarkan, disimpan, atau dikirim. Catatan yang ada tetap disimpan."
+      }
     }
   }
 }

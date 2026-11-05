@@ -423,6 +423,10 @@
         "title": "Cambiar el panel",
         "description": "El modelo puede proponer un nuevo diseño de tu panel de Inicio. Tú confirmas cada cambio."
       },
+      "knowledge_write": {
+        "title": "Añadir al conocimiento",
+        "description": "Permite al modelo proponer un texto para una colección de tu Conocimiento. Confirmas cada uno; nunca se añade de inmediato."
+      },
       "triggers_propose": {
         "title": "Proponer también desde aplicaciones de mensajería",
         "description": "El modelo puede proponer un disparador cuando alguien lo pide en una aplicación de mensajería. Tú lo confirmas."
@@ -725,7 +729,8 @@
       "profile": "Perfil",
       "skill": "Habilidad",
       "page": "Página",
-      "dashboard": "Panel"
+      "dashboard": "Panel",
+      "knowledge": "Conocimiento"
     },
     "scope": {
       "user": "Todos tus chats",
@@ -738,7 +743,8 @@
       "kind": "Tipo",
       "target": "Archivo",
       "source": "De",
-      "expires": "Caduca en"
+      "expires": "Caduca en",
+      "collection": "Colección"
     },
     "source": {
       "chat": "Un chat",
@@ -787,6 +793,12 @@
       "dismissed": "Cambio descartado.",
       "undone": "Cambio deshecho.",
       "asked": "Se pidió al asistente que lo proponga de nuevo."
+    },
+    "knowledge": {
+      "label": "Texto para añadir a {{collection}}",
+      "size": "{{size}} de un máximo de {{max}}",
+      "note": "No se añade nada hasta que confirmes. Después el texto se divide en pasajes y se indexa, y cualquier chat que busque en esta colección puede usarlo.",
+      "editLabel": "Texto para añadir a {{target}}"
     }
   },
   "proposalsPage": {
@@ -841,6 +853,7 @@
       "mine": "Mías",
       "deleted": "Agentes eliminados",
       "channels": "Conversaciones",
+      "channelsNote": "Notes saved from chats in messaging apps. Open a note to read it, or delete it. A note from a sender who is not paired with you always waits for your approval.",
       "export": "Exportar estas notas",
       "clearAgent": "Eliminar las notas de este agente",
       "clearDeleted": "Eliminar estas notas"
@@ -931,7 +944,8 @@
       "chat": "Es un chat privado: no se lee ni se guarda nada. Tus notas no se tocan. Actívala en el menú de herramientas.",
       "user": "Ningún chat ni agente lee o guarda notas, y tus notas no se tocan.",
       "agent": "El agente de este chat tiene la memoria desactivada.",
-      "files": "Las notas son archivos, y los archivos están desactivados en este servidor."
+      "files": "Las notas son archivos, y los archivos están desactivados en este servidor.",
+      "provider": "El complemento que sirve la memoria no está disponible, así que no se lee ni se guarda nada. Elige un proveedor en Ajustes, Memoria."
     },
     "chip": "Memoria off",
     "chipPrivate": "Chat privado",
@@ -1009,6 +1023,31 @@
         "body": "Lee, nunca guarda."
       },
       "hint": "Un agente puede preguntar más que tu ajuste, nunca menos. «Guardar y avisarme» no se ofrece aquí. En un chat de mensajería la nota va primero a esa conversación y llega a las notas propias de este agente solo desde un remitente emparejado."
+    }
+  },
+  "providerPicker": {
+    "title": "Proveedor",
+    "lede": "Solo sirve un proveedor a la vez. Tus datos actuales se quedan donde están al cambiar.",
+    "off": "Desactivado",
+    "unavailable": "No disponible",
+    "loadError": "No se pudieron cargar los proveedores",
+    "saveFailed": "No se pudo cambiar el proveedor",
+    "failedTitle": "{{name}} no está disponible",
+    "failedReason": "Esto sigue desactivado hasta que elijas un proveedor. Nada pasó al proveedor integrado, así que no se guarda nada donde no lo elegiste.",
+    "useBuiltin": "Usar el proveedor integrado",
+    "facts": {
+      "local": "Local",
+      "remote": "Remoto",
+      "undoHost": "Deshacer aquí",
+      "undoProvider": "Deshacer por el servicio",
+      "undoNone": "No se puede deshacer"
+    },
+    "slots": {
+      "memory": {
+        "builtin": "Integrado",
+        "builtinBody": "Archivos simples en tu carpeta Memory. Nada sale de esta máquina.",
+        "offBody": "No se lee, ofrece, guarda ni envía nada. Las notas existentes se conservan."
+      }
     }
   }
 }

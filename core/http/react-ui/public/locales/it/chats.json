@@ -423,6 +423,10 @@
         "title": "Cambiare la dashboard",
         "description": "Il modello può proporre un nuovo layout della tua dashboard Home. Confermi tu ogni modifica."
       },
+      "knowledge_write": {
+        "title": "Aggiungi alla conoscenza",
+        "description": "Permette al modello di proporre un testo per una raccolta della tua Conoscenza. Confermi ogni testo; non viene mai aggiunto subito."
+      },
       "triggers_propose": {
         "title": "Proponi anche dalle app di messaggistica",
         "description": "Il modello può proporre un trigger quando qualcuno lo chiede in un'app di messaggistica. Lo confermi tu."
@@ -725,7 +729,8 @@
       "profile": "Profilo",
       "skill": "Skill",
       "page": "Pagina",
-      "dashboard": "Dashboard"
+      "dashboard": "Dashboard",
+      "knowledge": "Conoscenza"
     },
     "scope": {
       "user": "Tutte le tue chat",
@@ -738,7 +743,8 @@
       "kind": "Tipo",
       "target": "File",
       "source": "Da",
-      "expires": "Scade tra"
+      "expires": "Scade tra",
+      "collection": "Raccolta"
     },
     "source": {
       "chat": "Una chat",
@@ -787,6 +793,12 @@
       "dismissed": "Modifica rifiutata.",
       "undone": "Modifica annullata.",
       "asked": "Ho chiesto all'assistente di riproporla."
+    },
+    "knowledge": {
+      "label": "Testo da aggiungere a {{collection}}",
+      "size": "{{size}} su un massimo di {{max}}",
+      "note": "Non viene aggiunto nulla finché non confermi. Poi il testo viene diviso in passaggi e indicizzato, e ogni chat che cerca in questa raccolta può usarlo.",
+      "editLabel": "Testo da aggiungere a {{target}}"
     }
   },
   "proposalsPage": {
@@ -841,6 +853,7 @@
       "mine": "Mie",
       "deleted": "Agenti eliminati",
       "channels": "Conversazioni",
+      "channelsNote": "Notes saved from chats in messaging apps. Open a note to read it, or delete it. A note from a sender who is not paired with you always waits for your approval.",
       "export": "Esporta queste note",
       "clearAgent": "Elimina le note di questo agente",
       "clearDeleted": "Elimina queste note"
@@ -931,7 +944,8 @@
       "chat": "È una chat privata: non si legge né si salva nulla. Le tue note non vengono toccate. Attivala nel menu degli strumenti.",
       "user": "Nessuna chat o agente legge o salva note, e le tue note non vengono toccate.",
       "agent": "L'agente di questa chat ha disattivato la memoria.",
-      "files": "Le note sono file, e i file sono disattivati su questo server."
+      "files": "Le note sono file, e i file sono disattivati su questo server.",
+      "provider": "L'add-on che fornisce la memoria non è disponibile, quindi non viene letto né salvato nulla. Scegli un fornitore in Impostazioni, Memoria."
     },
     "chip": "Memoria off",
     "chipPrivate": "Chat privata",
@@ -1009,6 +1023,31 @@
         "body": "Legge, non salva mai."
       },
       "hint": "Un agente può chiedere di più della tua impostazione, mai di meno. «Salva e avvisami» qui non è offerto. In una chat di messaggistica la nota va prima in quella conversazione e arriva alle note proprie di questo agente solo da un mittente abbinato."
+    }
+  },
+  "providerPicker": {
+    "title": "Fornitore",
+    "lede": "Serve un solo fornitore alla volta. I tuoi dati esistenti restano dove sono quando cambi.",
+    "off": "Disattivato",
+    "unavailable": "Non disponibile",
+    "loadError": "Impossibile caricare i fornitori",
+    "saveFailed": "Impossibile cambiare il fornitore",
+    "failedTitle": "{{name}} non è disponibile",
+    "failedReason": "Resta disattivato finché non scegli un fornitore. Niente è passato al fornitore integrato, quindi non viene salvato nulla dove non hai scelto.",
+    "useBuiltin": "Usa il fornitore integrato",
+    "facts": {
+      "local": "Locale",
+      "remote": "Remoto",
+      "undoHost": "Annulla qui",
+      "undoProvider": "Annullamento a cura del servizio",
+      "undoNone": "Non si può annullare"
+    },
+    "slots": {
+      "memory": {
+        "builtin": "Integrato",
+        "builtinBody": "File semplici nella tua cartella Memory. Niente lascia questa macchina.",
+        "offBody": "Non viene letto, offerto, salvato né inviato nulla. Le note esistenti restano."
+      }
     }
   }
 }

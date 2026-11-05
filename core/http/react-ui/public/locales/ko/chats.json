@@ -423,6 +423,10 @@
         "title": "대시보드 변경",
         "description": "모델이 홈 대시보드의 새 레이아웃을 제안할 수 있습니다. 변경마다 직접 확인합니다."
       },
+      "knowledge_write": {
+        "title": "지식에 추가",
+        "description": "모델이 지식의 컬렉션에 넣을 텍스트를 제안할 수 있게 합니다. 하나씩 직접 확인하며, 바로 추가되는 일은 없습니다."
+      },
       "triggers_propose": {
         "title": "메신저 앱에서도 제안",
         "description": "누군가 메신저 앱에서 요청하면 모델이 트리거를 제안할 수 있습니다. 직접 확인합니다."
@@ -725,7 +729,8 @@
       "profile": "프로필",
       "skill": "스킬",
       "page": "페이지",
-      "dashboard": "대시보드"
+      "dashboard": "대시보드",
+      "knowledge": "지식"
     },
     "scope": {
       "user": "내 모든 채팅",
@@ -738,7 +743,8 @@
       "kind": "종류",
       "target": "파일",
       "source": "출처",
-      "expires": "만료까지"
+      "expires": "만료까지",
+      "collection": "컬렉션"
     },
     "source": {
       "chat": "채팅",
@@ -787,6 +793,12 @@
       "dismissed": "변경을 거절했습니다.",
       "undone": "변경을 되돌렸습니다.",
       "asked": "어시스턴트에게 다시 제안하도록 요청했습니다."
+    },
+    "knowledge": {
+      "label": "{{collection}}에 추가할 텍스트",
+      "size": "최대 {{max}} 중 {{size}}",
+      "note": "확인하기 전에는 아무것도 추가되지 않습니다. 확인하면 텍스트가 구절로 나뉘어 색인되며, 이 컬렉션을 검색하는 모든 채팅에서 사용할 수 있습니다.",
+      "editLabel": "{{target}}에 추가할 텍스트"
     }
   },
   "proposalsPage": {
@@ -841,6 +853,7 @@
       "mine": "내 메모",
       "deleted": "삭제된 에이전트",
       "channels": "대화",
+      "channelsNote": "Notes saved from chats in messaging apps. Open a note to read it, or delete it. A note from a sender who is not paired with you always waits for your approval.",
       "export": "이 메모 내보내기",
       "clearAgent": "이 에이전트의 메모 삭제",
       "clearDeleted": "이 메모 삭제"
@@ -931,7 +944,8 @@
       "chat": "비공개 채팅입니다. 아무것도 읽거나 저장하지 않으며 메모는 그대로입니다. 도구 메뉴에서 켤 수 있습니다.",
       "user": "어떤 채팅이나 에이전트도 메모를 읽거나 저장하지 않으며 메모는 그대로입니다.",
       "agent": "이 채팅의 에이전트는 메모리를 껐습니다.",
-      "files": "메모는 파일이며 이 서버에서는 파일이 꺼져 있습니다."
+      "files": "메모는 파일이며 이 서버에서는 파일이 꺼져 있습니다.",
+      "provider": "메모리를 제공하는 애드온을 사용할 수 없어 읽거나 저장하는 것이 없습니다. 설정의 메모리에서 제공자를 선택하세요."
     },
     "chip": "메모리 꺼짐",
     "chipPrivate": "비공개 채팅",
@@ -1009,6 +1023,31 @@
         "body": "읽기만 하고 저장하지 않습니다."
       },
       "hint": "에이전트는 내 설정보다 더 물어볼 수는 있어도 덜 묻지는 않습니다. \"저장하고 알려주기\"는 여기서 제공되지 않습니다. 메시징 채팅에서는 메모가 먼저 그 대화에 들어가고, 페어링된 보낸 사람일 때만 이 에이전트 자기 메모에 닿습니다."
+    }
+  },
+  "providerPicker": {
+    "title": "제공자",
+    "lede": "한 번에 하나의 제공자만 동작합니다. 전환해도 기존 데이터는 그대로 남습니다.",
+    "off": "끄기",
+    "unavailable": "사용할 수 없음",
+    "loadError": "제공자를 불러오지 못했습니다",
+    "saveFailed": "제공자를 변경하지 못했습니다",
+    "failedTitle": "{{name}}을(를) 사용할 수 없습니다",
+    "failedReason": "제공자를 선택할 때까지 꺼진 상태로 유지됩니다. 내장 제공자로 옮겨지지 않았으므로, 선택하지 않은 곳에는 아무것도 저장되지 않습니다.",
+    "useBuiltin": "내장 제공자 사용",
+    "facts": {
+      "local": "로컬",
+      "remote": "원격",
+      "undoHost": "여기서 실행 취소",
+      "undoProvider": "서비스에서 실행 취소",
+      "undoNone": "실행 취소 불가"
+    },
+    "slots": {
+      "memory": {
+        "builtin": "내장",
+        "builtinBody": "Memory 폴더의 일반 파일입니다. 이 컴퓨터 밖으로 나가는 것은 없습니다.",
+        "offBody": "아무것도 읽거나 제공하거나 저장하거나 보내지 않습니다. 기존 메모는 유지됩니다."
+      }
     }
   }
 }
