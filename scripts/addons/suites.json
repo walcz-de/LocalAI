@@ -535,7 +535,22 @@
           "keeps the field out of an older strict reader: an unknown key is refused",
           "needs a list mapping",
           "accepts a plural and translated nouns, and falls back from the translation to English",
-          "refuses translated nouns the manifest does not name, empty ones and markup"
+          "refuses translated nouns the manifest does not name, empty ones and markup",
+          "accepts a title and summary fields on a write tool",
+          "refuses them on a read tool",
+          "refuses a bad title, a bad key, a repeated key and too many keys",
+          "shows only the listed scalar keys, in order, as short plain lines",
+          "cuts a long value and shows nothing without keys",
+          "is found in a wrapped error and keeps the cause",
+          "400",
+          "just below 400",
+          "success",
+          "zero",
+          "403",
+          "599",
+          "600",
+          "cleans a hint to printable ASCII on one line, cut at the limit",
+          "requires featureLevel 3 for ownerData, and a level 2 host refuses it"
         ]
       },
       {
@@ -721,11 +736,15 @@
           "rejects a missing skill, mismatched frontmatter, and scripts",
           "has consistent package files for github",
           "has consistent package files for home-assistant",
+          "has consistent package files for calendar",
+          "has consistent package files for contacts",
           "has consistent package files for jellyfin",
           "has consistent package files for pikvm",
           "writes the zip of a verified layout with a digest manifest and a sha256 file",
           "audits actual host calls and strict package contract for github",
           "audits actual host calls and strict package contract for home-assistant",
+          "audits actual host calls and strict package contract for calendar",
+          "audits actual host calls and strict package contract for contacts",
           "audits actual host calls and strict package contract for jellyfin",
           "audits actual host calls and strict package contract for pikvm",
           "lists every release platform with its runner",
@@ -737,6 +756,8 @@
           "gives every translated connector kind of fine-tuning the fields of its English kind, and no others",
           "gives every translated connector kind of github the fields of its English kind, and no others",
           "gives every translated connector kind of home-assistant the fields of its English kind, and no others",
+          "gives every translated connector kind of calendar the fields of its English kind, and no others",
+          "gives every translated connector kind of contacts the fields of its English kind, and no others",
           "gives every translated connector kind of jellyfin the fields of its English kind, and no others",
           "gives every translated connector kind of office the fields of its English kind, and no others",
           "gives every translated connector kind of pikvm the fields of its English kind, and no others",
@@ -757,6 +778,8 @@
           "translates the title and the description of fine-tuning in every main language",
           "translates the title and the description of github in every main language",
           "translates the title and the description of home-assistant in every main language",
+          "translates the title and the description of calendar in every main language",
+          "translates the title and the description of contacts in every main language",
           "translates the title and the description of jellyfin in every main language",
           "translates the title and the description of office in every main language",
           "translates the title and the description of pikvm in every main language",
@@ -1240,7 +1263,15 @@
           "leaves a 429 with another body an outage: only the add-on's own word counts",
           "keeps the short-call slots free while more polls than the concurrency limit are open",
           "refuses a poll past the poll pool, and frees the slot when a poll is cancelled",
-          "refuses a poll after the client is withdrawn and waits for open polls to drain"
+          "refuses a poll after the client is withdrawn and waits for open polls to drain",
+          "carries the status of the service and the sentence of the add-on",
+          "above 599",
+          "below 400",
+          "empty",
+          "not a number",
+          "success",
+          "keeps a refusal with no header as it was",
+          "bounds the hint to printable ASCII"
         ]
       },
       {
@@ -1277,7 +1308,9 @@
           "exits when the owner closes the startup channel",
           "still exits when the runtime does not return in time",
           "exits at once for a runtime with nothing to close",
-          "answers 429 with the wait in Retry-After and a fixed body"
+          "answers 429 with the wait in Retry-After and a fixed body",
+          "tells the owner which status the service behind the add-on answered, and what to do",
+          "sends no status header for a status that is not a refusal of a service"
         ]
       }
     ]
@@ -2082,7 +2115,11 @@
       "send-key, ask each time",
       "type-text, even when the host would say skip",
       "type-text, ask each time",
-      "declares the setting of each relaxable tool with the default ask, and none for type-text"
+      "declares the setting of each relaxable tool with the default ask, and none for type-text",
+      "refuses the chat credential without the mark, runs it once with the mark, and does nothing on a replay",
+      "refuses a digest other than the one stored, even with the mark",
+      "does not let the mark lift a tool that always asks",
+      "does not let another user confirm with the mark"
     ],
     "report": ".cache/addons/logs/policy.json"
   },
@@ -2290,7 +2327,11 @@
           "send-key, ask each time",
           "type-text, even when the host would say skip",
           "type-text, ask each time",
-          "declares the setting of each relaxable tool with the default ask, and none for type-text"
+          "declares the setting of each relaxable tool with the default ask, and none for type-text",
+          "refuses the chat credential without the mark, runs it once with the mark, and does nothing on a replay",
+          "refuses a digest other than the one stored, even with the mark",
+          "does not let the mark lift a tool that always asks",
+          "does not let another user confirm with the mark"
         ]
       },
       {
@@ -3227,7 +3268,15 @@
           "leaves a 429 with another body an outage: only the add-on's own word counts",
           "keeps the short-call slots free while more polls than the concurrency limit are open",
           "refuses a poll past the poll pool, and frees the slot when a poll is cancelled",
-          "refuses a poll after the client is withdrawn and waits for open polls to drain"
+          "refuses a poll after the client is withdrawn and waits for open polls to drain",
+          "carries the status of the service and the sentence of the add-on",
+          "above 599",
+          "below 400",
+          "empty",
+          "not a number",
+          "success",
+          "keeps a refusal with no header as it was",
+          "bounds the hint to printable ASCII"
         ]
       },
       {
@@ -4282,6 +4331,28 @@
       "go: offers nothing to an add-on that declares no listing, even with resources",
       "go: lets a manifest without the declaration keep the tool of the old name only through the apps list",
       "go: rejects a declared listing that collides with a tool of the manifest",
+      "go: a read that works",
+      "go: a write that is applied at once",
+      "go: a write held because the connection only proposes",
+      "go: a write held because the tool always asks",
+      "go: a write the connection does not allow (write mode off)",
+      "go: a call with no connection chosen",
+      "go: a resource that is not on the list of the connection",
+      "go: the person lacks a permission",
+      "go: the service refused the token (401)",
+      "go: the service refused the call for a missing permission (403)",
+      "go: the service could not find it (404)",
+      "go: the service did not accept the values (422)",
+      "go: the add-on refused as invalid, with no status from the service",
+      "go: the add-on is not running",
+      "go: an outage",
+      "go: hands the model the status and the sentence of the add-on when the service refused",
+      "go: falls back to the short reason when the add-on gave no sentence",
+      "go: reports a refusal at the confirm of an immediate write the same way",
+      "go: marks a write that a rule of the host holds",
+      "go: keeps the kind of the tool",
+      "go: records nothing and fails nothing for a call with no outcome in the context",
+      "go: classifies an error that is not a typed refusal as an error",
       "go: leaves a proposal that awaits a person for the person, even for the chat adapter",
       "go: stores the proposal and applies nothing when the host holds the call for a person",
       "go: tells the model that writes are off when the host refuses the call for that reason",
@@ -4297,7 +4368,9 @@
       "go: states it on a refusal too, so the person sees whose list refused",
       "go: states it on a proposal card",
       "go: says nothing when the call carries no connection",
-      "go: turns a missing selection into a note the model can relay"
+      "go: turns a missing selection into a note the model can relay",
+      "go: is tools.write for the tools that change things, in an add-on that keeps the owner's own data",
+      "go: hands the host the held write with its digest and the facts the tool lets a chat repeat, never the arguments"
     ]
   },
   "tables-admin": {
@@ -4813,6 +4886,8 @@
       "go: audits actual host calls and strict package contract for fine-tuning",
       "go: audits actual host calls and strict package contract for github",
       "go: audits actual host calls and strict package contract for home-assistant",
+      "go: audits actual host calls and strict package contract for calendar",
+      "go: audits actual host calls and strict package contract for contacts",
       "go: audits actual host calls and strict package contract for jellyfin",
       "go: audits actual host calls and strict package contract for office",
       "go: audits actual host calls and strict package contract for pikvm",
@@ -4833,6 +4908,8 @@
       "go: has a catalog template",
       "go: has consistent package files for github",
       "go: has consistent package files for home-assistant",
+      "go: has consistent package files for calendar",
+      "go: has consistent package files for contacts",
       "go: has consistent package files for jellyfin",
       "go: has consistent package files for pikvm"
     ]
@@ -4854,6 +4931,7 @@
       "unit: updates: times are shown as the reader's own and a bad time as nothing",
       "unit: updates: the client sends check and upgrade as the administrator's own action and types the refusals",
       "unit: updates: every locale carries the same update keys as English, and words for every state, reason and refusal",
+      "unit: updates: a release that needs a newer LocalAI is incompatible with the reason feature-level, and an install that fails for it says so",
       "go: offers a digest-only change of the branch-fix-cache channel with an identical version label",
       "go: offers a digest-only change of the development channel with an identical version label",
       "go: offers a digest-only change of the latest channel with an identical version label",

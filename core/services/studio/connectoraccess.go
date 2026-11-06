@@ -115,13 +115,13 @@ func Authorize(b connectors.Binding, kind *contract.ConnectorKind, s AccessSubje
 	case !slices.Contains(b.Caps, capability):
 		return deny(CodeConnectionPermissionOff, "the owner has not enabled %s for this bot", capability)
 	case !s.Allowlisted:
-		return deny(CodeSenderNotListed, "the sender is not on the allowlist")
+		return deny(CodeSenderNotListed, "the sender is not a listed person")
 	}
 	if s.SenderID != "" && b.IsPaired(s.SenderID, now) {
 		return Decision{Capability: capability, Allowed: true, Via: "paired"}
 	}
 	if contract.SensitiveCapability(capability) {
-		return deny(CodeSenderNeedsPairing, "%s needs a sender that the owner paired with this bot", capability)
+		return deny(CodeSenderNeedsPairing, "%s needs a verified person: a sender that the owner verified with this bot", capability)
 	}
 	if s.Listed && s.SenderID != "" {
 		return Decision{Capability: capability, Allowed: true, Via: "allowlist"}
@@ -138,7 +138,7 @@ func Authorize(b connectors.Binding, kind *contract.ConnectorKind, s AccessSubje
 			}
 		}
 	}
-	reason := fmt.Sprintf("%s needs a sender on this bot's allowlist, or one that the owner paired with this bot", capability)
+	reason := fmt.Sprintf("%s needs a listed person, or a verified person: one that the owner verified with this bot", capability)
 	switch {
 	case len(s.Roles) > 0 && kind == nil:
 		return refusal(b, capability, CodeKindNotRunning, reason, nil)
@@ -161,12 +161,12 @@ func untrustedReason(capability string, s AccessSubject) string {
 		who = "sender " + s.SenderID
 	}
 	how := "because the bot accepts anyone"
-	fix := "put the sender on the allowlist, or use a sender the owner paired"
+	fix := "list the sender as a person, or use a verified person"
 	if s.ViaChannel {
 		how = "through a channel set to Answer only"
-		fix = "add " + strings.TrimPrefix(who, "sender ") + " to the allowed people, or set the channel to Let everyone here ask for actions"
+		fix = "list " + strings.TrimPrefix(who, "sender ") + " as a person, or set the channel to Let everyone here ask for actions"
 		if s.SenderID == "" {
-			fix = "add the sender to the allowed people, or set the channel to Let everyone here ask for actions"
+			fix = "list the sender as a person, or set the channel to Let everyone here ask for actions"
 		}
 	}
 	return fmt.Sprintf("%s needs a trusted sender: %s was let in only %s; %s", capability, who, how, fix)
@@ -191,6 +191,17 @@ type AgentConnection struct {
 func impliedWrite(b connectors.Binding, s AccessSubject, now time.Time, off Block) bool {
 	return !b.CredentialsOnly() && !off.Off() && !b.WriteTickRemoved && !slices.Contains(b.Caps, contract.CapToolsWrite) &&
 		s.Allowlisted && s.SenderID != "" && b.IsPaired(s.SenderID, now)
+}
+
+// everyoneWrite says whether the owner opened the write tools of the add-ons
+// that keep the owner's own data to every sender the bot lets in: tools.write
+// is in the ceiling, no switch is off, and the sender has an ID. Authorize
+// stops short of this for a sender who is only let in (a bot that accepts
+// anyone, a channel), and that stays so for every other tool; the data of
+// these add-ons is the owner's, so the owner's tick decides for the whole bot.
+func everyoneWrite(b connectors.Binding, s AccessSubject, off Block) bool {
+	return !b.CredentialsOnly() && !off.Off() && slices.Contains(b.Caps, contract.CapToolsWrite) &&
+		s.Allowlisted && s.SenderID != ""
 }
 
 // writeModeOn lists the connections whose write mode lets a call run or wait
@@ -321,7 +332,7 @@ func (c *Connectors) Authorize(ctx context.Context, b connectors.Binding, m cont
 			}
 		}
 	}
-	c.svc.access.record(c.o.Clock(), b, []string{m.SenderID}, m.Roles, d)
+	c.svc.access.record(c.o.Clock(), b, []string{m.SenderID}, m.Roles, d, whereOf(m))
 	return d
 }
 
@@ -368,12 +379,21 @@ type turnGrant struct {
 	// list it (see impliedWrite). The tool builder still checks the connection.
 	// With several senders it holds only when it holds for each.
 	ImpliedWrite bool
+	// EveryoneWrite says the owner ticked tools.write for the bot and the
+	// sender was let in (listed, paired, a role, a channel or a bot that
+	// accepts anyone). Only the write tools of an add-on that keeps the owner's
+	// own data read it (see everyoneWrite); every other tool still follows
+	// Authorize. With several senders it holds only when it holds for each.
+	EveryoneWrite bool
 	// Sender says how the sender was let in: SenderPaired, SenderListed,
 	// SenderRolePrefix+id (shown as "role"), SenderChannelMember, SenderAnyone,
 	// or senderMixed for senders that differ. DeniedCodes holds the refusal
 	// code of each capability in Denied. Both feed the log of the tool calls.
 	Sender      string
 	DeniedCodes map[string]string
+	// Where is the name of the first sender and the chat of the turn, for the
+	// log of the tool decisions. It stays on this process.
+	Where eventWhere
 }
 
 // senderMixed is the Sender of a turn with senders who were let in in
@@ -381,7 +401,7 @@ type turnGrant struct {
 const senderMixed = "mixed"
 
 func (g turnGrant) merge(o turnGrant) turnGrant {
-	out := turnGrant{Binding: g.Binding, Kind: g.Kind, Direct: g.Direct && o.Direct, Paired: g.Paired && o.Paired, ImpliedWrite: g.ImpliedWrite && o.ImpliedWrite, Sender: g.Sender}
+	out := turnGrant{Binding: g.Binding, Kind: g.Kind, Direct: g.Direct && o.Direct, Paired: g.Paired && o.Paired, ImpliedWrite: g.ImpliedWrite && o.ImpliedWrite, EveryoneWrite: g.EveryoneWrite && o.EveryoneWrite, Sender: g.Sender, Where: g.Where}
 	if g.Sender != o.Sender {
 		out.Sender = senderMixed
 	}
@@ -428,12 +448,12 @@ func unionOf(a, b []string) []string {
 }
 
 func grantOf(w *workerctl.ChatGrant) turnGrant {
-	return turnGrant{Binding: w.Binding, Kind: w.Kind, Senders: w.Senders, Roles: w.Roles, Caps: w.Caps, Denied: w.Denied, Direct: w.Direct, Paired: w.Paired, ImpliedWrite: w.ImpliedWrite,
+	return turnGrant{Binding: w.Binding, Kind: w.Kind, Senders: w.Senders, Roles: w.Roles, Caps: w.Caps, Denied: w.Denied, Direct: w.Direct, Paired: w.Paired, ImpliedWrite: w.ImpliedWrite, EveryoneWrite: w.EveryoneWrite,
 		Sender: w.Sender, DeniedCodes: w.DeniedCodes}
 }
 
 func (g turnGrant) wire() *workerctl.ChatGrant {
-	return &workerctl.ChatGrant{Binding: g.Binding, Kind: g.Kind, Senders: g.Senders, Roles: g.Roles, Caps: g.Caps, Denied: g.Denied, Direct: g.Direct, Paired: g.Paired, ImpliedWrite: g.ImpliedWrite,
+	return &workerctl.ChatGrant{Binding: g.Binding, Kind: g.Kind, Senders: g.Senders, Roles: g.Roles, Caps: g.Caps, Denied: g.Denied, Direct: g.Direct, Paired: g.Paired, ImpliedWrite: g.ImpliedWrite, EveryoneWrite: g.EveryoneWrite,
 		Sender: g.Sender, DeniedCodes: g.DeniedCodes}
 }
 
@@ -462,7 +482,9 @@ func (c *Connectors) grantFor(ctx context.Context, b connectors.Binding, m contr
 	now := c.o.Clock()
 	g := turnGrant{Binding: b.ID, Kind: b.Kind, Senders: []string{m.SenderID}, Roles: slices.Clone(m.Roles),
 		Direct: m.Direct, Paired: m.SenderID != "" && b.IsPaired(m.SenderID, now)}
+	g.Where = whereOf(m)
 	g.ImpliedWrite = impliedWrite(b, c.subjectOf(b, m, true), now, c.offReason(ctx, b, contract.CapToolsWrite))
+	g.EveryoneWrite = everyoneWrite(b, c.subjectOf(b, m, true), c.offReason(ctx, b, contract.CapToolsWrite))
 	g.Sender = grantSenderKind(b, c.subjectOf(b, m, true), g.Paired, kind)
 	for _, name := range contract.ConnectorCapabilityNames() {
 		d := Authorize(b, kind, c.subjectOf(b, m, true), name, now, c.offReason(ctx, b, name))
@@ -518,15 +540,22 @@ const (
 // AccessEvent is one audited decision. It holds IDs and capability names,
 // never message text, pairing codes or tokens.
 type AccessEvent struct {
-	At         time.Time `json:"at"`
-	Binding    string    `json:"binding"`
-	Kind       string    `json:"kind,omitempty"`
-	Senders    []string  `json:"senders,omitempty"`
-	Roles      []string  `json:"roles,omitempty"`
-	Capability string    `json:"capability"`
-	Allowed    bool      `json:"allowed"`
-	Via        string    `json:"via,omitempty"`
-	Reason     string    `json:"reason,omitempty"`
+	At      time.Time `json:"at"`
+	Binding string    `json:"binding"`
+	Kind    string    `json:"kind,omitempty"`
+	Senders []string  `json:"senders,omitempty"`
+	Roles   []string  `json:"roles,omitempty"`
+	// SenderName is the display name of the first sender, and Chat and ChatName
+	// the conversation of the message (the ID, and the name when the add-on
+	// knows it). All three are optional: an event with no message at hand, such
+	// as a preview, has none, and a reader falls back to the IDs.
+	SenderName string `json:"sender_name,omitempty"`
+	Chat       string `json:"chat,omitempty"`
+	ChatName   string `json:"chat_name,omitempty"`
+	Capability string `json:"capability"`
+	Allowed    bool   `json:"allowed"`
+	Via        string `json:"via,omitempty"`
+	Reason     string `json:"reason,omitempty"`
 	// Code is the code of the refusal (see connectorreasons.go).
 	Code string `json:"code,omitempty"`
 	// The fields below are set by a message the host wrote on its own (see
@@ -547,6 +576,9 @@ type AccessEvent struct {
 	// add-on, when it answered one.
 	Outcome string `json:"outcome,omitempty"`
 	Status  int    `json:"status,omitempty"`
+	// Asker is the sender whose message made the turn that asked for a held
+	// write; Senders of the event is who answered it.
+	Asker string `json:"asker,omitempty"`
 }
 
 type heldGrant struct {
@@ -599,9 +631,12 @@ func (a *accessState) get(chat string) (turnGrant, bool) {
 	return h.turnGrant, true
 }
 
-func (a *accessState) record(now time.Time, b connectors.Binding, senders, roles []string, d Decision) {
+func (a *accessState) record(now time.Time, b connectors.Binding, senders, roles []string, d Decision, where ...eventWhere) {
 	e := AccessEvent{At: now.UTC(), Binding: b.ID, Kind: b.Kind, Senders: senders, Roles: roles,
 		Capability: d.Capability, Allowed: d.Allowed, Via: d.Via, Reason: d.Reason, Code: d.Code}
+	if len(where) > 0 {
+		e.SenderName, e.Chat, e.ChatName = where[0].SenderName, where[0].Chat, where[0].ChatName
+	}
 	a.append(e)
 }
 
@@ -614,6 +649,18 @@ func (a *accessState) append(e AccessEvent) {
 	if len(a.log) > AccessLogSize {
 		a.log = slices.Clone(a.log[len(a.log)-AccessLogSize:])
 	}
+}
+
+// eventWhere is who and where an event came from, when the message is at hand.
+type eventWhere struct{ SenderName, Chat, ChatName string }
+
+// whereOf reads it from a message: the display name, else the username.
+func whereOf(m contract.ConnectorMessage) eventWhere {
+	name := m.SenderName
+	if name == "" {
+		name = m.SenderUsername
+	}
+	return eventWhere{SenderName: name, Chat: m.Chat, ChatName: m.ChatName}
 }
 
 // recordTool keeps the outcome of a tool call for the settings page of the
@@ -685,7 +732,7 @@ func (s *Service) turnAllow(chat string) (allow func(string) (bool, string), aud
 		if ok {
 			d.Via = "turn"
 		}
-		s.access.record(s.now(), connectors.Binding{ID: g.Binding, Kind: g.Kind}, g.Senders, g.Roles, d)
+		s.access.record(s.now(), connectors.Binding{ID: g.Binding, Kind: g.Kind}, g.Senders, g.Roles, d, g.Where)
 	}
 	return allow, audit
 }
@@ -718,7 +765,7 @@ func notesDecision(b connectors.Binding, s AccessSubject, now time.Time) Decisio
 		return Decision{Capability: NotesReadCapability, Allowed: true, Via: "paired"}
 	}
 	return refusal(b, NotesReadCapability, CodeSenderNeedsPairing,
-		"the personal notes of the owner are read only for a sender that the owner paired with this bot", nil)
+		"the personal notes of the owner are read only for a verified person, one that the owner verified with this bot", nil)
 }
 
 // AccessSubjectView is what one kind of sender may do on a binding.
@@ -773,6 +820,10 @@ type AccessView struct {
 	// missing tick holds back. The decision itself is in Subjects, under the
 	// capability.
 	AddonTools []AddonToolHold `json:"addon_tools,omitempty"`
+	// ProposalMode is what the connection does with a trigger the agent
+	// proposes: ask, auto or auto_readonly. The page shows "Asks first" next
+	// to the permission to propose triggers when it is not auto.
+	ProposalMode string `json:"proposal_mode,omitempty"`
 }
 
 // AddonToolHold names the tools of one add-on that need one capability of the
@@ -945,8 +996,15 @@ type AccessDraft struct {
 	// AllowTrust is the trust level of the chat entries of Allow. Nil keeps the
 	// saved levels.
 	AllowTrust map[string]string
-	Caps       []string
-	Grants     []connectors.RoleGrant
+	// Channels are the places the bot may post, as the form lists them. Nil
+	// keeps the saved list.
+	Channels []connectors.Channel
+	// ApprovalMode is the form's choice for triggers that the agent proposes
+	// (ask, auto or auto_readonly). Nil keeps the saved one. It is shown in the
+	// view as ProposalMode and decides nothing here.
+	ApprovalMode *string
+	Caps         []string
+	Grants       []connectors.RoleGrant
 	// Sender, when set, limits the answer to one kind of sender: "listed",
 	// "paired", "channel_member", "anyone" or "role:<id>".
 	Sender string
@@ -996,6 +1054,17 @@ func (c *Connectors) AccessPreview(ctx context.Context, user, id string, d Acces
 	for k := range b.AllowTrust {
 		if !slices.Contains(b.Allow, k) {
 			delete(b.AllowTrust, k)
+		}
+	}
+	if d.Channels != nil {
+		b.Channels = slices.Clone(d.Channels)
+	}
+	if d.ApprovalMode != nil {
+		switch m := *d.ApprovalMode; m {
+		case "", connectors.ApprovalAsk, connectors.ApprovalAuto, connectors.ApprovalAutoReadonly:
+			b.Approval.Mode = m
+		default:
+			return AccessView{}, connectorBad("approval_mode must be ask, auto or auto_readonly")
 		}
 	}
 	if d.Caps != nil {
@@ -1048,9 +1117,9 @@ func (c *Connectors) accessOf(ctx context.Context, b connectors.Binding, only st
 		}
 		return only == "" || only == id
 	}
-	out := AccessView{Binding: b.ID, Approvals: c.svc.approvalsOf(ctx, b), AddonTools: holds}
+	out := AccessView{Binding: b.ID, Approvals: c.svc.approvalsOf(ctx, b), AddonTools: holds, ProposalMode: b.Approval.ModeOrDefault()}
 	if want("listed") {
-		out.Subjects = append(out.Subjects, view("listed", "A sender on the allowlist", b, AccessSubject{SenderID: "x", Allowlisted: true, Listed: true}))
+		out.Subjects = append(out.Subjects, view("listed", "A listed person", b, AccessSubject{SenderID: "x", Allowlisted: true, Listed: true}))
 	}
 	if want("anyone") {
 		out.Subjects = append(out.Subjects, view("anyone", "A sender let in through a listed channel", b, AccessSubject{SenderID: "x", Allowlisted: true, ViaChannel: true}))
@@ -1061,7 +1130,7 @@ func (c *Connectors) accessOf(ctx context.Context, b connectors.Binding, only st
 	if want("paired") {
 		paired := b
 		paired.Paired = []connectors.PairedSender{{SenderID: "paired", At: now}}
-		out.Subjects = append(out.Subjects, view("paired", "A paired sender", paired, AccessSubject{SenderID: "paired", Allowlisted: true}))
+		out.Subjects = append(out.Subjects, view("paired", "A verified person", paired, AccessSubject{SenderID: "paired", Allowlisted: true}))
 	}
 	if kind != nil {
 		for _, r := range kind.Roles {

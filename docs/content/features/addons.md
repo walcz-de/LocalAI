@@ -1588,13 +1588,13 @@ The four compatibility ranges above are integers that every published add-on sta
 without making every published add-on incompatible, so the host also has a **feature
 level**: one integer that counts the additive manifest features it understands.
 
-- The host declares its level (`contract.HostFeatureLevel`). This version has level 2.
+- The host declares its level (`contract.HostFeatureLevel`). This version has level 3.
   A host that predates the levels is level 1.
 - A manifest may set `featureLevel` (a positive integer, default 1). It states the level
   the add-on needs. A manifest that uses a field of a higher level must say so: the
   parser refuses a manifest that uses `capabilities.resources.agentScoped`,
   `capabilities.resources.nounPlural` or `i18n.<language>.resources` and does not declare
-  `featureLevel: 2`.
+  `featureLevel: 2`. `capabilities.ownerData` is level 3.
 - A host with a lower level refuses the add-on with the plain reason **needs a newer
   LocalAI**. The add-on is not installed and not upgraded. A failed install or upgrade has
   the cause `needs_newer_host`, and an update check shows the add-on as incompatible with
@@ -3408,6 +3408,22 @@ names it gets the unknown-tool answer. The Sandbox uses it for `set-backend` and
 `confirm-host`: they change a setting, and the add-on asks the host whether the
 caller is an administrator before it acts.
 
+### Add-ons that keep the owner's own data
+
+An add-on that keeps the data of one person and needs no credential and no resource list (the
+[Calendar](/features/calendar/) and [Contacts](/features/contacts/) add-ons) sets `capabilities.ownerData` to `true` and
+`featureLevel` to 3. Its tools name no resource: the add-on keys the data on the user in the
+authority of the call, never on an argument. Reads run at once for every sender a messaging
+bot lets in. A tool of another kind than `read` is held to `tools.write` in a messaging chat,
+like the writes of a credentialed add-on: the owner and the senders paired with the bot hold
+it without a tick on the bot, and every other sender (a listed person who is not paired, a
+channel, a bot that accepts anyone) can read but not change. To let everyone the bot lets in
+change the data, tick **Let people who are not verified change things with add-on tools**
+(`tools.write`) in the permissions of that bot. The tick covers every sender, including listed
+people and, for a bot that accepts anyone, any sender, and it applies to these add-ons only:
+for other add-ons `tools.write` still stops short of a sender who is only let in. A trigger or a job runs the writes
+only under the `act.addons` grant of the action policy, as for any action tool.
+
 ### Resource listing for agents
 
 An add-on whose resources a person may want to hand out one by one can opt in to
@@ -3490,10 +3506,13 @@ studio: addon tool addon=<id> tool=<name> kind=<read|write|schema|create|action|
   `channel`, `anyone` or `mixed` for a messaging turn (how the sender was let in);
   `trigger` or `job` for an unattended run.
 - `outcome` is `ok`, `held` (a write that waits for a person), `denied` (a rule stopped it
-  before the service was called) or `error`.
+  before the service was called) or `error`. A write that waited in a messaging chat
+  later gets one more event in **Latest decisions**: `confirmed`, `cancelled` or
+  `expired` (see [Confirming a held write in the chat](#confirming-a-held-write-in-the-chat)).
 - `reason` is a stable code: a code of the permission chain (`sender_needs_pairing`,
   `connection_permission_off`), `write_mode_off`, `write_mode_propose` or
-  `approval_always` for a write that waits, `resource_not_allowed` or
+  `approval_always` for a write that waits (`waiting_in_chat` when the bot asked in the
+  chat), `chat_confirmed`, `chat_cancelled` or `hold_expired` for its end, `resource_not_allowed` or
   `resource_not_in_agent_list`, `select_connection`, `act_read_only`, or
   `upstream_<status>` when the service behind the add-on refused the call.
 - `status` is the HTTP status that service answered, when the add-on says so.
@@ -3506,6 +3525,39 @@ The same event is kept in memory, at most 20 for each connection and each bot, a
 connection page shows it under **Latest decisions** with the tool, the outcome, the reason
 in the language of the page and the time. `GET /api/chats/connectors/{id}/access` returns
 them as `tool_outcomes`. They reset when the server restarts.
+
+### Confirming a held write in the chat
+
+A write tool waits for a person when the write mode of its connection is **ask first**.
+In the web UI the owner confirms it on the Add-ons page. In a messaging chat the host
+now asks in the chat itself, when the bot has `proposals.confirm` enabled and at least one
+sender is paired with it.
+
+- **What is written.** The host writes one message in the chat and thread of the request:
+  the title of the tool in plain words, the resource, and the facts the tool definition
+  lists, then how to answer: `yes` or `no`, or `confirm CODE` or `cancel CODE` when
+  several wait. It never writes the words of the model, a token or a raw JSON dump, and
+  every fact is cut to 120 characters. A tool definition lists its facts with two optional
+  fields: `title` (at most 60 characters) and `summaryFields` (at most 6 keys of the
+  sample that the preview returns). A key that is not listed is never repeated in a chat.
+- **Who may answer.** Only a sender who is paired with the bot and holds
+  `proposals.confirm`. A sender on the allowlist who is not paired, a member of a listed
+  channel, and anyone on a bot that accepts anyone get one sentence and nothing runs. The
+  person who asked and the person who answers can differ; the audit line names both. The
+  owner can still confirm or cancel it in the web UI.
+- **What runs.** The call stored with the proposal, bound to its digest, exactly as
+  proposed. A code works once. The answer must come from the chat and thread where it was
+  asked. The result goes back as one short message: a link or number the tool returned
+  when it is safe to show (an https address without credentials), or the plain reason it
+  failed, such as a refusal of the service behind the add-on.
+- **Limits.** At most 5 writes wait in the chats of one bot, at most 10 are asked in an
+  hour, and a proposal expires after 24 hours. The records survive a restart. Above a
+  limit the write waits for the owner in the web UI and the model is told so.
+- **Not in the chat.** A tool that declares `approval: "always"` still waits for a person
+  at the web UI, whatever a chat says.
+- **The model.** The result of the tool says the write waits for confirmation in the chat,
+  with the code, so the model does not say it was done. The web chat shows status lines
+  for waiting, confirmed, cancelled, expired and failed.
 
 When the service behind an add-on refuses a call (a token without the permission, a name
 that does not exist, a value it does not accept), the add-on tells the host the status and

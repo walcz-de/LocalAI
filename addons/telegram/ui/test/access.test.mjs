@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  toolOutcomeRows,  changedFields, fixAction, remainingChecks, sentenceCase, isProblem, pickSubject, previewBody, previewId, readinessRows, reachable, senderOptions, unusable, visibleRows,
+  toolOutcomeRows,  changedFields, fixAction, remainingChecks, sentenceCase, isProblem, previewBody, previewId, readinessRows, reachable, statusRows, unusable, visibleRows,
 } from '../../../internal/connector-ui/src/access.js'
 import { localizeAccess } from '../../../internal/connector-ui/src/connector.js'
 import { connectorForm, emptyConnector } from '../../../internal/connector-ui/src/connector.js'
@@ -20,7 +20,7 @@ const row = (rows, id) => rows.find((r) => r.id === id)
 
 test('access: the preview body holds the form values, no token, and the kind only for a new connection', () => {
   const b = previewBody({ ...emptyConnector(), agent_id: 'a1', allow: [' 42 ', '42', ''], caps: ['memory.write'], grants: [{ role: 'r', caps: ['memory.write'] }], token: 'secret' }, 'telegram')
-  assert.deepEqual(b, { agent_id: 'a1', accept_any: false, allow: ['42'], allow_trust: {}, caps: ['memory.write'], grants: [{ role: 'r', caps: ['memory.write'] }], kind: 'telegram' })
+  assert.deepEqual(b, { agent_id: 'a1', accept_any: false, allow: ['42'], allow_trust: {}, channels: [], approval_mode: 'ask', caps: ['memory.write'], grants: [{ role: 'r', caps: ['memory.write'] }], kind: 'telegram' })
   assert.equal(JSON.stringify(b).includes('secret'), false)
   assert.equal(previewId({ id: '' }), 'new')
   const saved = previewBody({ ...emptyConnector(), id: 'b1', accept_any: true, allow: ['x'] }, 'telegram')
@@ -28,20 +28,16 @@ test('access: the preview body holds the form values, no token, and the kind onl
   assert.deepEqual(saved.allow, [], 'anyone sends no list')
 })
 
-test('access: the sender selector offers channels only for a kind with channels, anyone only with accept_any, and each role', () => {
-  const ids = (f, lists) => senderOptions(f, { roles: [{ id: 'admin', title: 'Admin' }] }, lists).map((o) => o.id)
-  assert.deepEqual(ids({}, ONE), ['listed', 'paired', 'role:admin'])
-  assert.deepEqual(ids({}, TWO), ['listed', 'channel_member', 'paired', 'role:admin'])
-  assert.deepEqual(ids({ accept_any: true }, TWO), ['anyone', 'paired', 'role:admin'])
-  const v = view({ listed: [], anyone: [] })
-  assert.equal(pickSubject(v, 'channel_member').id, 'anyone')
-  assert.equal(pickSubject(v, 'paired'), null)
+test('access: the status line keeps the token, the agent and who is let in, and leaves the rest to the matrix', () => {
+  const rows = readinessRows(base({ agent_id: 'a1', allow: ['42'], caps: ['memory.write'] }))
+  assert.ok(rows.length > 3)
+  assert.deepEqual(statusRows(rows).map((r) => r.id), ['token', 'agent', 'who'])
 })
 
 test('access: fix routing maps each kind to a jump, a link, words or nothing', () => {
   const ctx = { agentId: 'a1', isAdmin: true, lists: TWO, form: {} }
   assert.deepEqual(fixAction({ kind: 'open_connection', target: 'caps', field: 'memory.write' }, ctx).selectors[0], '[data-testid="connector-cap-switch-memory.write"]')
-  assert.match(fixAction({ kind: 'open_connection', target: 'grants' }, ctx).selectors[0], /connector-roles/)
+  assert.match(fixAction({ kind: 'open_connection', target: 'grants' }, ctx).selectors[0], /connector-matrix/)
   assert.match(fixAction({ kind: 'open_connection', target: 'agent_id' }, ctx).selectors[0], /connector-agent/)
   assert.deepEqual(fixAction({ kind: 'open_agent', target: 'a 1' }, ctx), { type: 'link', to: '/app/agents/a%201/edit' })
   assert.deepEqual(fixAction({ kind: 'open_agent', target: '' }, ctx), { type: 'link', to: '/app/agents/a1/edit' })
@@ -287,8 +283,10 @@ test('access: the add-on tool calls are listed newest first, at most 20, with th
   assert.equal(rows.length, 20)
   assert.equal(rows[0].at, many[0].at, 'the host sends newest first and the page keeps the order')
   assert.deepEqual([rows[0].tool, rows[0].outcome, rows[0].tone, rows[0].code], ['tracker / create-issue', 'held', 'skipped', 'approval_always'])
-  const tones = toolOutcomeRows({ tool_outcomes: ['ok', 'held', 'denied', 'error'].map((outcome) => ev(0, { outcome })) }).map((r) => r.tone)
-  assert.deepEqual(tones, ['done', 'skipped', 'failed', 'failed'])
+  const tones = toolOutcomeRows({ tool_outcomes: ['ok', 'held', 'denied', 'error', 'confirmed', 'cancelled', 'expired'].map((outcome) => ev(0, { outcome })) }).map((r) => r.tone)
+  assert.deepEqual(tones, ['done', 'skipped', 'failed', 'failed', 'done', 'skipped', 'skipped'])
+  const answered = toolOutcomeRows({ tool_outcomes: [ev(0, { outcome: 'confirmed', code: 'chat_confirmed', senders: ['P2'], asker: 'U1' })] })[0]
+  assert.deepEqual([answered.outcome, answered.senders, answered.asker], ['confirmed', ['P2'], 'U1'], 'who answered and who asked are both kept')
   const odd = toolOutcomeRows({ tool_outcomes: [ev(0, { outcome: 'surprise', addon: '' })] })[0]
   assert.deepEqual([odd.outcome, odd.tone, odd.tool], ['error', 'failed', 'create-issue'], 'an outcome the page does not know reads as a failure')
   assert.deepEqual(toolOutcomeRows({}), [])
@@ -303,4 +301,19 @@ test('access: a tool call reads in the language of the page when the host transl
   assert.equal(v.tool_outcomes[0].message, 'La modifica attende.')
   assert.equal(v.tool_outcomes[1].message, undefined)
   assert.deepEqual(localizeAccess({ subjects: [] }).tool_outcomes, [])
+})
+
+test('access: a connection that asks first and a ticked confirm permission say a paired person confirms the writes in the chat', () => {
+  const caps = [{ name: 'tools.write', title: 'Change things' }, { name: 'proposals.confirm', title: 'Confirm proposals' }]
+  const hold = (mode) => [{ addon: 'tracker', capability: 'tools.write', tools: ['create-issue'], connections: [{ name: 'Work', write_mode: mode }], without_tick: ['paired'] }]
+  const paired = [{ sender_id: 'p', at: new Date().toISOString() }]
+  const rows = (mode, ticked, pairs = paired) => readinessRows(base({ id: 'b1', agent_id: 'a1', allow: ['42'], caps: ticked },
+    { saved: connectorForm({ id: 'b1', agent_id: 'a1', allow: ['42'], caps: ticked }), capabilities: caps, paired: pairs,
+      preview: { status: 'ready', view: { ...view({ listed: [], paired: [dec('tools.write'), dec('proposals.confirm')], anyone: [] }), addon_tools: hold(mode) } } }))
+  const confirm = (list) => list.find((r) => r.id === 'addons:tracker:confirm')
+  assert.equal(confirm(rows('propose', ['proposals.confirm']))?.key, 'ready.addons.confirmChat')
+  assert.equal(confirm(rows('propose', ['proposals.confirm', 'tools.write']))?.state, 'ok')
+  assert.equal(confirm(rows('auto', ['proposals.confirm'])), undefined, 'a connection that writes at once has nothing to confirm')
+  assert.equal(confirm(rows('propose', [])), undefined, 'without the confirm permission the bot does not ask in the chat')
+  assert.equal(confirm(rows('propose', ['proposals.confirm'], [])), undefined, 'nobody is paired')
 })

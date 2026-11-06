@@ -10,18 +10,21 @@ import ConfirmDialog from '../../host-compat/src/components/ConfirmDialog'
 import Icon from '../../host-compat/src/components/Icon'
 import AnswerFields, { answerSummary, answerT } from './AnswerFields'
 import AccessView from './AccessView'
-import CapabilitiesPanel, { useAccessPreview, useIsAdmin } from './CapabilitiesPanel'
+import { jumpTo, useAccessPreview, useIsAdmin } from './accessHooks'
 import ReadinessList from './ReadinessList'
 import { useAuth } from '../../host-compat/src/context/AuthContext'
 import ApprovalOptions from './ApprovalFields'
 import FilesFields from './FilesFields'
-import { Check, Field, HintLabels, Notice, RadioCards, Select, Switch, TextInput } from './controls'
-import NameList from './NameList'
-import ChannelTrust from './ChannelTrust'
-import PermissionFields, { NoCapsNotice } from './PermissionFields'
+import { Field, HintLabels, Notice, Select, Switch, TextInput } from './controls'
+import WhoFields from './WhoFields'
+import AccessMatrix from './AccessMatrix'
+import PermissionFields from './PermissionFields'
+import NotifyField from './NotifyField'
 import { agentsApi, connectorsApi, setApiLanguage } from './api'
-import { DUPLICATE_CONFIRMATION, canSave, channelOnly, duplicateOther, duplicateRefusalName, isDuplicateRefusal, connectorForm, hasNoCaps, connectorPayload, emptyConnector, listEntries, replaceList, senderLine, trustAfter, usualCaps } from './connector'
+import { DUPLICATE_CONFIRMATION, canSave, channelOnly, duplicateOther, duplicateRefusalName, isDuplicateRefusal, connectorForm, connectorPayload, emptyConnector, agentHeld, usualFor, listEntries, senderLine, withUsualCaps } from './connector'
 import { registerConnectorLocales } from './i18n'
+import { chatNamesFrom, chatText, knownTargets, peopleFrom, recentPeople } from './people'
+import { PeopleContext } from './Person'
 import './connector.css'
 
 // The shared words, in every language of the web UI, under the namespace "connector".
@@ -43,6 +46,8 @@ function Senders({ id, onAllowed, t }) {
         <li key={s.id}>
           <span className={`cn-status cn-status--${s.allowed ? 'done' : 'skipped'}`}>{s.allowed ? t('accepted') : t('ignored')}</span>
           <span>{senderLine(s, answerT(t))}</span>
+          {s.chat && <span className="cn-muted">{answerT(t)('sender.chat', { chat: chatText(s.chat, s.chat_name) })}</span>}
+          {!s.allowed && s.reason && <span className="cn-muted" data-testid="sender-reason" data-code={s.reason}>{answerT(t)(`sender.reason.${s.reason}`, { defaultValue: s.reason })}</span>}
           {!s.allowed && (
             <button type="button" className="dk-btn dk-btn--secondary dk-btn--sm"
               onClick={async () => {
@@ -78,14 +83,14 @@ function SameBotNotice({ c, s, busy, onOff, onOpen }) {
     <Notice tone="warn" role="status" testId="duplicate-warning">
       <p className="cn-notice__text">{s('dup.text', { name: other.name })}</p>
       <span className="cn-row__actions">
-        <button type="button" className="dk-btn dk-btn--secondary dk-btn--sm" data-testid="duplicate-off" disabled={busy} onClick={onOff}>{s('dup.turnOff')}</button>
+        <button type="button" className="dk-btn dk-btn--secondary dk-btn--sm" disabled={busy} onClick={onOff}>{s('dup.turnOff')}</button>
         <button type="button" className="cn-link cn-link--text" data-testid="duplicate-open" onClick={() => onOpen(other.id)}>{s('dup.openOther', { name: other.name })}</button>
       </span>
     </Notice>
   )
 }
 
-const ONE_LIST = [{ key: 'allow', label: 'allow', hint: 'allowHint', testId: 'connector-allow' }]
+const ONE_LIST = [{ key: 'allow', hint: 'allowHint', testId: 'connector-allow' }]
 
 /**
  * @param {object} props
@@ -94,10 +99,13 @@ const ONE_LIST = [{ key: 'allow', label: 'allow', hint: 'allowHint', testId: 'co
  * @param {string} props.testId        the test id of the page
  * @param {Function} [props.TokenFields] the fields of the token ({ form, setForm, t })
  * @param {Function} [props.tokenOf]   the secret that the fields make, '' when not typed
- * @param {Array} [props.lists]        the allowlists: { key, label, hint, testId, match }
+ * @param {Array} [props.lists]        the allowlists: { key, hint, help, testId, match }
  * @param {Function} [props.Help]      a block under the intro ({ t })
  * @param {string} [props.notifyMode]  the inputMode of the notification field
- * @param {Function} [props.isChannelEntry] whether an allowlist entry names a channel or group: (entry) => boolean
+ * @param {Function} [props.isChannelEntry] whether an allowlist entry names a channel or group: (entry) => boolean.
+ *                                     The kind knows its IDs: the page puts such an entry in the table of channels.
+ * @param {boolean} [props.mixedList]  a kind that cannot tell a person from a channel by its ID keeps one list of people
+ *                                     and channels, with the level of a channel on every entry
  * @param {boolean} [props.messaging]  false for a kind that carries no messages: the page then hides the sender,
  *                                     reply, file and notification settings and the switch of the binding
  * @param {Function} [props.ExtraFields] more fields of the add-on's own ({ form, setForm, t })
@@ -108,7 +116,7 @@ const ONE_LIST = [{ key: 'allow', label: 'allow', hint: 'allowHint', testId: 'co
  * @param {Function} [props.RowInfo]   a line under a binding in the list ({ c, t })
  */
 export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleToken, tokenOf = (f) => f.token || '', lists = ONE_LIST, Help, notifyMode = 'text',
-  messaging = true, isChannelEntry: channelPredicate, ExtraFields, extraBody, extraForm, extraValid, testExtra, RowInfo }) {
+  messaging = true, isChannelEntry: channelPredicate, mixedList = false, ExtraFields, extraBody, extraForm, extraValid, testExtra, RowInfo }) {
   const { t, i18n } = useTranslation([ns, 'connector'])
   const uiLanguage = i18n?.resolvedLanguage || i18n?.language || ''
   setApiLanguage(uiLanguage)
@@ -127,6 +135,10 @@ export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleTo
   const [kindInfo, setKindInfo] = useState(null)
   const [capabilities, setCapabilities] = useState([])
   const [accessVersion, setAccessVersion] = useState(0)
+  // The names of the people who wrote to the open binding, to show beside their IDs.
+  const [directory, setDirectory] = useState(() => new Map())
+  // The sender log of the open binding: the recent people to offer, and the names of the chats.
+  const [senderLog, setSenderLog] = useState([])
   // The last token test of each saved binding in this session: { ok, bot, reason }.
   const [tokenChecks, setTokenChecks] = useState({})
   // The pairings of the open binding, as pairing here changes them.
@@ -180,10 +192,25 @@ export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleTo
     if (!c) return
     linked.current = true
     open({ ...connectorForm(c), ...(extraForm ? extraForm(c) : {}) })
-    setTimeout(() => document.querySelector('[data-testid="connector-permissions"]')?.scrollIntoView?.({ block: 'start' }), 50)
+    setTimeout(() => document.querySelector('[data-testid="connector-matrix"]')?.scrollIntoView?.({ block: 'start' }), 50)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items])
 
+  // A new binding starts with the usual set for its agent. While those caps are
+  // untouched, choosing another agent ticks the usual set for that agent instead.
+  const withAgent = (f, agentId) => {
+    const held = (id) => agentHeld(agents.find((a) => a.id === id))
+    const same = (a, b) => a.length === b.length && a.every((x) => b.includes(x))
+    const untouched = !f.id && same(f.caps || [], usualFor(capabilities, held(f.agent_id)).caps)
+    return { ...f, agent_id: agentId, ...(untouched ? { caps: usualFor(capabilities, held(agentId)).caps } : {}) }
+  }
+  const openId = form?.id || ''
+  useEffect(() => {
+    if (!openId || !messaging) { setDirectory(new Map()); setSenderLog([]); return undefined }
+    let live = true
+    connectorsApi.senders(openId).then((r) => { if (live) { setDirectory(peopleFrom(r?.senders)); setSenderLog(r?.senders || []) } }).catch(() => { if (live) { setDirectory(new Map()); setSenderLog([]) } })
+    return () => { live = false }
+  }, [openId, messaging, accessVersion])
   const agentName = (id) => agents.find((a) => a.id === id)?.name || id
   const open = (c) => { setForm(c); setConfirmed(Boolean(c.accept_any)); setNote(''); setPairedList(null); setDupAsk(null) }
   // The question sits by the Save button, at the end of a long form: bring it into view.
@@ -234,21 +261,6 @@ export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleTo
     } finally { setBusy(false) }
   }
 
-  // The preset for a saved binding that has no permission on: the usual set,
-  // saved at once, with every other setting as it was.
-  const allowUsual = async (c) => {
-    setBusy(true)
-    setError('')
-    setNote('')
-    try {
-      const f = { ...connectorForm(c), ...(extraForm ? extraForm(c) : {}) }
-      f.caps = usualCaps(capabilities)
-      await connectorsApi.update(c.id, connectorPayload(f, kind, '', extra(f)))
-      setNote(s('perm.usualSaved', { name: c.name }))
-      await load()
-    } catch (e) { fail(e) } finally { setBusy(false) }
-  }
-
   const act = async (fn) => {
     setError('')
     try { await fn(); await load() } catch (e) { fail(e) }
@@ -275,10 +287,11 @@ export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleTo
 
   return (
     <HintLabels.Provider value={{ more: s('more'), less: s('less'), optional: s('optional') }}>
+    <PeopleContext.Provider value={directory}>
     <div className="cn-page" data-testid={testId}>
       <header className="cn-head">
         <h1 className="cn-title">{t('title')}</h1>
-        <button type="button" className="dk-btn dk-btn--primary" onClick={() => open({ ...emptyConnector(), ...(extraForm ? extraForm({}) : {}) })}>
+        <button type="button" className="dk-btn dk-btn--primary" onClick={() => open({ ...emptyConnector(capabilities, agentHeld(agents.length === 1 ? agents[0] : null)), ...(extraForm ? extraForm({}) : {}) })}>
           <Icon name="plus" /> {t('new')}
         </button>
       </header>
@@ -308,7 +321,7 @@ export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleTo
             <TokenFields form={form} setForm={setForm} t={t} />
             <Field label={t('agent')} hint={agentOptional ? answerT(t)('agentOptionalHint') : undefined} optional={agentOptional}>
               {(p) => (
-                <Select {...p} data-testid="connector-agent" aria-label={t('agent')} value={form.agent_id} required={!agentOptional} onChange={(e) => setForm({ ...form, agent_id: e.target.value })}>
+                <Select {...p} data-testid="connector-agent" aria-label={t('agent')} value={form.agent_id} required={!agentOptional} onChange={(e) => setForm(withAgent(form, e.target.value))}>
                   <option value="">{agentOptional ? answerT(t)('agentCredentialsOnly') : t('agentNone')}</option>
                   {agents.map((a) => (
                     <option key={a.id} value={a.id} disabled={!a.model}>{a.model ? a.name : t('agentNoModel', { name: a.name })}</option>
@@ -318,34 +331,29 @@ export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleTo
             </Field>
             {ExtraFields && <ExtraFields form={form} setForm={setForm} t={t} />}
             {messaging && (<>
-            <fieldset className="cn-group" data-testid="connector-who" tabIndex={-1}>
-              <legend>{t('who')}</legend>
-              <RadioCards name="who" legend={t('who')} value={form.accept_any} onChange={(any) => { setForm({ ...form, accept_any: any }); if (!any) setConfirmed(false) }}
-                options={[{ value: false, label: t('onlyListed') }, { value: true, label: t('anyone') }]} />
-              {form.accept_any && (
-                <Notice tone="warn" role="alert" testId="anyone-warning">
-                  <p className="cn-notice__text">{t('anyoneWarning')}</p>
-                  <Check checked={confirmed} onChange={setConfirmed}>{t('anyoneConfirm')}</Check>
-                </Notice>
+            <WhoFields key={form.id || 'new'} form={form} setForm={setForm} t={t} s={s} confirmed={confirmed} setConfirmed={setConfirmed} isChannel={isChannelEntry} mixed={mixedList}
+              onPaired={pairedChanged} recent={recentPeople(senderLog, form.allow)} chatNames={chatNamesFrom(senderLog)}
+              hint={lists[0]?.hint ? t(lists[0].hint) : undefined} help={lists[0]?.help ? t(lists[0].help) : undefined} />
+            {capabilities.length > 0 && (
+              <AccessMatrix form={form} setForm={setForm} kindInfo={kindInfo} capabilities={capabilities} preview={preview} dirty={dirty} s={s} ctx={fixCtx}
+                agent={agents.find((a) => a.id === form.agent_id)} paired={pairedList || form.paired || []}
+                onReset={() => setForm(withUsualCaps(form, capabilities, agentHeld(agents.find((a) => a.id === form.agent_id))))} />
+            )}
+            <AnswerFields key={form.id || 'new'} form={form} setForm={setForm} t={t} kindInfo={kindInfo}
+              places={capabilities.length > 0 && (
+                <PermissionFields form={form} setForm={setForm} s={s} chatNames={chatNamesFrom(senderLog)}
+                  onSwitchOn={() => jumpTo(['[data-testid="connector-cap-switch-talkback.channels"]', '[data-testid="connector-matrix"]'])} />
               )}
-              {!form.accept_any && lists.map((l, i) => (
-                <NameList key={l.key} label={t(l.label)} hint={t(l.hint)} help={l.help ? t(l.help) : undefined} value={listEntries(form.allow, lists, i)} addLabel={answerT(t)('add')}
-                  onChange={(v) => { const allow = replaceList(form.allow, lists, i, v); setForm({ ...form, allow, allow_trust: trustAfter(form, allow, isChannelEntry) }) }} testId={l.testId} />
-              ))}
-              <ChannelTrust form={form} setForm={setForm} t={s} isChannel={isChannelEntry} />
-            </fieldset>
-            <Field label={t('notifyChat')} hint={t('notifyHelp')} optional>
-              {(p) => <TextInput {...p} mono inputMode={notifyMode} data-testid="connector-notify" value={form.notify_chat} onChange={(e) => setForm({ ...form, notify_chat: e.target.value })} />}
-            </Field>
-            <AnswerFields form={form} setForm={setForm} t={t} kindInfo={kindInfo} />
-            <FilesFields form={form} setForm={setForm} kind={kindFiles} saved={form.files} s={answerT(t)} />
-            <PermissionFields form={form} setForm={setForm} kind={kindInfo} capabilities={capabilities} s={s} onPaired={pairedChanged} agent={agents.find((a) => a.id === form.agent_id)} channelsOnly={channelOnly(form, lists)} />
-            {/* The approval of proposed triggers sits under the permission Propose triggers; an older host with no capability list has no such row, so it shows here. */}
+              notify={<NotifyField form={form} setForm={setForm} s={s} label={s('notify.label')} hint={t('notifyHelp')} inputMode={notifyMode}
+                known={knownTargets({ form, senders: senderLog, isChannel: isChannelEntry })} />}
+              sizes={<FilesFields form={form} setForm={setForm} kind={kindFiles} saved={form.files} s={s} />} />
+            {/* The approval of proposed triggers sits under the row Propose triggers of the matrix; an older host with no capability list has no such row, so it shows here. */}
             {capabilities.length === 0 && <ApprovalOptions form={form} setForm={setForm} s={s} />}
-            {capabilities.length > 0 && (<>
-              <CapabilitiesPanel form={form} kindInfo={kindInfo} capabilities={capabilities} lists={lists} preview={preview} dirty={dirty} s={s} ctx={fixCtx} />
-              <AccessView binding={form} capabilities={capabilities} s={s} version={accessVersion} onAllowed={(sender) => { setForm((f) => (f && !(f.allow || []).includes(sender) ? { ...f, allow: [...(f.allow || []), sender] } : f)); load() }} />
-            </>)}
+            {capabilities.length > 0 && (
+              <AccessView binding={form} capabilities={capabilities} s={s} version={accessVersion} setForm={setForm} preview={preview} kindInfo={kindInfo} ctx={fixCtx}
+                paired={pairedList || form.paired || []} isChannel={isChannelEntry} mixed={mixedList} chatNames={chatNamesFrom(senderLog)} senders={senderLog}
+                onAllowed={(sender) => { setForm((f) => (f && !(f.allow || []).includes(sender) ? { ...f, allow: [...(f.allow || []), sender] } : f)); setAccessVersion((v) => v + 1); load() }} />
+            )}
             </>)}
             {dupAsk && (
               <Notice tone="warn" role="alert" testId="duplicate-confirm">
@@ -392,9 +400,6 @@ export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleTo
               </span>}
               {RowInfo && <RowInfo c={c} t={t} />}
               {messaging && form?.id !== c.id && <SameBotNotice c={c} s={s} busy={busy} onOff={() => act(() => connectorsApi.disable(c.id))} onOpen={openById} />}
-              {messaging && capabilities.length > 0 && hasNoCaps(c) && (
-                <NoCapsNotice capabilities={capabilities} s={s} busy={busy} name={c.name} onUsual={() => allowUsual(c)} />
-              )}
               {c.active === false && <span className="cn-muted" data-testid="connector-inactive">{t('inactive', { reason: c.reason })}</span>}
               {openSenders === c.id && <Senders id={c.id} onAllowed={load} t={t} />}
             </div>
@@ -426,6 +431,7 @@ export default function ConnectorPage({ kind, ns, testId, TokenFields = SingleTo
         onCancel={() => setToDelete(null)}
       />
     </div>
+    </PeopleContext.Provider>
     </HintLabels.Provider>
   )
 }

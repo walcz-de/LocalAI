@@ -17496,6 +17496,17 @@
                     "description": "Shadows names a built-in chat tool that this tool replaces. When the\nadd-on is installed, running and on for a chat, the model sees one tool\nunder that name, served by the add-on, and the built-in one is hidden.\nOnly a name in ReplaceableTools may be shadowed. A tool without it keeps\nits add-on name (addon__\u003cid\u003e__\u003ctool\u003e).",
                     "type": "string"
                 },
+                "summaryFields": {
+                    "description": "SummaryFields name keys of the sample that the add-on's preview returns\n(the facts it shows the person who confirms). The host may repeat the\nscalar values of those keys, cut short, in the chat where a call waits\nfor a confirmation. Only the add-on knows which facts are safe to show\nthere; a key that is not listed is never shown in a chat. At most\nMaxSummaryFields keys.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "description": "Title is the name of the tool in plain words (\"Open an issue\"), for a\nperson who reads that a call waits for them in a chat. Only a write,\nschema or create tool may set it. A tool without one is named by its\ntool name.",
+                    "type": "string"
+                },
                 "uiOnly": {
                     "description": "UIOnly marks a tool that only the add-on's own page may call, such as a\nsettings change that asks the host whether the caller is an\nadministrator. It is never offered to a model, a chat or an agent. The\npage has no resource to name, so it must be a read tool without one.",
                     "type": "boolean"
@@ -22295,6 +22306,10 @@
                     "description": "Preview is true when the view is for a form that is not saved.",
                     "type": "boolean"
                 },
+                "proposal_mode": {
+                    "description": "ProposalMode is what the connection does with a trigger the agent\nproposes: ask, auto or auto_readonly.",
+                    "type": "string"
+                },
                 "recent": {
                     "type": "array",
                     "items": {
@@ -22375,10 +22390,20 @@
                 "allowed": {
                     "type": "boolean"
                 },
+                "asker": {
+                    "description": "Asker is the sender whose message asked for a write that waited in the\nchat; senders then holds who answered it (confirmed, cancelled).",
+                    "type": "string"
+                },
                 "at": {
                     "type": "string"
                 },
                 "capability": {
+                    "type": "string"
+                },
+                "chat": {
+                    "type": "string"
+                },
+                "chat_name": {
                     "type": "string"
                 },
                 "code": {
@@ -22397,7 +22422,10 @@
                         "ok",
                         "denied",
                         "held",
-                        "error"
+                        "error",
+                        "confirmed",
+                        "cancelled",
+                        "expired"
                     ]
                 },
                 "reason": {
@@ -22408,6 +22436,10 @@
                     "items": {
                         "type": "string"
                     }
+                },
+                "sender_name": {
+                    "description": "SenderName is the display name of the first sender, and Chat and ChatName\nthe conversation of the message: its ID, and its name when the add-on\nknows it. All three are optional; a reader falls back to the IDs.",
+                    "type": "string"
                 },
                 "senders": {
                     "type": "array",
@@ -22465,11 +22497,22 @@
                         "type": "string"
                     }
                 },
+                "approval_mode": {
+                    "description": "ApprovalMode is the form's choice for proposed triggers: ask, auto or\nauto_readonly. Absent keeps the saved one.",
+                    "type": "string"
+                },
                 "caps": {
                     "description": "Caps and Grants are the form's permissions; an empty list clears.",
                     "type": "array",
                     "items": {
                         "type": "string"
+                    }
+                },
+                "channels": {
+                    "description": "Channels is the form's list of places the bot may post. Absent keeps the\nsaved list.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/schema.ChatsConnectorChannel"
                     }
                 },
                 "grants": {
@@ -22940,6 +22983,13 @@
                 "allowed": {
                     "type": "boolean"
                 },
+                "chat": {
+                    "description": "Chat and ChatName say where the last message came from: the ID, and the\nname when the add-on knows it. Reason is why that message was ignored\n(not_listed or not_addressed). All three are optional.",
+                    "type": "string"
+                },
+                "chat_name": {
+                    "type": "string"
+                },
                 "count": {
                     "type": "integer"
                 },
@@ -22953,6 +23003,9 @@
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "reason": {
                     "type": "string"
                 }
             }

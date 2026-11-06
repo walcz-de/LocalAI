@@ -48,6 +48,10 @@ type AddonTool struct {
 	// enabled for the chat (see Connectors.ConnectionsOf); until then a chat
 	// does not offer it.
 	Credentialed bool
+	// OwnerData is true for a tool of an add-on that keeps the owner's own
+	// data. Its write tools are held to tools.write, which the owner and the
+	// paired senders of a messaging chat have without a tick.
+	OwnerData bool
 	// ApprovalOverridable is true for a write tool whose confirmation the
 	// person can relax with their own setting. Tool is its name inside the
 	// add-on, the key of that setting.
@@ -416,8 +420,12 @@ func (s *Service) addonToolsHeld(ctx context.Context, a workspace.Actor, rec ses
 			var connected bool
 			if d.Permission == contract.CapToolsWrite && d.Credentialed {
 				connected = s.agentConnectedForWrite(ctx, a.Principal, d.AddonID, conns)
+			} else if d.Permission == contract.CapToolsWrite && d.OwnerData {
+				// The data is the owner's and the agent was given the add-on:
+				// the owner and paired senders write, every other sender reads.
+				connected = true
 			}
-			if tool, ok, why = s.gateAddonTool(tool, d.Permission, a.ChatID, connected); !ok {
+			if tool, ok, why = s.gateAddonToolFor(tool, d.Permission, a.ChatID, connected, d.OwnerData); !ok {
 				held.add(d, strings.TrimSuffix(why, "."))
 				continue
 			}
@@ -471,7 +479,28 @@ func unavailableTool(addonID, reason string) session.Tool {
 // write mode and the approval of the connection still decide whether the call
 // runs or waits for a confirmation.
 func (s *Service) gateAddonTool(t session.Tool, permission, chat string, connected bool) (session.Tool, bool, string) {
+	return s.gateAddonToolFor(t, permission, chat, connected, false)
+}
+
+// gateAddonToolFor is gateAddonTool with ownerData set for a tool of an add-on
+// that keeps the owner's own data. When the owner ticked tools.write for the
+// bot, every sender the bot let in passes for such a tool (see everyoneWrite);
+// without the tick nothing changes.
+func (s *Service) gateAddonToolFor(t session.Tool, permission, chat string, connected, ownerData bool) (session.Tool, bool, string) {
 	allow, audit := s.turnAllow(chat)
+	if ownerData && permission == contract.CapToolsWrite {
+		plain := allow
+		allow = func(capability string) (bool, string) {
+			ok, why := plain(capability)
+			if ok || capability != contract.CapToolsWrite {
+				return ok, why
+			}
+			if g, found := s.access.get(chat); found && g.EveryoneWrite {
+				return true, ""
+			}
+			return false, why
+		}
+	}
 	if connected && permission == contract.CapToolsWrite {
 		plain := allow
 		allow = func(capability string) (bool, string) {

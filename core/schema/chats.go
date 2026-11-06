@@ -1644,13 +1644,19 @@ type ChatsConnectorAccessSubject struct {
 
 // ChatsConnectorAccessEvent is a recorded decision. It holds IDs, never text.
 type ChatsConnectorAccessEvent struct {
-	At         time.Time `json:"at"`
-	Senders    []string  `json:"senders,omitempty"`
-	Roles      []string  `json:"roles,omitempty"`
-	Capability string    `json:"capability"`
-	Allowed    bool      `json:"allowed"`
-	Via        string    `json:"via,omitempty"`
-	Reason     string    `json:"reason,omitempty"`
+	At      time.Time `json:"at"`
+	Senders []string  `json:"senders,omitempty"`
+	Roles   []string  `json:"roles,omitempty"`
+	// SenderName is the display name of the first sender, and Chat and ChatName
+	// the conversation of the message: its ID, and its name when the add-on
+	// knows it. All three are optional; a reader falls back to the IDs.
+	SenderName string `json:"sender_name,omitempty"`
+	Chat       string `json:"chat,omitempty"`
+	ChatName   string `json:"chat_name,omitempty"`
+	Capability string `json:"capability"`
+	Allowed    bool   `json:"allowed"`
+	Via        string `json:"via,omitempty"`
+	Reason     string `json:"reason,omitempty"`
 	// Code is the code of a refusal, as in the decisions.
 	Code string `json:"code,omitempty"`
 	// Addon and Tool name the add-on tool call, for an event in tool_outcomes;
@@ -1659,9 +1665,12 @@ type ChatsConnectorAccessEvent struct {
 	// the add-on, when it answered one. Message is the owner's sentence for the
 	// reason, in English, and localized_message the same in the language of the
 	// request. An outcome holds names and codes, never arguments or results.
-	Addon            string `json:"addon,omitempty"`
-	Tool             string `json:"tool,omitempty"`
-	Outcome          string `json:"outcome,omitempty" enums:"ok,denied,held,error"`
+	Addon   string `json:"addon,omitempty"`
+	Tool    string `json:"tool,omitempty"`
+	Outcome string `json:"outcome,omitempty" enums:"ok,denied,held,error,confirmed,cancelled,expired"`
+	// Asker is the sender whose message asked for a write that waited in the
+	// chat; senders then holds who answered it (confirmed, cancelled).
+	Asker            string `json:"asker,omitempty"`
 	Status           int    `json:"status,omitempty"`
 	Message          string `json:"message,omitempty"`
 	LocalizedMessage string `json:"localized_message,omitempty"`
@@ -1685,6 +1694,9 @@ type ChatsConnectorAccess struct {
 	// permission of the connection decides in a messaging chat, so the page can
 	// say which tools a missing permission holds back. Absent when none.
 	AddonTools []ChatsConnectorAddonTools `json:"addon_tools,omitempty"`
+	// ProposalMode is what the connection does with a trigger the agent
+	// proposes: ask, auto or auto_readonly.
+	ProposalMode string `json:"proposal_mode,omitempty"`
 	// Preview is true when the view is for a form that is not saved.
 	Preview bool `json:"preview,omitempty"`
 	// Language is the language of the localized_message fields, negotiated
@@ -1752,6 +1764,12 @@ type ChatsConnectorAccessPreviewRequest struct {
 	// Caps and Grants are the form's permissions; an empty list clears.
 	Caps   []string                  `json:"caps,omitempty"`
 	Grants []ChatsConnectorRoleGrant `json:"grants,omitempty"`
+	// Channels is the form's list of places the bot may post. Absent keeps the
+	// saved list.
+	Channels []ChatsConnectorChannel `json:"channels,omitempty"`
+	// ApprovalMode is the form's choice for proposed triggers: ask, auto or
+	// auto_readonly. Absent keeps the saved one.
+	ApprovalMode *string `json:"approval_mode,omitempty"`
 	// Sender limits the answer to one kind of sender: listed, paired,
 	// channel_member, channel_acts, anyone or role:<id>. Absent means every kind.
 	Sender string `json:"sender,omitempty"`
@@ -2041,6 +2059,12 @@ type ChatsConnectorSender struct {
 	First   time.Time `json:"first"`
 	Last    time.Time `json:"last"`
 	Allowed bool      `json:"allowed"`
+	// Chat and ChatName say where the last message came from: the ID, and the
+	// name when the add-on knows it. Reason is why that message was ignored
+	// (not_listed or not_addressed). All three are optional.
+	Chat     string `json:"chat,omitempty"`
+	ChatName string `json:"chat_name,omitempty"`
+	Reason   string `json:"reason,omitempty"`
 }
 
 // ChatsConnectorSenderList is the sender log of a binding, newest first.

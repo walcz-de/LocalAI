@@ -129,6 +129,11 @@ type ToolDefinition struct {
 	// run with the token of a connection that the person selects. A chat
 	// offers them only after a connection is selected.
 	Credentialed bool `json:"credentialed,omitempty"`
+	// OwnerData is true when the add-on keeps the owner's own data (see
+	// contract.Capabilities.OwnerData). Its write tools carry Permission
+	// tools.write; the owner and paired senders of a messaging chat hold it
+	// without a tick, as for an add-on the agent is connected to.
+	OwnerData bool `json:"ownerData,omitempty"`
 	// ApprovalOverridable is true for a write tool that declares approval
 	// "always" and lets the person relax it with their own setting (see
 	// contract.ToolDefinition). The chat consumer shows it; the broker decides.
@@ -141,6 +146,11 @@ type ToolDefinition struct {
 	// (capabilities.resources.agentScoped). A chat of a saved agent then
 	// reaches only the resources on the list of the agent.
 	ResourceScoped bool `json:"-"`
+	// Title and SummaryFields come from the tool definition of the add-on
+	// (see contract.ToolDefinition). They shape what a chat repeats of a
+	// call that waits for a confirmation; the model never sees them.
+	Title         string   `json:"-"`
+	SummaryFields []string `json:"-"`
 }
 
 // ResultKind says what a ToolResult carries.
@@ -292,6 +302,11 @@ type ProposalRef struct {
 	// Connection names the connection the change will be made with, as
 	// "as Work, repository acme/widgets"; empty for an add-on with no credential.
 	Connection string `json:"connection,omitempty"`
+	// Title and Facts are what the tool definition lets a chat repeat of the
+	// call: the title of the tool and the listed keys of the preview. They
+	// are not sent to the model, which already wrote the call.
+	Title string          `json:"-"`
+	Facts []contract.Fact `json:"-"`
 }
 
 // AppliedRef is what a chat learns of a change it made. The person enabled the
@@ -789,8 +804,9 @@ func definition(a apps.App, d contract.ToolDefinition) (ToolDefinition, bool) {
 	if json.Unmarshal(d.InputSchema, &params) != nil {
 		return ToolDefinition{}, false
 	}
-	def := ToolDefinition{Name: name, AddonID: a.ID, Tool: d.Name, Kind: d.Kind, Description: d.Description, Parameters: params, InstalledAt: a.InstalledAt, Permission: contract.ToolPermission(a.Credentialed || (a.Resources != nil && a.Resources.AgentScoped), d), Credentialed: a.Credentialed, ApprovalOverridable: d.ApprovalOverridable && d.Approval == contract.ApprovalAlways,
-		ResourceArgument: a.ResourceArgument, ResourceLabel: a.ResourceLabel, ResourceScoped: a.Resources != nil && a.Resources.AgentScoped}
+	def := ToolDefinition{Name: name, AddonID: a.ID, Tool: d.Name, Kind: d.Kind, Description: d.Description, Parameters: params, InstalledAt: a.InstalledAt, OwnerData: a.OwnerData, Permission: contract.ToolPermission(a.Credentialed || a.OwnerData || (a.Resources != nil && a.Resources.AgentScoped), d), Credentialed: a.Credentialed, ApprovalOverridable: d.ApprovalOverridable && d.Approval == contract.ApprovalAlways,
+		ResourceArgument: a.ResourceArgument, ResourceLabel: a.ResourceLabel, ResourceScoped: a.Resources != nil && a.Resources.AgentScoped,
+		Title: d.Title, SummaryFields: slices.Clone(d.SummaryFields)}
 	// Checked again for the same reason as the schema: a manifest that names a
 	// tool outside the list, or a shadow of the wrong kind or schema, never
 	// shadows it.
@@ -1046,6 +1062,9 @@ func (t *ToolAdapter) executeTool(ctx context.Context, actor contract.Actor, con
 	if len(p.Effects.Sample) <= MaxSummaryBytes {
 		ref.Summary = p.Effects.Sample
 	}
+	ref.Title, ref.Facts = def.Title, contract.DisplayFacts(contract.ToolDefinition{SummaryFields: def.SummaryFields}, p.Effects.Sample)
+	out.Held(HeldProposal{ID: p.ID, Digest: p.Digest, AddonID: p.AddonID, Tool: name, Hold: ref.Hold, ExpiresAt: p.ExpiresAt,
+		Title: ref.Title, Facts: ref.Facts, Connection: p.ConnectionName, Resource: out.Data().Resource})
 	return ToolResult{Kind: ResultProposal, Tool: name, Proposal: &ref, Note: ProposalNote}, nil
 }
 

@@ -122,6 +122,11 @@ type Connectors struct {
 	o   ConnectorOptions
 	log *slog.Logger
 
+	// beforeJoin runs in deliver after a message has joined a running reply
+	// and before it reaches the chat. Only the specs set it, to hold a
+	// message in that gap.
+	beforeJoin func()
+
 	sealMu sync.Mutex
 	sealer *connectors.Sealer
 	wmu    sync.Mutex // serialises writes of bindings
@@ -167,6 +172,10 @@ type senderState struct {
 	// do: the intersection over the messages the turn took. Nil while no turn
 	// runs.
 	grant *turnGrant
+	// joining counts the messages that found a reply running and are on their
+	// way to the chat. The reply may not give the chat up while one is: the
+	// turn it starts would have no reply to carry its answer.
+	joining int
 }
 
 // NewConnectors returns the manager. It does nothing until Run or Sync is called.
@@ -716,6 +725,19 @@ func (c *Connectors) handle(ctx context.Context, b connectors.Binding, token str
 	if err := c.o.Store.RecordSender(ctx, b.ID, senderID, name, allowed, c.o.Clock()); err != nil {
 		c.log.Warn("studio: could not record a sender", "binding", b.ID, "error", err)
 	}
+	if ns, ok := c.o.Store.(connectors.SenderNoter); ok {
+		note := connectors.SenderNote{Chat: m.Chat, ChatName: m.ChatName}
+		switch {
+		case allowed:
+		case !m.Direct && !m.Mention:
+			note.Reason = connectors.ReasonNotAddressed
+		default:
+			note.Reason = connectors.ReasonNotListed
+		}
+		if err := ns.NoteSender(ctx, b.ID, senderID, note); err != nil {
+			c.log.Warn("studio: could not note a sender", "binding", b.ID, "error", err)
+		}
+	}
 	if !allowed {
 		return // ignored: not answered, and in the sender log for the owner
 	}
@@ -1112,6 +1134,9 @@ func (c *Connectors) deliver(ctx context.Context, b connectors.Binding, token st
 	c.smu.Lock()
 	was := st.active
 	st.active = true
+	if was {
+		st.joining++
+	}
 	if was && st.grant != nil {
 		grant = st.grant.merge(grant)
 	}
@@ -1119,6 +1144,9 @@ func (c *Connectors) deliver(ctx context.Context, b connectors.Binding, token st
 	c.smu.Unlock()
 	c.svc.access.set(chatID, grant)
 	ctx = withTurnGrant(ctx, grant)
+	if was && c.beforeJoin != nil {
+		c.beforeJoin()
+	}
 	var events <-chan session.Event
 	var cancel func()
 	if !was {
@@ -1132,7 +1160,13 @@ func (c *Connectors) deliver(ctx context.Context, b connectors.Binding, token st
 			return
 		}
 	}
-	if _, err := c.start(ctx, b, chatID, m.Text, up, earlier); err != nil {
+	_, err := c.start(ctx, b, chatID, m.Text, up, earlier)
+	if was {
+		c.smu.Lock()
+		st.joining--
+		c.smu.Unlock()
+	}
+	if err != nil {
 		if !was {
 			cancel()
 			c.smu.Lock()
@@ -1199,9 +1233,46 @@ func (c *Connectors) reply(b connectors.Binding, token string, m contract.Connec
 	var poll <-chan time.Time
 	errText := ""
 	l, since, turn := c.startLive(b, token, m, pace), time.Now(), 0
+	// settle gives the chat up when it is idle. It reports false when another
+	// turn runs or its events are queued. The check is under smu on purpose: a
+	// message that arrives now must see either the running turn or the cleared
+	// flag.
+	settle := func() bool {
+		c.smu.Lock()
+		tctx, tcancel := context.WithTimeout(context.Background(), 5*time.Second)
+		info, err := c.svc.Turn(tctx, b.Owner, chatID)
+		tcancel()
+		// A waiting message starts the next turn at once, and that turn may be
+		// over before this point; its events are then still queued.
+		if (err == nil && info.Running) || len(events) > 0 || st.joining > 0 {
+			c.smu.Unlock()
+			return false
+		}
+		st.active, st.grant = false, nil
+		c.smu.Unlock()
+		c.svc.access.clear(chatID)
+		return true
+	}
+	// quiet is set when settle saw a turn on its way and none of its events
+	// has come yet. The claim that starts a turn from the waiting messages is
+	// also held for a moment when it finds none, so that sign can be false:
+	// recheck then ends the reply instead of waiting for a turn that never
+	// comes, which would leave the sender refused as busy.
+	quiet := false
+	recheck := time.NewTicker(time.Second)
+	defer recheck.Stop()
 	for {
 		ended := false
+		var again <-chan time.Time
+		if quiet {
+			again = recheck.C
+		}
 		select {
+		case <-again:
+			if settle() {
+				return
+			}
+			continue
 		case ev, ok := <-events:
 			if !ok {
 				events = nil
@@ -1210,6 +1281,7 @@ func (c *Connectors) reply(b connectors.Binding, token string, m contract.Connec
 				poll = p.C
 				continue
 			}
+			quiet = false
 			l.observe(ev)
 			switch ev.Kind {
 			case session.KindError:
@@ -1236,22 +1308,11 @@ func (c *Connectors) reply(b connectors.Binding, token string, m contract.Connec
 		c.remember(b, m, chatID, ids)
 		c.sendFiles(b, token, m, chatID, turn, since, answer)
 		errText = ""
-		c.smu.Lock()
-		tctx, tcancel := context.WithTimeout(context.Background(), 5*time.Second)
-		info, err := c.svc.Turn(tctx, b.Owner, chatID) // under smu on purpose: a message that arrives now must see either the running turn or the cleared flag
-		tcancel()
-		// A waiting message starts the next turn at once, and that turn may be
-		// over before this point; its events are then still queued.
-		if (err == nil && info.Running) || len(events) > 0 {
-			c.smu.Unlock()
-			// A waiting message started the next turn.
-			l, since, turn = c.startLive(b, token, m, pace), time.Now(), 0
-			continue
+		if settle() {
+			return
 		}
-		st.active, st.grant = false, nil
-		c.smu.Unlock()
-		c.svc.access.clear(chatID)
-		return
+		// A waiting message started the next turn.
+		l, since, turn, quiet = c.startLive(b, token, m, pace), time.Now(), 0, true
 	}
 }
 

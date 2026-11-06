@@ -420,7 +420,8 @@ func (h *Handlers) ConnectorSenders(c echo.Context) error {
 	}
 	out := schema.ChatsConnectorSenderList{Senders: make([]schema.ChatsConnectorSender, 0, len(list))}
 	for _, s := range list {
-		out.Senders = append(out.Senders, schema.ChatsConnectorSender{ID: s.ID, Name: s.Name, Count: s.Count, First: s.First, Last: s.Last, Allowed: s.Allowed})
+		out.Senders = append(out.Senders, schema.ChatsConnectorSender{ID: s.ID, Name: s.Name, Count: s.Count, First: s.First, Last: s.Last, Allowed: s.Allowed,
+			Chat: s.Chat, ChatName: s.ChatName, Reason: s.Reason})
 	}
 	return c.JSON(http.StatusOK, out)
 }
@@ -485,7 +486,7 @@ func (h *Handlers) ConnectorAccess(c echo.Context) error {
 }
 
 func accessOut(v studiosvc.AccessView, lang string) schema.ChatsConnectorAccess {
-	out := schema.ChatsConnectorAccess{Binding: v.Binding, Subjects: []schema.ChatsConnectorAccessSubject{}, Recent: []schema.ChatsConnectorAccessEvent{}, Preview: v.Preview, Language: lang}
+	out := schema.ChatsConnectorAccess{ProposalMode: v.ProposalMode, Binding: v.Binding, Subjects: []schema.ChatsConnectorAccessSubject{}, Recent: []schema.ChatsConnectorAccessEvent{}, Preview: v.Preview, Language: lang}
 	for _, s := range v.Subjects {
 		o := schema.ChatsConnectorAccessSubject{ID: s.ID, Title: s.Title, NoteSave: s.NoteSave, Decisions: []schema.ChatsConnectorAccessDecision{}}
 		for _, d := range s.Decisions {
@@ -514,10 +515,10 @@ func accessOut(v studiosvc.AccessView, lang string) schema.ChatsConnectorAccess 
 		out.Approvals = append(out.Approvals, schema.ChatsConnectorToolApproval{Tool: a.Tool, Skip: a.Skip, RunsWithoutAsking: a.RunsWithoutAsking})
 	}
 	for _, e := range v.Recent {
-		out.Recent = append(out.Recent, schema.ChatsConnectorAccessEvent{At: e.At, Senders: e.Senders, Roles: e.Roles, Capability: e.Capability, Allowed: e.Allowed, Via: e.Via, Reason: e.Reason, Code: e.Code})
+		out.Recent = append(out.Recent, schema.ChatsConnectorAccessEvent{At: e.At, Senders: e.Senders, Roles: e.Roles, SenderName: e.SenderName, Chat: e.Chat, ChatName: e.ChatName, Capability: e.Capability, Allowed: e.Allowed, Via: e.Via, Reason: e.Reason, Code: e.Code})
 	}
 	for _, e := range v.ToolOutcomes {
-		o := schema.ChatsConnectorAccessEvent{At: e.At, Senders: e.Senders, Roles: e.Roles, Addon: e.Addon, Tool: e.Tool, Outcome: e.Outcome,
+		o := schema.ChatsConnectorAccessEvent{At: e.At, Senders: e.Senders, Roles: e.Roles, SenderName: e.SenderName, Chat: e.Chat, ChatName: e.ChatName, Addon: e.Addon, Tool: e.Tool, Outcome: e.Outcome, Asker: e.Asker,
 			Status: e.Status, Code: e.Reason, Message: studiosvc.ToolReasonMessage(e.Reason, e.Status)}
 		if lang != "" && e.Reason != "" {
 			key := studiosvc.ToolReasonKey(e.Reason)
@@ -553,7 +554,7 @@ func (h *Handlers) ConnectorAccessPreview(c echo.Context) error {
 		return nil
 	}
 	v, err := host.AccessPreview(c.Request().Context(), userID(c), c.Param("id"), studiosvc.AccessDraft{
-		Kind: req.Kind, AgentID: req.AgentID, AcceptAny: req.AcceptAny, Allow: req.Allow, AllowTrust: req.AllowTrust, Caps: req.Caps, Grants: grantsIn(req.Grants), Sender: req.Sender})
+		Kind: req.Kind, AgentID: req.AgentID, AcceptAny: req.AcceptAny, Allow: req.Allow, AllowTrust: req.AllowTrust, Channels: channelsIn(req.Channels), ApprovalMode: req.ApprovalMode, Caps: req.Caps, Grants: grantsIn(req.Grants), Sender: req.Sender})
 	if err != nil {
 		return failConnector(c, err)
 	}
