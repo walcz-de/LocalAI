@@ -408,6 +408,14 @@ export const chatSkillsApi = {
   // agent layer ({ agent }): see skillRef in utils/chatSkills.js.
   get: (layer, name, ref = {}) => fetchJSON(`/api/chats/skills/${enc2(layer)}/${enc2(name)}${refQuery(ref)}`),
   create: (body) => postJSON('/api/chats/skills', body),
+  // Skills in the Agent Skills format, from a zip file: { skills: [{ name, description, files, bytes, scripts }], rev }.
+  importZip: async (file) => {
+    const form = new FormData()
+    form.append('file', file, file.name)
+    return handleResponse(await fetch(apiUrl('/api/chats/skills/import'), { method: 'POST', body: form }))
+  },
+  // The skill as a zip file in the Agent Skills layout, as a Blob.
+  exportZip: async (name) => (await handleResponse(await fetch(apiUrl(`/api/chats/skills/personal/${enc2(name)}/export`)))).blob(),
   update: (layer, name, body) => fetchJSON(`/api/chats/skills/${enc2(layer)}/${enc2(name)}`, { method: 'PUT', body: JSON.stringify(body) }),
   remove: (layer, name, ref = {}) => fetchJSON(`/api/chats/skills/${enc2(layer)}/${enc2(name)}${refQuery(ref)}`, { method: 'DELETE' }),
   setOff: (chat, off) => fetchJSON(`/api/chats/${enc2(chat)}/skills`, { method: 'PUT', body: JSON.stringify({ off }) }),
@@ -543,6 +551,7 @@ export const agentJobsApi = {
 export const chatConnectorsApi = {
   list: () => fetchJSON('/api/chats/connectors'),
   kinds: () => fetchJSON('/api/chats/connectors/kinds'),
+  create: (body) => postJSON('/api/chats/connectors', body),
   enable: (id) => postJSON(`/api/chats/connectors/${enc2(id)}/enable`, {}),
   disable: (id) => postJSON(`/api/chats/connectors/${enc2(id)}/disable`, {}),
   // What each kind of sender may do on a connection, for the state in the body
@@ -551,6 +560,19 @@ export const chatConnectorsApi = {
   // Makes a binding of the caller shareable: { resource_id, shared_with }, the
   // ID of the binding in /api/shares/connection (sharesApi).
   share: (id) => postJSON(`/api/chats/connectors/${enc2(id)}/share`, {}),
+  // The login of a binding that uses OAuth: start gives { authorize_url,
+  // expires } to send the browser to; disconnect gives { revoked }, false when
+  // the service did not confirm the revocation.
+  oauthStart: (id, body) => postJSON(`/api/chats/connectors/${enc2(id)}/oauth/start`, body || {}),
+  oauthDisconnect: (id) => postJSON(`/api/chats/connectors/${enc2(id)}/oauth/disconnect`, {}),
+}
+
+// The OAuth client of an add-on (administrators). Saving approves the login
+// the add-on declares, for the digest the form showed; the secret is
+// write-only and no answer carries it.
+export const chatOAuthClientsApi = {
+  get: (addonId) => fetchJSON(`/api/chats/admin/oauth-clients/${enc2(addonId)}`),
+  save: (addonId, body) => fetchJSON(`/api/chats/admin/oauth-clients/${enc2(addonId)}`, { method: 'PUT', body: JSON.stringify(body) }),
 }
 
 // Triggers: work that starts by itself, as the user, in a new chat.
@@ -794,11 +816,12 @@ async function parseAudioBlobResponse(response) {
   return { blob, serverUrl, inputUrl, referenceUrl }
 }
 
-async function postAudioBlob(endpoint, body) {
+async function postAudioBlob(endpoint, body, signal) {
   const response = await fetch(apiUrl(endpoint), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    ...(signal ? { signal } : {}),
   })
   return parseAudioBlobResponse(response)
 }
@@ -812,6 +835,15 @@ async function postMultipartAudioBlob(endpoint, formData) {
 export const ttsApi = {
   generate: (body) => postAudioBlob(API_CONFIG.endpoints.tts, body),
   generateV1: (body) => postAudioBlob(API_CONFIG.endpoints.audioSpeech, body),
+}
+
+// Live voice mode: one reply chunk as a WAV blob.
+export const liveApi = {
+  speak: (model, text, signal) => postAudioBlob(
+    API_CONFIG.endpoints.audioSpeech,
+    { model, input: text, response_format: 'wav', stream: false },
+    signal,
+  ).then(({ blob }) => blob),
 }
 
 // Reusable voice-cloning profiles. The browser uploads multipart PCM-WAV;
@@ -856,10 +888,11 @@ export const audioTransformApi = {
 
 // Audio transcription
 export const audioApi = {
-  transcribe: async (formData) => {
+  transcribe: async (formData, signal) => {
     const response = await fetch(apiUrl(API_CONFIG.endpoints.audioTranscriptions), {
       method: 'POST',
       body: formData,
+      signal,
     })
     return handleResponse(response)
   },
