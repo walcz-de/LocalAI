@@ -95,6 +95,15 @@ const faceEmbeddingDim = 0
 const voiceEmbeddingDim = 0
 
 type Application struct {
+	// shareKinds are the services whose resource kinds are shared through
+	// the policy; shareKindsPolicy is the policy they were registered with
+	// once the owner opened it. See RegisterShareKinds.
+	shareKindsMu     sync.Mutex
+	shareKinds       []policy.KindProvider
+	shareKindsPolicy *policy.Policy
+	// hostKindsOnce registers the host's own kinds (connection, collection).
+	hostKindsOnce sync.Once
+
 	addonPolicy         *policy.Policy
 	addonStore          *policy.Store
 	addonResourceExists func(context.Context, policy.ResourceKey) (bool, error)
@@ -1128,6 +1137,9 @@ func (a *Application) startAddons() error {
 	a.addonManager = m
 	if c.InstanceID == c.OwnerID {
 		go a.runAddonAutoUpgrade(a.applicationConfig.Context, upgradeInitialDelay, upgradeCheckInterval)
+	}
+	if err := a.registerHostShareKinds(); err != nil {
+		return err
 	}
 	if err := a.startAddonGateway(); err != nil {
 		return err

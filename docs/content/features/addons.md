@@ -37,6 +37,10 @@ Trust has three parts, and they are different:
 
 Every addon requires an executable; a UI bundle alone is not an addon.
 
+The owner's resource policy also serves the resource kinds that are not add-ons.
+[Sharing resources]({{%relref "features/sharing" %}}) describes their roles, the
+grant to `@everyone` and the `/api/shares` routes.
+
 ## Internal host policy store
 
 `core/services/addons/hostsettings` provides internal, host-owned durable policy
@@ -1971,6 +1975,10 @@ draw the same thing.
   `HomeModelPicker` and `ModelSelector` stay as names for the same picker.
 - `sdk.ui` also has the settings kit, for a settings section or any form: see
   [The settings kit](#the-settings-kit).
+- `sdk.ui` also has the Share dialog, `ShareDialog`, and the role and sharing line
+  of a list row, `RoleBadge` and `SharedByBadge`. `sdk.resources.shareClient(resourceId)`
+  is the dialog's client for one resource of the add-on. See
+  [The Share dialog]({{%relref "features/sharing#the-share-dialog" %}}).
 - `sdk.theme.tokens`: the host's design tokens as CSS values (`var(--dk-...)`), for the
   add-on's own scoped style sheet: `text`, `muted`, `surface`, `inset`, `edge`, `hover`,
   `accent`, `accentText`, `accentWash`, `onAccent`, `okText`, `okWash`, `warnText`,
@@ -5540,8 +5548,10 @@ what the user may do.
 
 `sdk.core.fetch` is `fetch` with a fixed policy. It sends the cookies of the page
 (`credentials: 'same-origin'`), refuses other origins (`mode: 'same-origin'`),
-refuses redirects, and does not use the cache. It removes any `Authorization` and
-`Cookie` header that the add-on sets, and it stops when the add-on is withdrawn.
+refuses redirects, and does not use the cache. It removes any `Authorization`,
+`Cookie` and `X-LocalAI-Confirm` header that the add-on sets, and it stops when the
+add-on is withdrawn. `X-LocalAI-Confirm` marks a person's own action in their own tab,
+and add-on code is not the person.
 
 The path must be a same-origin path that starts with one `/`. These are refused with
 an `invalid_path` error before any request is made:
@@ -5551,6 +5561,13 @@ an `invalid_path` error before any request is made:
 - the add-on gateway (`/api/addons`) and the auth routes (`/api/auth`). The add-on
   gateway has its own typed calls, and the auth routes hold account credentials. The
   check uses the decoded path, so `/api/%61ddons/apps` is refused too;
+- the sharing routes: `/api/shares`, the folder sharing routes under
+  `/api/chats/files/shares`, and every API path whose last segment is `share`,
+  such as `/api/chats/agents/{id}/share`, `/api/collections/{name}/share` and
+  `/api/chats/connectors/{id}/share`. Only the person shares, in the host's Share
+  dialog: an add-on page renders `sdk.ui.ShareDialog` with
+  `sdk.resources.shareClient` for its own resources, or `sdk.ui.ConnectionShareDialog`
+  for a connector binding (see [Sharing resources]({{%relref "features/sharing#in-an-add-on" %}}));
 - an encoded `/` or `\` in the first two segments, because it can hide a segment
   boundary. In a later segment it is a normal identifier (`/api/voice-profiles/a%2Fb`).
 

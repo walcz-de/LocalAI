@@ -1829,7 +1829,7 @@ The **Files** page in the sidebar is a file browser for all of this.
 - **Filter and search.** Typing in the box filters the open folder by name. Press Enter, or choose **Search all files**, to search the names and the text of every file.
 - **Upload.** Use **Upload** (its arrow also uploads a whole folder), drop files or folders anywhere on the page, or paste with Ctrl+V; a pasted screenshot gets the date and time as its name. A drop on a folder row, or on a folder of the breadcrumb, uploads into that folder. The upload panel at the bottom right shows each file with its progress, speed and time left, and the total for all of them. You can cancel a file, try a failed one again (the panel says why it failed), and keep working: an upload keeps going when you open another folder or another page of the app, and the browser asks before you close the tab while files are still on their way. A file over the server's limit is refused before it is sent. When an upload has the name of a file that is in the folder already, the page asks: **Replace** it, **Keep both** (the new one gets a new name) or **Skip** it.
 - **Select.** Click a row to select it, Ctrl-click (Cmd on a Mac) to add one, Shift-click for a range, or use the boxes. The bar above the list then offers **Download**, **Move to…** and **Move to Trash** for the selection.
-- **Act.** Each row has a menu (⋮, or a right click): **Preview** or **Open**, **Download**, **Rename**, **Move to…** and **Move to Trash**. Drag rows onto a folder to move them there. **New folder** and **New file** add one in place, with a name you can type over. A move, a rename and a delete show a message with **Undo**.
+- **Act.** Each row has a menu (⋮, or a right click): **Preview** or **Open**, **Download**, **Rename**, **Move to…** and **Move to Trash**. A folder of your own also has **Share…** when the server has accounts (see [Share a folder of your home](#share-a-folder-of-your-home)). Drag rows onto a folder to move them there. **New folder** and **New file** add one in place, with a name you can type over. A move, a rename and a delete show a message with **Undo**.
 - **Keyboard.** Arrows move between rows (and tiles), Shift+arrows extend the selection, Space selects, Enter opens, F2 renames, Delete moves to the Trash, Ctrl+A selects all, Escape clears the selection, Backspace opens the parent folder, and typing the start of a name jumps to it.
 - **Preview.** Opening a file shows it in a side pane, the same views as the preview pane of a chat, with **Download**, **Rename**, **Move to…** and **Move to Trash**. On a phone it is a sheet from the bottom. Escape closes it.
 - **Trash and History.** The **Trash** tab restores what you deleted, deletes one item for good, or empties the Trash; each of those asks first and says how many files and how much space it removes, and **Empty Trash** is off while the Trash is empty. The **History** tab undoes a change of the open folder.
@@ -1912,7 +1912,7 @@ folders shared with them and their access.
 
 | Route | Who | Use |
 |---|---|---|
-| `GET /api/chats/shared-folders` | any user | The folders shared with you: `id`, `name`, `path`, `pages`, `mode` (`read` or `write`). |
+| `GET /api/chats/shared-folders` | any user | The folders shared with you: `id`, `name`, `path`, `pages`, `mode` (`read` or `write`). A folder a person shared from their home has `owner` (their name), `everyone` when you have it only through **Everyone**, and an empty `path`. |
 | `GET /api/chats/shared-folders/{id}` | any user | One of them; `404` when it is not shared with you. |
 | `GET /api/chats/admin/shared-folders` | administrator | Every shared folder with its `members` (`principal`, `name`, `everyone`, `mode`). |
 | `POST /api/chats/admin/shared-folders` | administrator | Create one, body `{name}`. `409` when the name is taken or the limit is reached. |
@@ -1938,6 +1938,87 @@ The LocalAI Assistant has the same operations as tools (see [LocalAI
 Assistant]({{%relref "features/localai-assistant" %}})). In a cluster the
 folders and the grants live in the shared workspace database and the audit in
 the auth database, so every frontend sees the same state.
+
+### Share a folder of your home
+
+You can share a folder of your own home with other people, without an
+administrator. Open **Files**, choose **Share…** in the menu of a folder, and
+add a person or **Everyone**, with **Can read** or **Can edit**. This is the
+same Share dialog as for agents and the other things you can share (see
+[Sharing resources]({{%relref "features/sharing" %}})).
+
+- **What you can share.** A folder inside your home: not the home itself, and
+  not a folder that LocalAI keeps or reads as your own words: `LocalAI/`,
+  `Chats/`, `Memory/`, `pages/`, a `.skills` folder anywhere, or a folder
+  inside one of them. You cannot share a folder that someone shared with you or
+  an administrator's shared folder. A person shares at most 100 folders, each
+  with at most 200 grants.
+- **What your chats use.** Your chats load your skills, your notes, your agent
+  profiles and your persona, and **Pages** runs your pages, with your own
+  rights. LocalAI leaves out anything in a folder on which another person, or
+  **Everyone**, can edit: a `.skills` folder inside a folder you share with
+  **Can edit** gives your chats no skill, and a page or a note there is not
+  yours. What you share with **Can read** stays in use. The others still see and
+  change those files as files.
+- **Who.** An active account that the search finds, or **Everyone** (every
+  account, also the ones created later). The search is the user picker of the
+  other kinds of sharing (see
+  [Sharing resources]({{%relref "features/sharing#api" %}})): it starts at three
+  characters of the display name, a part of an address finds nobody, and an
+  account without a name is found by its whole address only. It shows a name and
+  nothing else.
+- **What they see.** The folder is in their **Shared** tab with your name and
+  their access, and their chats see it at `/workspace/shared-<name>` like an
+  administrator's shared folder (`shared-<name> 2` when two have the same name).
+  Its path in your home is not shown to them. Its `pages/` are not shared pages:
+  a page runs in the browser of the person who opens it, so only an
+  administrator's shared folder can share one.
+- **Taking it back.** A lower access or a removed grant holds from their next
+  file call, on every frontend. Their chats that run with the folder on the
+  frontend that serves your change are stopped before the change answers; the
+  other frontends get the request on the chat bus and stop theirs within
+  seconds. A grant follows the folder: when you rename or move it inside your
+  home, it stays shared; when you move it to the Trash, nobody else can open
+  it, and restoring it from the Trash shares it again.
+- **Moves that keep a share where it does not belong.** A folder that is
+  shared, or that has a shared folder inside it, cannot move into another
+  person's home (also not by someone who can edit there), out of a home, or
+  into `LocalAI/`, `Chats/`, `Memory/`, `pages/` or a `.skills` folder. The
+  move is refused with `409` and type `folder_shared`, and nothing moves: stop
+  sharing it first. A folder of your home that still has a grant from before,
+  wherever it is, is in your list of shared folders and you can remove its
+  grants.
+- **Only from your browser.** Changing who has a folder, listing it and the
+  search accept only your own signed-in browser tab. An API key, an agent, a
+  tool and an MCP client cannot share anything. In local-owner mode (no
+  accounts) folders cannot be shared.
+- **Audit.** Each grant and revoke is a line of the shared folders audit, with
+  you as the one who made it.
+
+| Route | Who | Use |
+|---|---|---|
+| `GET /api/chats/files/shares` | you | The folders of your home that are shared: `id`, `name`, `path` (in your home), `sharedWith`, `everyone`; `sharing` is `false` when folders cannot be shared here. |
+| `POST /api/chats/files/shares` | you | Body `{path}`: the folder's `id` for the routes below. `403` for a folder you cannot share, and for one that does not exist. |
+| `GET /api/chats/files/shares/{id}/grants` | you, browser only | `{grants: [{userId, displayName, role}]}`; `role` is `read` or `write`. |
+| `PUT /api/chats/files/shares/{id}/grants/{principal}` | you, browser only | Body `{role}`. `principal` is an account ID from the search, or `@everyone`. |
+| `DELETE /api/chats/files/shares/{id}/grants/{principal}` | you, browser only | Remove a grant. |
+| `GET /api/chats/files/shares/{id}/users?q=` | you, browser only | Search accounts by a display-name prefix of 3 to 64 characters, or an account without a name by its whole address, at most 20, never you. `429` with type `rate_limited` after 20 searches at once, then one every 2 seconds. |
+
+"Browser only" means a same-origin `fetch` with the header `X-LocalAI-Confirm`
+equal to the folder ID, no API key and no tool, agent or MCP marker; anything
+else gets `403`. A folder you cannot share, one that does not exist and one of
+someone else get the same `403`, so a call cannot tell them apart.
+
+The grants are the same workspace grants as an administrator's, in the
+workspace database, and nothing else keeps a copy: every frontend reads them on
+every call, so a change made through one frontend holds at once on all of
+them. A frontend stops its own running chats, and sends the request to stop on
+the chat bus to the other frontends and chat workers, which stop theirs. The
+search answers on the frontend that serves the call and keeps the count of
+searches of each person in the memory of that frontend (per instance): with
+several frontends a person may search at that rate on each of them, and a
+restart resets the count. The count only slows down a person who tries many
+names; it decides no access.
 
 Files need a place to live. The choice is made at start and is explicit: with a
 database the tree goes there, and without one it goes in a JSON index.

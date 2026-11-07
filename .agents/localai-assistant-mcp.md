@@ -120,6 +120,11 @@ example Tables) follow a different, code-enforced rule, documented in
   process-wide server with no per-call principal and would inherit prompt-only
   authorization. Do not add them without a per-call actor and a host approval
   card.
+- The same holds for the sharing of the resource kinds that are not add-ons
+  (`/api/shares`): no tool maps to those routes and no source file of
+  `core/services/localaitools/` names them.
+  `core/services/localaitools/shares_unmapped_test.go` and the consumer matrix
+  test fail if one does. Sharing is never a tool.
 - New code that discovers or executes tools must be classified in
   `tools.Consumers` (`core/services/addons/tools/consumers.go`) as route or
   reject. The matrix test scans the sources and fails for an unclassified file.

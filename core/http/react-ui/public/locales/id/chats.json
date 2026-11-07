@@ -285,6 +285,19 @@
       "running": "Berjalan",
       "off": "Mati",
       "attention": "Perlu perhatian"
+    },
+    "share": {
+      "label": "Bagikan",
+      "button": "Bagikan {{name}}",
+      "intro": "Orang yang Anda tambahkan dapat memakai koneksi ini di obrolan dan agen mereka sendiri. Mereka melihat nama dan statusnya, tidak pernah tokennya atau pengaturannya. Pesan ke bot tetap sampai ke agen Anda.",
+      "roleUse": "Dapat memakai",
+      "roleUseHelp": "Dapat memakainya di obrolan dan agen mereka. Tidak dapat melihat token, mengubah, atau membagikannya."
+    },
+    "shared": {
+      "title": "Dibagikan kepada Anda",
+      "text": "Orang lain mengizinkan Anda memakai koneksi ini di obrolan dan agen Anda. Hanya pemiliknya yang dapat mengubahnya.",
+      "on": "Mendengarkan",
+      "off": "Mati"
     }
   },
   "tools": {

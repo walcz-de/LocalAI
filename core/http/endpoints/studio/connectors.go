@@ -48,15 +48,25 @@ func connectorOut(i studiosvc.ConnectorInfo, lang string) schema.ChatsConnector 
 	if allow == nil {
 		allow = []string{}
 	}
-	inbound := i.InboundMedia
-	if inbound == nil {
-		inbound = []string{}
-	}
 	return schema.ChatsConnector{Caps: capsOut(i.Caps), Grants: grantsOut(i.Grants), Paired: pairedOut(i.Paired), ID: i.ID, Name: i.Name, Kind: i.Kind, Addon: i.AddonID, Active: i.Active, Reason: i.Reason, AgentID: i.AgentID, CredentialsOnly: i.CredentialsOnly(), Enabled: i.Enabled, AcceptAny: i.AcceptAny,
 		Allow: allow, AllowTrust: i.AllowTrust, NotifyChat: i.NotifyChat, HasToken: i.HasToken, Created: i.Created,
 		ReplyMode: i.ReplyMode(), Conversation: i.ConversationMode(), WindowMinutes: i.WindowMinutes, SendFiles: i.SendsFiles(), ReplyLanguage: i.ReplyLang(), UILanguage: i.UILanguage, Options: i.Options,
 		Files: filesOut(i.Files), FileReceiveMaxBytes: i.FileReceiveMax, FileSendMaxBytes: i.FileSendMax, Resources: connectors.ResourceKeys(i.Resources), Channels: channelsOut(i.Channels), WriteMode: i.Writes(), Approval: approvalOut(i.Approval), Duplicate: duplicateOut(i, lang),
-		InboundMedia: inbound}
+		Share: shareOut(i.Share)}
+}
+
+func shareOut(s *studiosvc.ShareState) *schema.ChatsConnectorShare {
+	if s == nil {
+		return nil
+	}
+	return &schema.ChatsConnectorShare{ResourceID: s.ResourceID, SharedWith: s.SharedWith}
+}
+
+// sharedConnectorOut is the only view of a binding that a grantee gets: it is
+// built field by field from the safe view, never from the binding.
+func sharedConnectorOut(v studiosvc.SharedConnectorView) schema.ChatsSharedConnector {
+	return schema.ChatsSharedConnector{ID: v.ID, Name: v.Name, Kind: v.Kind, Addon: v.AddonID, Enabled: v.Enabled, Active: v.Active, Reason: v.Reason,
+		Owner: v.OwnerName, Role: v.Role}
 }
 
 func approvalOut(a connectors.Approval) schema.ChatsConnectorApproval {
@@ -168,8 +178,7 @@ func connectorIn(req schema.ChatsConnectorWrite) studiosvc.ConnectorInput {
 	return studiosvc.ConnectorInput{Kind: req.Kind, Name: req.Name, Token: req.Token, AgentID: req.AgentID, Enabled: req.Enabled,
 		AcceptAny: req.AcceptAny, Allow: req.Allow, AllowTrust: req.AllowTrust, NotifyChat: req.NotifyChat,
 		Reply: req.ReplyMode, Conversation: req.Conversation, WindowMinutes: req.WindowMinutes, SendFiles: req.SendFiles, ReplyLanguage: req.ReplyLanguage, UILanguage: req.UILanguage, Options: req.Options,
-		FileReceiveMax: req.FileReceiveMaxBytes, FileSendMax: req.FileSendMaxBytes, Caps: req.Caps, Grants: grantsIn(req.Grants), Resources: req.Resources, ConfirmAnyResource: req.ConfirmAnyResource, ConfirmWiderToken: req.ConfirmWiderToken, ConfirmDuplicate: req.ConfirmDuplicate, Channels: channelsIn(req.Channels), WriteMode: req.WriteMode, Approval: approvalIn(req.Approval),
-		InboundMedia: req.InboundMedia}
+		FileReceiveMax: req.FileReceiveMaxBytes, FileSendMax: req.FileSendMaxBytes, Caps: req.Caps, Grants: grantsIn(req.Grants), Resources: req.Resources, ConfirmAnyResource: req.ConfirmAnyResource, ConfirmWiderToken: req.ConfirmWiderToken, ConfirmDuplicate: req.ConfirmDuplicate, Channels: channelsIn(req.Channels), WriteMode: req.WriteMode, Approval: approvalIn(req.Approval)}
 }
 
 var connectorRules = []errRule{
@@ -179,7 +188,11 @@ var connectorRules = []errRule{
 	// A host denial is not a failure of the server. The text names no part of the
 	// check (the add-on, the agent, the token), so it tells a caller nothing to probe.
 	fixed(http.StatusForbidden, typeAuthz, "you are not allowed to do this with this connector", connectors.ErrForbidden),
+	fixed(http.StatusConflict, typeSharingDisabled, "sharing is not available on this server", studiosvc.ErrSharingOff),
 }
+
+// typeSharingDisabled is the error type of /api/shares for the same answer.
+const typeSharingDisabled = "sharing_disabled"
 
 func failConnector(c echo.Context, err error) error {
 	var dup *studiosvc.DuplicateError
@@ -204,7 +217,7 @@ func failConnector(c echo.Context, err error) error {
 
 // ListConnectors lists the bindings.
 // @Summary List your connector bindings.
-// @Description A binding connects a bot of a messaging platform (served by a connector add-on, such as Telegram) to one of your saved agents. A person who messages the bot talks to that agent, in a conversation of their own, as you: your quota, your model allowlist and only the agent's grants apply.
+// @Description A binding connects a bot of a messaging platform (served by a connector add-on, such as Telegram) to one of your saved agents. A person who messages the bot talks to that agent, in a conversation of their own, as you: your quota, your model allowlist and only the agent's grants apply. shared lists the bindings that other people shared with you, with their name, state and owner only: you may use them in your chats and agents and nothing else. sharing is false when this server cannot share bindings (no named accounts). A binding you shared carries share, with its ID in /api/shares/connection.
 // @Tags chats
 // @Success 200 {object} schema.ChatsConnectorList "Your bindings, sorted by name"
 // @Router /api/chats/connectors [get]
@@ -213,15 +226,51 @@ func (h *Handlers) ListConnectors(c echo.Context) error {
 	if !ok {
 		return nil
 	}
-	list, err := host.ListConnectors(c.Request().Context(), userID(c))
+	ctx := c.Request().Context()
+	list, err := host.ListConnectors(ctx, userID(c))
 	if err != nil {
 		return failConnector(c, err)
 	}
-	out := schema.ChatsConnectorList{Connectors: make([]schema.ChatsConnector, 0, len(list))}
+	out := schema.ChatsConnectorList{Connectors: make([]schema.ChatsConnector, 0, len(list)), Shared: []schema.ChatsSharedConnector{}, Sharing: host.SharingEnabled()}
 	for _, i := range list {
 		out.Connectors = append(out.Connectors, connectorOut(i, connectorLang(c)))
 	}
+	shared, err := host.SharedConnectors(ctx, userID(c))
+	if err != nil {
+		return failConnector(c, err)
+	}
+	for _, v := range shared {
+		out.Shared = append(out.Shared, sharedConnectorOut(v))
+	}
 	return c.JSON(http.StatusOK, out)
+}
+
+// ShareConnector makes a binding shareable.
+// @Summary Make a connector binding shareable.
+// @Description Returns the ID of the binding in the sharing API: the owner then lists, grants and revokes access with /api/shares/connection/{resource_id}/grants. The only role is use, and a binding is never shared with @everyone. A grantee may use the binding in their chats and agents, and never reads its token or its settings. Only the owner may call it: any other caller gets 404, as for a binding that does not exist. 409 sharing_disabled when this server cannot share bindings.
+// @Tags chats
+// @Param id path string true "the binding's id"
+// @Success 200 {object} schema.ChatsConnectorShare "The share of the binding"
+// @Failure 404 {object} schema.ErrorResponse "Not your binding"
+// @Failure 409 {object} schema.ErrorResponse "Sharing is not available on this server"
+// @Router /api/chats/connectors/{id}/share [post]
+func (h *Handlers) ShareConnector(c echo.Context) error {
+	host, ok := h.connectorHost(c)
+	if !ok {
+		return nil
+	}
+	ctx := c.Request().Context()
+	if _, err := host.EnsureShare(ctx, userID(c), c.Param("id")); err != nil {
+		return failConnector(c, err)
+	}
+	i, err := host.GetConnector(ctx, userID(c), c.Param("id"))
+	if err != nil {
+		return failConnector(c, err)
+	}
+	if i.Share == nil {
+		return failConnector(c, studiosvc.ErrSharingOff)
+	}
+	return c.JSON(http.StatusOK, shareOut(i.Share))
 }
 
 // ConnectorKinds lists the kinds of binding that installed add-ons serve.
@@ -303,7 +352,7 @@ func (h *Handlers) GetConnector(c echo.Context) error {
 
 // UpdateConnector replaces a binding.
 // @Summary Replace a connector binding.
-// @Description The body replaces every field except the token, which is kept unless the request has a new one, and send_files, reply_language and inbound_media, which are kept when absent. A new token is checked with the platform: a token that the platform refuses is a 400 and nothing is saved.
+// @Description The body replaces every field except the token, which is kept unless the request has a new one, and send_files and reply_language, which are kept when absent. A new token is checked with the platform: a token that the platform refuses is a 400 and nothing is saved.
 // @Tags chats
 // @Param id path string true "the binding's id"
 // @Param request body schema.ChatsConnectorWrite true "the binding"

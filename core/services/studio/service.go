@@ -104,6 +104,14 @@ type Deps struct {
 	MCPConnectors *mcpconns.Service
 	// Agents holds the saved agents. Nil: a chat cannot name an agent.
 	Agents agents.Store
+	// AgentShares is the sharing policy of saved agents (share kind
+	// "agent"). Nil, or not Available: agents are not shared, and a chat
+	// names only its owner's agents.
+	AgentShares AgentShares
+	// ReferenceShares maps the collections and connections an agent names
+	// to their IDs in the sharing API, so the owner can share them with the
+	// agent. Nil: they cannot be shared from the agent's Share dialog.
+	ReferenceShares ReferenceShareResolver
 	// Notify stores and delivers notifications. Nil: there is no inbox.
 	Notify *notify.Service
 	// Push sends notifications to browsers. Nil: browser push is off.
@@ -180,6 +188,9 @@ type Deps struct {
 	// whatever their status, for the members of a shared folder. Nil: Users
 	// looks members up by ID, and with no Users any principal is a member.
 	FindUser func(ctx context.Context, ref string) (*auth.User, error)
+	// FolderDirectory is the account directory people pick from when they
+	// share a folder of their own home. Nil (no accounts): they cannot.
+	FolderDirectory sharedfolders.Directory
 	// Builtins is the registry of the built-in chat tools an add-on may
 	// replace. Nil: the service makes one. The service registers bash in it
 	// when HostExec is set.
@@ -367,6 +378,8 @@ type Service struct {
 	outcomes outcomeLimiter
 	bus      Bus
 	log      *slog.Logger
+	// stopFolderWatch ends the listener of folderAccessKey.
+	stopFolderWatch func()
 	// beforeNext runs before the next turn is started from the waiting
 	// messages, after the end of the last one is announced. Only the specs set
 	// it.
@@ -555,7 +568,9 @@ func New(d Deps) (*Service, error) {
 	s.providerHealth, s.providerTimings = newProviderHealth(), defaultProviderTimings()
 	s.registerMemorySlot()
 	s.ctxfiles = contextfiles.NewLoader(contextfiles.NewRegistry(), homeReader{f: d.Files}, log)
-	s.shared = sharedfolders.New(sharedfolders.Options{Files: d.Files, Consents: d.PageConsents, Audit: d.SharedFolderAudit, Users: s.folderUsers()})
+	s.shared = sharedfolders.New(sharedfolders.Options{Files: d.Files, Consents: d.PageConsents, Audit: d.SharedFolderAudit, Users: s.folderUsers(),
+		Directory: d.FolderDirectory, AccessLost: s.folderAccessLost})
+	s.stopFolderWatch = s.bus.OnControl(folderAccessKey, s.onFolderAccess)
 	// A chat mounts the shared folders of its owner at /workspace/shared-<name>.
 	mgr, err := session.New(session.Options{Store: d.Store, Workspace: d.Files.Store(), Harness: h, StateDir: d.StateDir, Inputs: s.inputs, ChatTools: s.chatTools,
 		Shared: s.shared.Roots, Resolve: s.resolveAccess, ProductScope: s.productScope, Logger: log})
@@ -637,6 +652,9 @@ func (s *Service) Close(ctx context.Context) error {
 	}
 	if s.feed != nil {
 		s.feed.Close()
+	}
+	if s.stopFolderWatch != nil {
+		s.stopFolderWatch()
 	}
 	if s.stopServing != nil {
 		s.stopServing()
@@ -779,10 +797,14 @@ func (s *Service) Create(ctx context.Context, user string, in CreateInput) (sess
 
 // CreateAs creates a conversation of user that was started by origin: a person
 // (the zero Origin), a trigger or a connector. The agent, when named, must be
-// the user's own.
+// the user's own, or, for a chat a person starts, an agent shared with them:
+// the chat then runs as the user with the agent's definition. A trigger or a
+// connector runs only its owner's agents.
 func (s *Service) CreateAs(ctx context.Context, user string, in CreateInput, origin Origin) (session.ChatRecord, error) {
 	model := in.Model
 	scoped := false
+	// shared says the agent is another person's, shared with user.
+	shared := false
 	var agentOn []string
 	if in.Assistant {
 		if in.AgentID != "" {
@@ -799,14 +821,21 @@ func (s *Service) CreateAs(ctx context.Context, user string, in CreateInput, ori
 		if s.d.Agents == nil {
 			return session.ChatRecord{}, ErrAgentsOff
 		}
-		ag, err := s.d.Agents.Get(ctx, principal(user), in.AgentID)
+		var ag agents.Agent
+		var err error
+		if origin.Kind == "" {
+			ag, err = s.chatAgent(ctx, principal(user), in.AgentID)
+		} else {
+			ag, err = s.ownAgent(ctx, user, in.AgentID)
+		}
 		if err != nil {
 			return session.ChatRecord{}, err
 		}
 		if ag.Model != "" {
 			model = ag.Model
 		}
-		agentOn = ag.BuiltinsOn
+		shared = ag.Principal != principal(user)
+		agentOn = grantedOn(ag, shared)
 		if ag.HasFolder() {
 			// A chat never starts on the whole home in place of a folder
 			// that is missing or not chosen.
@@ -846,6 +875,8 @@ func (s *Service) CreateAs(ctx context.Context, user string, in CreateInput, ori
 		// A chat a person starts gets the instance default, or the network
 		// of its saved agent when the agent sets one, under the ceiling. An
 		// unattended run follows its agent's network field at each check.
+		// An agent of another person never widens the person's own default:
+		// its owner's choice runs with the person's authority.
 		set, err := s.egressSettings(ctx)
 		if err != nil {
 			return session.ChatRecord{}, err
@@ -853,7 +884,7 @@ func (s *Service) CreateAs(ctx context.Context, user string, in CreateInput, ori
 		rec.Egress = egress.ChatState{Preset: set.DefaultPreset()}
 		if in.AgentID != "" {
 			if n := s.agentNetwork(ctx, rec); n != egress.PresetOff {
-				rec.Egress.Preset = egress.Min(n, set.Ceiling)
+				rec.Egress.Preset = egress.Min(n, startLimit(set, shared))
 			}
 		}
 	}
@@ -861,6 +892,26 @@ func (s *Service) CreateAs(ctx context.Context, user string, in CreateInput, ori
 		return session.ChatRecord{}, err
 	}
 	return rec, nil
+}
+
+// startLimit is the widest network a chat a person starts may get from its
+// saved agent: the ceiling for the person's own agent, the person's own
+// default for an agent shared with them.
+func startLimit(set egress.Settings, shared bool) egress.Preset {
+	if shared {
+		return set.DefaultPreset()
+	}
+	return set.Ceiling
+}
+
+// grantedOn are the opt-in groups of built-in tools that a new chat of the
+// agent starts with. A chat of the person's own starts with none of them, so
+// an agent shared with the person turns none on: the person turns them on.
+func grantedOn(ag agents.Agent, shared bool) []string {
+	if shared {
+		return nil
+	}
+	return ag.BuiltinsOn
 }
 
 // Get returns a conversation the user owns.
@@ -1342,8 +1393,16 @@ func (s *Service) startFromPending(ctx context.Context, p, conv string) (bool, e
 
 // startTurn runs msg as a turn the claim runID already covers.
 func (s *Service) startTurn(ctx context.Context, p, conv, runID string, msg session.Message) error {
+	// A chat with an agent shared with its owner runs as admitted work of
+	// the agent's sharing record: a lowering or a revocation stops it.
+	release, recheck, err := s.admitAgentTurn(ctx, p, conv)
+	if err != nil {
+		_ = s.d.Store.ReleaseTurn(ctx, p, conv, runID, store.TurnFailed)
+		return err
+	}
 	chat, err := s.chat(ctx, p, conv)
 	if err != nil {
+		release()
 		_ = s.d.Store.ReleaseTurn(ctx, p, conv, runID, store.TurnFailed)
 		return err
 	}
@@ -1359,7 +1418,7 @@ func (s *Service) startTurn(ctx context.Context, p, conv, runID string, msg sess
 			}
 		}
 	})
-	end := func() { stopBeat(); stopListening() }
+	end := func() { stopBeat(); stopListening(); release() }
 	// The cards still pending in the record belong to an earlier turn, whose
 	// frontend may have died: nobody waits on them any more.
 	s.expireConsents(ctx, p, conv, "")
@@ -1367,6 +1426,7 @@ func (s *Service) startTurn(ctx context.Context, p, conv, runID string, msg sess
 	s.runs[k] = &run{id: runID, started: time.Now(), end: end, chat: chat}
 	s.rings[k] = newEventRing(runID, ringMaxEvents, ringMaxBytes)
 	s.mu.Unlock()
+	recheck()
 	s.recordOwner(ctx, p, conv, runID)
 	msg.Media = s.keepVideos(k, msg.Media)
 	if err := chat.Send(context.WithoutCancel(ctx), msg); err != nil {

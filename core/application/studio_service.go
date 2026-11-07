@@ -19,6 +19,8 @@ import (
 	"github.com/mudler/LocalAI/core/http/auth"
 	endpointsaddons "github.com/mudler/LocalAI/core/http/endpoints/addons"
 	mcpendpoint "github.com/mudler/LocalAI/core/http/endpoints/mcp"
+	"github.com/mudler/LocalAI/core/services/addons/gateway"
+	"github.com/mudler/LocalAI/core/services/addons/resources"
 	"github.com/mudler/LocalAI/core/services/advisorylock"
 	"github.com/mudler/LocalAI/core/services/nodes"
 	"github.com/mudler/LocalAI/core/services/studio"
@@ -141,31 +143,38 @@ func (a *Application) initStudioService() {
 		MCP:                a.studioMCP,
 		MCPServers:         a.studioModelMCPServers,
 		Agents:             a.studioAgents,
-		Notify:             inbox,
-		Push:               pusher,
-		AddonTools:         lateStudioAddons{a},
-		Assistant:          studioAssistant{a},
-		ClientTools:        studioAssistant{a},
-		Collections:        studioCollections{a},
-		ContextTokens:      a.studioContextTokens,
-		RemoteModel:        a.studioRemoteModel,
-		PageConsents:       a.studioPageConsents(),
-		SharedFolderAudit:  a.studioSharedFolderAudit(),
-		Proposals:          a.studioProposalStore(),
-		UserSetting:        a.studioUserSetting,
-		SetUserSetting:     a.studioSetUserSetting,
-		EgressSettings:     a.studioEgressSettings,
-		EgressAudit:        a.studioEgressAudit(),
-		EgressAuditDays:    func() int { return a.applicationConfig.EffectiveChatsEgressAuditDays() },
-		FindUser:           a.studioFindUser(),
-		SharedPagesOn:      func() bool { return !a.applicationConfig.DisableSharedPages },
-		Modalities:         a.studioModalities,
-		MCPContent:         studioMCPContent{a: a},
-		AgentOptions:       a.studioAgentOptions,
-		Persistent:         a.studioStoreKind != "memory",
-		Files:              a.StudioFiles(),
-		Media:              media.New(a.studioProvider, media.UserLookup(a.studioUsers()), a.studioHelperModel).WithVisionChooser(a.studioVisionModel).WithClient(a.studioMediaClient),
-		Web:                a.studioWeb,
+		// Saved agents are shared through the policy of the add-on owner.
+		// The owner process holds it; a frontend reaches it through the
+		// add-on carrier (addonSharingForward). Without either no agent is
+		// shared through this process, which fails closed.
+		AgentShares:       studio.PolicyAgentShares{Policy: a.AddonPolicy, Forward: a.addonSharingForward},
+		ReferenceShares:   a.studioReferenceShares,
+		Notify:            inbox,
+		Push:              pusher,
+		AddonTools:        lateStudioAddons{a},
+		Assistant:         studioAssistant{a},
+		ClientTools:       studioAssistant{a},
+		Collections:       studioCollections{a},
+		ContextTokens:     a.studioContextTokens,
+		RemoteModel:       a.studioRemoteModel,
+		PageConsents:      a.studioPageConsents(),
+		SharedFolderAudit: a.studioSharedFolderAudit(),
+		Proposals:         a.studioProposalStore(),
+		UserSetting:       a.studioUserSetting,
+		SetUserSetting:    a.studioSetUserSetting,
+		EgressSettings:    a.studioEgressSettings,
+		EgressAudit:       a.studioEgressAudit(),
+		EgressAuditDays:   func() int { return a.applicationConfig.EffectiveChatsEgressAuditDays() },
+		FindUser:          a.studioFindUser(),
+		FolderDirectory:   a.studioFolderDirectory(),
+		SharedPagesOn:     func() bool { return !a.applicationConfig.DisableSharedPages },
+		Modalities:        a.studioModalities,
+		MCPContent:        studioMCPContent{a: a},
+		AgentOptions:      a.studioAgentOptions,
+		Persistent:        a.studioStoreKind != "memory",
+		Files:             a.StudioFiles(),
+		Media:             media.New(a.studioProvider, media.UserLookup(a.studioUsers()), a.studioHelperModel).WithVisionChooser(a.studioVisionModel).WithClient(a.studioMediaClient),
+		Web:               a.studioWeb,
 	}
 	if a.studioMCPConns != nil {
 		deps.MCPConnectors = a.studioMCPConns
@@ -230,6 +239,11 @@ func (a *Application) initStudioService() {
 	}
 	a.studioService = svc
 	svcRef.Store(svc)
+	// The kind "agent" registers with the policy when the add-on owner opens
+	// it, or at once when it is already open.
+	if err := a.RegisterShareKinds(svc); err != nil {
+		xlog.Warn("Chats: saved agents cannot be shared", "error", err)
+	}
 	a.startStudioReaper(svc)
 	a.startStudioEgressPrune(svc)
 	if a.applicationConfig.Distributed.ChatWorker {
@@ -709,6 +723,56 @@ func (a *Application) studioFindUser() func(ctx context.Context, ref string) (*a
 		}
 		return nil, studio.ErrNoUser
 	}
+}
+
+// studioFolderDirectory is the account directory people pick from when they
+// share a folder of their own home: the user picker of the sharing routes,
+// with its rules and its own rate per person. The picker is this frontend's
+// own, so the rate is counted per frontend, not for the whole cluster.
+// Without an account database there is none and folders are not shared by
+// their owners.
+func (a *Application) studioFolderDirectory() sharedfolders.Directory {
+	if a.authDB == nil {
+		return nil
+	}
+	u := auth.NewAddonUsers(a.authDB)
+	return folderDirectory{u: u, picker: resources.NewAccountPicker(func() resources.AccountFinder { return u.Accounts }, 0, 0, nil)}
+}
+
+type folderDirectory struct {
+	u      *auth.AddonUsers
+	picker *resources.AccountPicker
+}
+
+func (d folderDirectory) Accounts(ctx context.Context, caller, query string, limit int) ([]sharedfolders.User, error) {
+	list, err := d.picker.Search(ctx, caller, "", query, limit, nil)
+	switch {
+	case errors.Is(err, gateway.ErrSearchLimited):
+		return nil, sharedfolders.ErrSearchLimited
+	case errors.Is(err, gateway.ErrInvalidRequest):
+		return nil, sharedfolders.ErrBadQuery
+	case err != nil:
+		return nil, err
+	}
+	out := make([]sharedfolders.User, 0, len(list.Users))
+	for _, r := range list.Users {
+		out = append(out, sharedfolders.User{ID: r.ID, Name: r.DisplayName})
+	}
+	return out, nil
+}
+
+func (d folderDirectory) Active(ctx context.Context, id string) (sharedfolders.User, error) {
+	if err := d.u.Active(ctx, id); err != nil {
+		if errors.Is(err, gateway.ErrForbidden) {
+			return sharedfolders.User{}, sharedfolders.ErrUnknownUser
+		}
+		return sharedfolders.User{}, err
+	}
+	names, err := d.u.Lookup(ctx, []string{id})
+	if err != nil {
+		return sharedfolders.User{}, err
+	}
+	return sharedfolders.User{ID: id, Name: names[id]}, nil
 }
 
 // studioPageConsents opens the store of the consents to shared pages, beside
