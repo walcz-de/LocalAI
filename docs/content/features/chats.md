@@ -124,7 +124,38 @@ curl -N localhost:8080/api/chats/3f1c.../events
 # The transcript, in order. Read it first, then open the event stream: the
 # stream carries only what happens after you connect.
 curl -s 'localhost:8080/api/chats/3f1c.../messages?after=0'
+
+# After a dropped connection, send the id of the last event you got.
+curl -N 'localhost:8080/api/chats/3f1c.../events?after=9d2e41.57'
 ```
+
+The events of a running turn have an id, `<run>.<n>`, sent as the SSE `id` field.
+A client that lost its connection sends the last id back in the `after` query
+parameter, or in the `Last-Event-ID` header (a browser sends that header when it
+reconnects by itself; the header wins). The server first sends the events it
+missed, then the live ones. Deltas of text and reasoning that came one after the
+other are not sent again, and the ones the client had are cut off. The server
+keeps the last 2048 events or 4 MiB of each running chat, and the ring stays
+for 30 seconds after the turn ends, so a client that reconnects at once also
+gets `turn_end`. Events that do not come from the turn itself (`files`, `goal`,
+`loops`, `cleared` and the cards) have no id and are not replayed: they tell
+the client to read the record again.
+
+When the server cannot give what was missed, the stream starts with a `resync`
+event. This happens when the id is of another turn, is older than the ring
+holds, or is not an id of this server, and in a cluster when the server that
+runs the turn is gone or does not answer in 2 seconds. Read the transcript, then
+go on: the `resync` event carries the id of the newest event known, when there
+is one, and the live events follow it. A gap in the numbers of the live events
+is filled from the ring in the same way.
+
+A user can have 8 event streams open on one chat on one server; one more gets
+HTTP 429 until one closes. The counter `localai_chat_event_resyncs_total` counts
+the reconnects that got a `resync`, by `reason`: `local` (the ring of this server
+did not have the events), `owner` (the ring of the server that runs the turn did
+not have them), `unreachable` (that server did not answer) and `no_owner` (no
+other server is known to run the turn). A steady rate of `local` or `owner`
+says that the ring is too small for your clients' gaps.
 
 The transcript lists messages, tool lines and one checkpoint line per turn.
 Undo works per tool call, not per turn: each `write_file`, `edit_file` or
@@ -258,6 +289,69 @@ stop it. Type `/loop` in the message box, or use the API.
   run in which the model calls neither ends the loop with a note, so a loop
   never goes on silently. The chat has these two tools only while it has a
   self-paced loop.
+- **Started by the model.** A chat without a self-paced loop gives the model
+  the `start_loop` tool. When the model tells you that it will check, wait or
+  retry later, it calls `start_loop` with the prompt of each run, how long to
+  wait before the first run (`first_run_after`, such as `2m`) and a short
+  reason. The loop starts at once and does not ask you first. You see it as a
+  line above the message box with the reason, and you can pause or stop it.
+  The limits below apply: the minimum wait, the loops per chat and per user,
+  and the run limit. The tool is offered in your chats, in chats of a saved
+  agent (whatever tools the agent allows), in sub-agent chats, and in chats
+  that a trigger, a job or a page started. It is not offered in chats that a
+  connector started, because the sender can be someone from outside, or when
+  loops are off. A loop in a chat that a trigger, a job or a page started ends
+  after a fifth of the run limit (20 runs by default).
+- **Sub-agents.** A sub-agent can start a loop, end its turn and wait. The
+  parent is not told that the sub-agent finished until its loop ends: by
+  `loop_done`, the run limit, a pause after failed runs, or a stop. Then the
+  parent gets the last result. Meanwhile the sub-agent shows as running, and it
+  counts once against the limit of background sub-agents. Stopping the parent
+  or the sub-agent ends the loop. You cannot start a loop in a sub-agent chat
+  yourself.
+- **Waits: `wait_for`.** A model that says "I will wait until the download is
+  done" can arm a wait. A wait is a loop whose check is code, not a model call:
+  the server polls a source and calls the model once. The source is a
+  read-only tool of the same chat with fixed arguments (for example a tool that
+  lists downloads; the chat must be allowed to call it, and only tools whose
+  name says they read, such as `list_*`, `get_*`, `search_*` or `*_status`, can
+  be polled), or a URL, which is read like `web_fetch` and so passes the same
+  checks. The condition is `change` (the output differs from the first check),
+  `match` (a regular expression) or `json_equals` (a JSON field equals a
+  value). The first check sets a baseline and never wakes the model; an error
+  is not a change. The model wakes when the condition holds, when the source
+  fails `max_errors` checks in a row (3 by default), or at the timeout (`timeout_seconds`; 1
+  hour by default, 24 hours at most). Failure and timeout wake it too, and the
+  wake-up text says plainly that the condition was *not* met. The check
+  interval (`interval_seconds`) is at least the loop minimum. The tool is nib's
+  own `wait_for`, answered by the server; it takes no `script`. A wait is listed with the loops (the
+  API gives it `kind: "wait"`), counts against the same limits, and you stop it
+  like a loop. A sub-agent that arms a wait stays running until it ends, as with
+  a loop.
+- **Tools of a sub-agent.** The names of the tools the parent gave a sub-agent
+  are stored with its chat. After a restart, or when another frontend runs its
+  next loop run, the sub-agent gets back those tools, limited to what the
+  parent may use at that time: it never gains a tool, and a tool that is gone is
+  removed with a short note to the model.
+- **Waiting for sub-agents: `wait_agents`.** A chat that started background
+  sub-agents can wait for them with `ids` (empty: all that run now) and a mode,
+  `all` or `any_failed_or_all`. The wait is bounded by `timeout_seconds` (30 seconds by
+  default, from 10 seconds to 10 minutes); at the timeout the tool returns the
+  current statuses and the sub-agents keep running. An unknown id is reported
+  at once. `spawn_agent` with `wait` set to true returns after at most two
+  minutes of waiting for a sub-agent that ended its turn and holds for a loop
+  or a wait; the sub-agent then goes on in the background and its result
+  arrives as a message.
+- **The promise guard.** When the last answer of a turn promises a later
+  check or action ("I'll check in a few minutes", "Controllo tra poco") and
+  nothing is armed in the chat (no active or running loop or wait, no running
+  sub-agent, no queued message), the server adds one short note for the model
+  and the model gets one more turn: arm a loop, a wait or a background
+  sub-agent now, or tell you plainly that it cannot watch. It happens at most
+  once per turn. In a chat that a connector started, where the model cannot
+  arm anything, the note only asks it to say so plainly. Sub-agent reports are
+  not checked. The matcher reads English, Italian, Spanish, French and German
+  and ignores questions, offers and promises that wait for you.
 - **The prompt** is plain text, or a skill: `/<skill-name>` (or
   `/skill <name>`) and its words. Each run sends it as that skill command
   would: the transcript shows the words and the skill's chip. Other slash
@@ -355,6 +449,19 @@ curl -X PATCH .../api/chats/3f1c... -H 'Content-Type: application/json' -d '{
   decides to compact the conversation. It does not reload the model.
 - A new `title` (1 to 80 characters) or `model` needs a chat with no turn running (409 otherwise).
   The history stays when the model changes.
+
+In the web UI, the **Effort** chip in the message box (next to Tools and
+Skills, on the chat page and on the Home page) and the chat settings sheet (`/settings`, or the sliders icon in the
+chat header) show and change the same `reasoning_effort`. The chip and the
+effort buttons in the sheet apply at once. In the sheet, temperature, top P and
+top K are sliders with a number box and a reset button; an empty value means
+the model's own default. The sliders cover 0 to 2 (temperature), above 0 to 1
+(top P) and 0 to 200 (top K). You can type a larger top K in the box. These
+values and the system prompt and context size are sent when you press **Save
+settings**. `reasoning_effort` `none` asks the model not to think.
+
+A level picked on the Home page is saved to the new chat when it is created,
+before the first message is sent, and the chat page opens with it.
 
 ### Context meter and speed
 
@@ -1249,6 +1356,7 @@ and `/model ` the chat models, `/loop stop ` the loops of the chat.
 | `/model`, `/models` | Open the model list; with a name, switch to that model. |
 | `/new`, `/chats` | Start a new chat, or open the list of your chats. |
 | `/find`, `/settings`, `/export`, `/delete` | Search this chat, open its settings, download it as Markdown, delete it. |
+| `/effort` | Open the reasoning effort menu of this chat. |
 | `/<skill>`, `/skill <name>` | Run the message with one of the skills of this chat (see below). |
 | `/skills` | Open the Skills page, where you write and manage skills (see [Skills](#skills)). |
 | `/agent <name> <task>` | Hand the task to one of your saved agents (see below). |
@@ -1370,17 +1478,26 @@ it off, so a chat that never touches the menu works as before:
 | **Your files** | `files` | `list_files`, `read_file`, `write_file`, `edit_file`, `move_file`, `delete_file`, `search_files` and `read_document` |
 | **Web** | `web` | `web_search` and `web_fetch` |
 | **Images and audio** | `media` | `describe_image` and `transcribe_audio` |
+| **LocalAI client** | `localai_client` | The inference tools of the [LocalAI Assistant]({{% relref "features/localai-assistant#tool-groups" %}}): `generate_image`, `speak`, `embed`, `voice_profile` and more. Each one is offered only when your account has its feature and an installed model can serve it. Saving a voice with `voice_profile` shows a card where you confirm that the speaker agreed; nothing is saved before |
 | **Knowledge** | `collections` | `list_collections` and `search_collection` |
 | **Sub-agents** | `subagents` | `spawn_agent` |
 | **Saved agents** | `saved_agents` | `list_agents` and the `agent` argument of `spawn_agent` (opt-in) |
 | **Past chats** | `history` | `search_chats` and `read_chat` (opt-in; see [Past chats](#past-chats)) |
 | **Triggers** | `triggers` | `propose_trigger`, `list_triggers`, `update_trigger` and `delete_trigger` |
 | **Memory** | `memory` | Your notes: the model reads them before it answers and may save new ones (see [Memory](/features/short-memory/)). Switch it off to make the chat private: it neither reads nor saves memory |
+| **LocalAI admin** | `localai_admin` | The tools that manage this server (administrators only, opt-in; see [LocalAI Assistant]({{% relref "features/localai-assistant#tool-groups" %}})). A chat in assistant mode has it on. It is never offered in a messaging chat or a run that starts by itself, whatever the agent switches on |
 | **Suggested changes** | `changes` | `propose_change` and `revert_change`: a model asks to change your notes, an agent profile, a skill, a page or the dashboard, and you confirm (see [change proposals](/features/addons/#change-proposals-from-chats)); for memory notes only, you can choose in your account settings to have them saved at once with an Undo, or never (see [Memory](/features/short-memory/#choose-how-a-note-is-saved)) |
 
 ```bash
 curl -s -X PUT localhost:8080/api/chats/$ID/builtins -d '{"off":["web","files"]}'
 ```
+
+The two LocalAI groups are large, so on a small context window a chat may not send
+them in full: it sends `tool_search`, `tool_describe` and `tool_call` instead, and the
+model finds and runs their tools through them, under the same permissions. The setting
+`chats_tool_search` (`auto`, `on` or `off`) decides; see
+[Tool search]({{% relref "features/localai-assistant#tool-search" %}}). The tools panel marks
+such a group with `"deferred":true`.
 
 `off` replaces the earlier list, and a name that is not a group is refused
 (400). A group the server does not offer is not listed: **Your files** and
@@ -1542,7 +1659,9 @@ The **Skills** page lists them by layer and edits personal skills, and the **Ski
 
 A chat stores the skills that are **off**, not the skills that are on. So **Select all** sends an empty list, **Disable all** sends the ids of every skill in the list, and a skill you add later is on in every chat, also in a chat where you chose **Disable all**. The menu says so under its title.
 
-The server ships three built-in skills: `writing-skills`, `localai-workspace`, and `localai-apps`.
+The server ships these built-in skills: `writing-skills`, `localai-workspace`, `localai-apps` and `localai`.
+`localai` teaches the model the [LocalAI client tools]({{% relref "features/localai-assistant#client-tools" %}}): when to use each one, how to clone a voice and what to say when a model is missing or a permission is refused. A chat lists it only while it has the **LocalAI client** group, so it costs nothing when the group is off. An add-on cannot replace it, as for the other skills that describe LocalAI itself.
+An administrator's chat that has the **LocalAI admin** group also lists one skill per admin recipe, named `localai-admin-<recipe>`, such as `localai-admin-install-chat-model`. Nobody else sees them. See [the prompt and the recipes]({{% relref "features/localai-assistant#the-prompt-and-the-recipes" %}}).
 `localai-workspace` describes changes to your persona, profile, shortcuts, Home widgets, and theme;
 see [Make LocalAI yours](/features/make-localai-yours/).
 `localai-apps` describes how to build an app, tracker, or tool as a [Page]({{%relref "features/pages" %}}).
@@ -1882,7 +2001,7 @@ The JSON files are for one LocalAI process. A cluster needs PostgreSQL, as
 
 In [distributed mode]({{% relref "features/distributed-mode" %}}) any frontend can serve any request about any chat.
 
-**State mode: shared.** Chats, their messages, the waiting messages and the claim that lets one turn run at a time live in PostgreSQL. Live events travel over the message bus, so a client connected to one frontend sees a turn that another frontend runs. Events are delivered at most once: a client that missed some reads the transcript.
+**State mode: shared.** Chats, their messages, the waiting messages and the claim that lets one turn run at a time live in PostgreSQL. Live events travel over the message bus, so a client connected to one frontend sees a turn that another frontend runs. Events are delivered at most once. The ring of recent events that serves a reconnect is per instance, on purpose: it is a cache of the live tail on the frontend or chat worker that runs the turn, and the transcript is the record. The process that runs a turn records its instance id (`LOCALAI_INSTANCE_ID`) on the chat. A reconnect that reaches another frontend asks that process for the missed events over the message bus (request and reply on `chats.replay.<instance>`), in replies of at most 512 KiB. When that process is gone, does not answer in 2 seconds, or no longer has the events, the client gets a `resync` and reads the transcript. The cap of 8 event streams per chat and user is per frontend.
 
 **Sub-agents.** The runs are chats in the shared store, linked to their parent. The background limit, the list of runs and "stopping a chat stops its sub-agents" all read the store, so they hold when the turns of one chat run on different frontends. A stop reaches a run on another frontend over the bus. The tool subset of a running sub-agent is kept in the memory of the frontend that runs it, which is where it runs. A sub-agent started from a saved agent keeps nothing in memory (stateless): the agent is named on its chat record, and its tools are read from the store at each turn, as for any chat with an agent. The chat's saved agents switch is stored with the chat, and the permission is checked again at each call, so every frontend gives the same answer.
 
@@ -1894,7 +2013,15 @@ In [distributed mode]({{% relref "features/distributed-mode" %}}) any frontend c
 
 **From any frontend** you can send a message, edit or cancel a waiting message, read the transcript, stop the turn and stream events. A stop travels over the bus to the frontend that runs the turn.
 
-**If a frontend dies.** A running turn records a heartbeat every 15 seconds. One frontend, chosen by a PostgreSQL advisory lock, ends turns that have not beaten for a minute. Such a turn ends as `interrupted`, its waiting messages stay, and `send-now` starts them. A standalone process with a database does the same once at startup, for turns its previous run left behind.
+**If a frontend dies.** A running turn records a heartbeat every 15 seconds. One frontend, chosen by a PostgreSQL advisory lock, ends turns that have not beaten for a minute. Such a turn ends as `interrupted`, its waiting messages stay, and `send-now` starts them. A standalone process with a database does the same once at startup, for turns its previous run left behind. On a normal stop the server marks the turns it cuts short as interrupted itself, and it does not wait for them for good: closing the chats is bounded (15 seconds), and a turn that does not stop in time is marked interrupted in the database before the process exits, with its resume scheduled like a turn that died.
+
+**Resuming by itself.** With `--chats-auto-resume` (`LOCALAI_CHATS_AUTO_RESUME`, off by default) the server goes on with an interrupted turn without anyone pressing Retry. The state lives in the chat's row, so it survives a restart of any process: a count of tries, the time of the interruption and the time of the next try. The same frontend that ends stale turns checks for due resumes at each tick (30 seconds), and a chat worker takes the start when workers are on. The claim on the chat decides when two frontends race, or when a person presses Retry at the same moment: one turn starts. A turn is resumed at most 3 times, after 15 seconds, 1 minute and 5 minutes, and only within 30 minutes of the interruption. A new message from you starts a normal turn and the count begins again. While a resume is scheduled the chat reads `will_resume: true` (with `resume_attempts`) and the page waits instead of resuming too. A run of a trigger, a job or a loop stays running until the resumed turn ends, a goal stays active, and a failed run is reported only when the last try is spent. A chat that a messaging connection started is not resumed by the server: its reply is sent by the process that died, so the sender is told the turn was interrupted. A sub-agent chat is not resumed either; its parent decides.
+
+**Calls that a restart cut in two.** The transcript is the checkpoint: each finished message and tool result is a line of its own. A call in flight has no result line, and running it again could do its work twice. So a call of a tool that may change something leaves an internal line before it runs (`tool_intent`: the tool name and the start of its arguments; the API never returns it). If the turn is resumed and an intent has no result after it, the model is told that those calls started, that it is not known whether they took effect, and to check the state before it repeats one. Only tools that only read skip the line: the add-on tools of kind read, the built-in tools declared read only, and a fixed list (the file, search, collection and web tools). A tool that nobody classified, such as an MCP tool, counts as one that may change something. A result is matched to an intent by the tool name, so two parallel calls of one tool can hide one unknown outcome. The effects that the host sends itself (the webhooks of a job, the notification of a run, the report of a trigger) do not repeat: each is sent when the run ends, behind its own once-only record, and the run ends only after the last try.
+
+**The answer that was being written.** A message is stored as a line when it ends, so a process that is killed in the middle of a long answer would lose it. While a message streams, the server saves its text so far into the chat record every 2 seconds, or when 4 KiB of new text have come (not more than four times a second), and clears it when the line is stored. A message that ends in under 2 seconds writes nothing. When the next turn starts (a resume, or a new message of yours) a text that is still there becomes an assistant line, kept as it was when last saved, up to 128 KiB. A resume also tells the model where its message stopped, so that it goes on from there. A graceful stop does not need this: the turn that Close cuts short stores its text as it ends.
+
+In terms of the [distributed state rule]({{% relref "features/distributed-mode" %}}): the resume state is shared (it is in the chat row), and the sweep is single-runner (the advisory lock of the reaper).
 
 The JSON files are not supported in a cluster, as the Storage table says.
 
@@ -1909,8 +2036,8 @@ An admin can start a chat that has the tools to manage the instance (install
 models and backends, edit model configs, check status). It starts from the Home
 page with `/assistant`, or over the API with `assistant: true` in
 `POST /api/chats`. It is an ordinary chat in the list after that. Only that chat
-has the tools, never its sub-agents. The `localai_assistant_enabled` setting
-turns the feature on and off. See [LocalAI Assistant](/features/localai-assistant/).
+has the tools, never its sub-agents. The `chats_localai_admin` setting
+turns the admin tools off. See [LocalAI Assistant](/features/localai-assistant/).
 
 ## Chats in the web UI
 
@@ -2087,7 +2214,7 @@ When a turn fails, the thread shows one banner: "The reply failed", the reason i
 | The provider behind the model returned an error | The provider or a proxy answered with a server error several times in a row. | Retry in a moment, then check the provider. |
 | The model took too long to answer / The turn was cancelled | A timeout, or the turn was stopped. | Retry, or use a smaller or faster model. |
 
-The banner stands after the messages, tool calls and results that the turn produced before it failed: nothing of them is removed. **Retry** goes on from where the turn stopped (`POST /api/chats/{id}/resume`). The model keeps its own state, so a tool call that already has a result is not made again, a step that did not finish is done again, the messages you sent while the turn ran stay, and a summary made by a compaction stays as it is. A second click, or a click in another window, starts nothing. To answer your last message again from the start, use **Regenerate** on the message.
+The banner stands after the messages, tool calls and results that the turn produced before it failed: nothing of them is removed. **Retry** goes on from where the turn stopped (`POST /api/chats/{id}/resume`). The model keeps its own state, so a tool call that already has a result is not made again, a step that did not finish is done again, the messages you sent while the turn ran stay, and a summary made by a compaction stays as it is. A turn that a restart of the server interrupted can be resumed the same way. With `--chats-auto-resume` the server does it, and the card says that the server is going on by itself while it waits. The chat shows such a turn as **The reply was interrupted**, keeps everything written so far, and resumes it by itself after a short wait: up to 3 tries, with a wait that doubles from 3 seconds up to 30 seconds. **Stop trying** cancels the wait, and **Retry** resumes at once and starts the count again. Only an interrupted turn is resumed this way; a turn that failed (a model error, a refused key) waits for you, and so does an interruption older than 10 minutes. When the connection to the server is lost for more than two seconds, the chat says "Connection lost. Reconnecting." until it is back. A second click, or a click in another window, starts nothing. To answer your last message again from the start, use **Regenerate** on the message.
 
 The reason is stored with the chat, so a reload shows the same banner as the live page, for a day after the turn. A new turn clears the banner.
 
