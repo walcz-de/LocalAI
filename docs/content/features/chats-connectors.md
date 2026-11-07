@@ -177,7 +177,7 @@ The GitHub add-on lets your [saved agents](/features/chats-agents/) read reposit
 
 This connection does not listen for `@mentions` on GitHub yet. An agent works on GitHub only when you ask it in a chat.
 
-The agent field is optional. A connection without an agent shows **Credentials only** in the list: it holds the token, the repository list and the write mode for your chats, and it never answers a message. It cannot be switched on, take an allowlist, send notifications or hold permissions; the server refuses those with a message that asks for an agent. This is the manifest key `agentOptional` of the kind (see [Connector add-ons](/features/addons/)), which the GitHub kind declares; Telegram and Slack bindings always need an agent. Over the API, `agent_id` may be empty for such a kind and the connection reports `credentials_only: true`.
+A tool-only connection has no agent. The GitHub kind is tool-only, like the Home Assistant, Jellyfin, Mail and PiKVM kinds: the form has no Agent field, and a connection answers no message. Many agents can use one connection. Each agent chooses it in its own **Account it uses** list (see [Agents](/features/chats-agents/)), and the connection says **Used by N agents** in the list and in its pane, or **Not used by any agent**. The count is of your own saved agents. The server clears `agent_id` on every save and on every read, so an older connection that still held an agent shows none. It cannot be switched on, accept anyone, take an allowlist, send notifications or hold permissions, and the server refuses `enabled` and `accept_any` with a message. This is the manifest key `toolOnly` of the kind (see [Connector add-ons](/features/addons/)). Telegram and Slack bindings always need an agent. Over the API the connection reports `agent_id: ""`, `credentials_only: true` and `used_by`, the number of your saved agents that hold the connection; the kind reports `tool_only: true` and `agent_optional: true`.
 
 The list is checked by LocalAI before the add-on is called, so an agent is refused any repository that is not covered by it, even if the token could reach it. The token is kept sealed and is never shown again, and no tool result contains it. A call uses one of the connections that your chat enabled: with one connection it is enabled, with several you tick the ones the chat may use in the **Tools** menu of the chat (or the agent names a set), and until then the GitHub tools are not offered. With two or more enabled, the model names the connection in each call, and only an enabled one is accepted. LocalAI never picks one for you, and the list of the connection that was named is the only one that applies. See [The connections of an add-on](/features/chats/#the-connections-of-an-add-on).
 
@@ -919,19 +919,33 @@ add-on.
 
 - **Capabilities** (`caps`). The ceiling you enable for a binding, from a closed list
   (`proposals.confirm`, `memory.write`, `files.upload`, `triggers.propose`,
-  `triggers.run`, `talkback.channels`, `tools.write`, and the sensitive `talkback.new_channel`,
-  `profile.write`, `skills.write`, `pages.write`, `dashboard.write`, `knowledge.write`). The default is
+  `triggers.run`, `talkback.channels`, `tools.write`, `loops.wait`, and the sensitive `talkback.new_channel`,
+  `profile.write`, `skills.write`, `pages.write`, `dashboard.write`, `knowledge.write`, `loops.start`). The default is
   no: a binding with none enabled lets a sender talk to the agent, but the agent can
   not use any of these on the sender's behalf. A binding saved before permissions
   were enforced has none, so the first start after the upgrade gives it the usual set
-  once, the same six that **Allow the usual** turns on (`proposals.confirm`,
+  once, the same seven that **Allow the usual** turns on (`proposals.confirm`,
   `memory.write`, `files.upload`, `triggers.propose`, `triggers.run`,
-  `talkback.channels`; never a sensitive one). It only touches a binding with no
+  `talkback.channels`, `loops.wait`; never a sensitive one). It only touches a binding with no
   capability whose kind lists permissions, and it logs one line for each binding it
   changes. It runs once for the whole store, also with several frontends, and never
   again, so a binding you clear later stays cleared. A binding you cleared before that
   start cannot be told from one never set and gets the set too. To keep the strict
   state, set `LOCALAI_SKIP_BINDING_CAPS_MIGRATION=true` before the first start.
+  A second one-time migration adds `loops.wait` to each binding that already has some
+  capability and lacks it, so a bot that existed before `loops.wait` can use waits
+  without a change by you. A binding with no capability stays with none. You can switch
+  `loops.wait` off afterwards and it stays off. The same variable skips it.
+- **Loops and waits.** `loops.wait` lets the model wait for a change (`wait_for`,
+  `wait_agents`). A wait is checked by code and costs no model call until it ends, so
+  the capability is not sensitive: a listed or paired sender holds it, and it is on by
+  default (in the usual set, and added to existing bindings once). `loops.start`
+  lets the model start a loop (`start_loop`, then `schedule_next` and `loop_done`).
+  Each run of a loop is a model call that nobody asked for at that moment, so the
+  capability is sensitive: only a paired sender holds it, and a bot that accepts
+  anyone never gives it to an unpaired sender. `loops.start` is off by default and never part of a
+  preset: the owner ticks it. A loop that a connector chat started ends after a fifth of
+  the run limit, as a loop of a trigger does. See [Loops](/features/chats/#loops-repeat-a-prompt-in-a-chat).
 - **Roles and grants** (`grants`). An add-on can declare roles, such as the admins of
   a workspace, and report the roles of each sender. You map a role to capabilities
   with `grants: [{"role", "caps"}]`. A grant is within `caps`, within what the kind
@@ -1083,7 +1097,7 @@ owner paired with this bot"). The model is told to relay it and not to say that 
 no such tool. Today this gates the
 agent's change proposals (`memory.write` for a memory note, `profile.write` for a
 profile), files sent to the bot (`files.upload`), the trigger tools
-(`triggers.propose`), and the confirm phrase (`proposals.confirm`), which answers trigger proposals and change proposals alike. Messages from a
+(`triggers.propose`), the loop tools (`loops.start` for `start_loop`, `schedule_next` and `loop_done`; `loops.wait` for `wait_for` and `wait_agents`), and the confirm phrase (`proposals.confirm`), which answers trigger proposals and change proposals alike. Messages from a
 sender who may not send files get a short refusal and no turn.
 
 A binding that was stored before this check has no capabilities. Enable what you want
@@ -1566,7 +1580,7 @@ first stops every share of it.
 
 | Method and path | Who may call it | Result |
 |---|---|---|
-| `GET /api/chats/connectors` | Anyone with the `connectors` feature | `connectors` are your bindings; one you shared carries `share` with `resource_id` and `shared_with`. `shared` are the bindings shared with you, each with `id`, `name`, `kind`, `addon`, `enabled`, `active`, `owner` (a display name) and `role` (`use`). `sharing` is `false` when this server cannot share bindings. |
+| `GET /api/chats/connectors` | Anyone with the `connectors` feature | `connectors` are your bindings; one of a tool-only kind carries `used_by`, the number of your saved agents that use it; one you shared carries `share` with `resource_id` and `shared_with`. `shared` are the bindings shared with you, each with `id`, `name`, `kind`, `addon`, `enabled`, `active`, `owner` (a display name) and `role` (`use`). `sharing` is `false` when this server cannot share bindings. |
 | `POST /api/chats/connectors/{id}/share` | The owner | `{"resource_id": "...", "shared_with": n}`: the ID of the binding in the sharing API. Another caller gets `404`; a server that cannot share answers `409` with type `sharing_disabled`. |
 
 The grants are then listed and changed with

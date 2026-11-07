@@ -1663,7 +1663,7 @@ The four compatibility ranges above are integers that every published add-on sta
 without making every published add-on incompatible, so the host also has a **feature
 level**: one integer that counts the additive manifest features it understands.
 
-- The host declares its level (`contract.HostFeatureLevel`). This version has level 4.
+- The host declares its level (`contract.HostFeatureLevel`). This version has level 5.
   A host that predates the levels is level 1.
 - A manifest may set `featureLevel` (a positive integer, default 1). It states the level
   the add-on needs. A manifest that uses a field of a higher level must say so: the
@@ -1671,6 +1671,7 @@ level**: one integer that counts the additive manifest features it understands.
   `capabilities.resources.nounPlural` or `i18n.<language>.resources` and does not declare
   `featureLevel: 2`. `capabilities.ownerData` is level 3.
   The setup text (`setup` on the manifest, `kinds[].setup` and the `setup` of a kind translation) is level 4.
+  `kinds[].toolOnly` is level 5.
 - A host with a lower level refuses the add-on with the plain reason **needs a newer
   LocalAI**. The add-on is not installed and not upgraded. A failed install or upgrade has
   the cause `needs_newer_host`, and an update check shows the add-on as incompatible with
@@ -2761,6 +2762,7 @@ The manifest declares the capability. It needs no tool and no `service` flag:
 | `kinds[].delivery` | `pull`: the host asks for updates (long polling). `push`: the add-on calls the host operation `connector.inbound`. |
 | `kinds[].page` | Optional. The add-on page that adds and edits bindings; it must be a declared page. The Connectors page links to it. |
 | `kinds[].agentOptional` | Optional, manifest `api` 2. `true` lets a binding of the kind have no agent. Such a binding is credentials only: it holds the token, the resource list and the write mode, and the host never delivers a message to it, polls for it, answers from it or authorizes a sender on it. The host refuses an empty agent together with listening, accepting senders, an allowlist, a notification chat, talk-back channels, permissions, pairing or trigger approval. Without the key every binding of the kind needs an agent. |
+| `kinds[].toolOnly` | Optional, feature level 5. `true` marks a kind whose bindings only serve tools: one binding is used by many agents, each through its own set of connections. It implies `agentOptional`. A binding of the kind never has an agent, never listens and never accepts senders: the host clears the agent on every save and read, and refuses `enabled` and `acceptAny`. The connector list returns `used_by`, the number of the person's saved agents that hold the binding, and the kinds list returns `tool_only`. A manifest that uses it must declare `featureLevel: 5`. |
 | `kinds[].wildcardResources` | Optional. `true` lets a binding of the kind list `owner/*` (every resource of one owner) or `*` (every resource the credential reaches) in its resources. The host matches them before the add-on is called, without regard to case and on whole names; a star anywhere else is refused, `*` must be the only entry, and saving `*` needs the confirmation `confirm_any_resource` = `allow any resource`. Without the key every entry is an exact name. |
 | `kinds[].tokenGuards` | Optional list of `{prefix, option, allow}`. The host refuses a credential that starts with `prefix` unless the binding set the kind option `option` to `allow`, and asks for `confirm_wider_token` = `accept wider token` when the option is turned on. It is checked when the token is saved and again each time it is used. `option` and `allow` must exist in the kind's `options`. At most 4. |
 | `toolDefinitions[].enumerates` | Optional, on a read tool of an add-on with credentials. The tool lists what the credential reaches, names no resource, and runs only for a binding whose list is `*` (the kind needs `wildcardResources`). The request carries the resource key `*`. |
@@ -2770,7 +2772,7 @@ The manifest declares the capability. It needs no tool and no `service` flag:
 | `kinds[].options` | Optional, manifest `api` 2, at most 4. A choice that each binding of the kind makes: `{"id", "title", "description", "values": [{"id", "title"}], "default"}` with 2 to 8 values and a default among them. The host shows the choice on the binding page, checks the owner's value against the declaration, stores it, and sends the value in effect to the add-on in `options` of every `poll`. What the option means is the add-on's own rule. |
 | `kinds[].files` | Optional. The files the kind can receive and send, with a limit for each. Needs manifest `api` 2. See [File abilities and limits](#file-abilities-and-limits). |
 | `kinds[].roles` | Optional, manifest `api` 2, at most 8. A role the kind can give to a sender: `{"id", "title", "description"}`, with an `id` in the same form as a kind `id`. The add-on owns the membership (for example, the admins of a workspace) and sends the role IDs of the sender in `roles` of each message, at most 8. The host drops a role the kind does not declare, and all roles for a kind that declares none. The owner of a binding maps each role to capabilities in the host. |
-| `kinds[].permissions` | Optional, manifest `api` 2, at most 13. The capabilities the kind can grant to a role, from the host's closed list: `proposals.confirm`, `memory.write`, `files.upload`, `triggers.propose`, `triggers.run`, `talkback.channels` and the sensitive `talkback.new_channel`, `profile.write`, `skills.write`, `pages.write`, `dashboard.write`, `knowledge.write`. An unknown name is refused. A sensitive name may be listed, but it is never granted to a role: only a sender that the owner paired can use it. |
+| `kinds[].permissions` | Optional, manifest `api` 2, at most 15. The capabilities the kind can grant to a role, from the host's closed list: `proposals.confirm`, `memory.write`, `files.upload`, `triggers.propose`, `triggers.run`, `talkback.channels`, `loops.wait` and the sensitive `talkback.new_channel`, `profile.write`, `skills.write`, `pages.write`, `dashboard.write`, `knowledge.write`, `loops.start`. An unknown name is refused. A sensitive name may be listed, but it is never granted to a role: only a sender that the owner paired can use it. |
 
 **Outbound: the connector route.** The host calls `POST /connector` on the add-on
 with the same bearer credential and incarnation header as every other route and a body
@@ -6178,7 +6180,9 @@ The guest image, `runsc` and the KVM programs are not part of the add-on's sourc
 
 The guest image carries exactly these programs and libraries for the model to use (the model is told this list in the prompt of each chat that has the Sandbox):
 
-python3 (pandas, openpyxl, docx, pptx, pypdf, Pillow), pip, jq, ripgrep (rg), sqlite3, zip, unzip, file, tree, poppler (pdftotext, pdftoppm), git, curl
+python3 (pandas, matplotlib, openpyxl, docx, pptx, pypdf, Pillow), pip, jq, ripgrep (rg), sqlite3, zip, unzip, file, tree, poppler (pdftotext, pdftoppm), git, curl
+
+matplotlib draws charts without a display: it writes PNG and SVG files, and the model can save them in the user's files. Its font cache is kept in `/tmp`.
 
 It does not have Node.js or npm, ImageMagick, ffmpeg or OCR. The command line runs as an unprivileged user and `apt` is blocked by the proxy, so nothing can be installed from inside the guest with a system package manager. `pip` can install Python packages within the chat's network setting (see [Network access](#network-access)). Adding a program means a new guest image. The build of the image fails when one of these programs is missing or does not start (`addons/sandbox/images/guest/check-tools.sh`).
 

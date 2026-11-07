@@ -88,7 +88,7 @@ what runs (`chats`, `agents`, `triggers`, `connectors`).
 | `LOCALAI_DISABLE_TRIGGERS` | `false` | Turns off the trigger runner. Trigger routes answer `409 triggers_off`. |
 | `LOCALAI_DISABLE_CONNECTORS` | `false` | Turns off the connector bots. Connector routes answer `409 connectors_off`. |
 | `LOCALAI_DISABLE_CONNECTOR_TALKBACK` | `false` | Turns off `send_message` and the reports of triggers to a channel for every connector binding. |
-| `LOCALAI_SKIP_BINDING_CAPS_MIGRATION` | `false` | Skips the one-time grant of the usual permissions to connector bindings that have none. |
+| `LOCALAI_SKIP_BINDING_CAPS_MIGRATION` | `false` | Skips the one-time grant of the usual permissions to connector bindings that have none, and the one-time add of `loops.wait` to existing bindings. |
 | `LOCALAI_DISABLE_AGENTS` | `false` | Deprecated. It kept the meaning it had in the old agent pool, which also held the knowledge base: it sets `LOCALAI_DISABLE_CHATS` and `LOCALAI_DISABLE_COLLECTIONS`, and logs a warning. |
 
 `LOCALAI_DISABLE_COLLECTIONS` stays separate and turns off only the
@@ -298,10 +298,20 @@ stop it. Type `/loop` in the message box, or use the API.
   The limits below apply: the minimum wait, the loops per chat and per user,
   and the run limit. The tool is offered in your chats, in chats of a saved
   agent (whatever tools the agent allows), in sub-agent chats, and in chats
-  that a trigger, a job or a page started. It is not offered in chats that a
-  connector started, because the sender can be someone from outside, or when
-  loops are off. A loop in a chat that a trigger, a job or a page started ends
-  after a fifth of the run limit (20 runs by default).
+  that a trigger, a job or a page started. It is not offered when loops are
+  off. In a chat that a connector started (Telegram, Slack and so on), the
+  sender can be someone from outside, so the tools follow the access model of
+  the bot: `start_loop`, `schedule_next` and `loop_done` need the capability
+  `loops.start` and a verified (paired) sender, and `wait_for` and
+  `wait_agents` need the capability `loops.wait` and a listed or paired
+  sender. `loops.wait` is on by default for new bots and is added once to
+  existing bots; `loops.start` is off until the owner ticks it, as for any
+  other capability (see [Chats: connectors](/features/chats-connectors/)).
+  A bot that accepts anyone gives neither to a sender who is not paired. The
+  server checks the capability again when the model calls the tool. A loop in
+  a chat that a trigger, a job, a page or a connector started ends after a fifth
+  of the run limit (20 runs by default). The runs of a loop have no sender, so
+  a connector chat keeps `schedule_next` and `loop_done` while its loop runs.
 - **Sub-agents.** A sub-agent can start a loop, end its turn and wait. The
   parent is not told that the sub-agent finished until its loop ends: by
   `loop_done`, the run limit, a pause after failed runs, or a stop. Then the
@@ -348,8 +358,9 @@ stop it. Type `/loop` in the message box, or use the API.
   sub-agent, no queued message), the server adds one short note for the model
   and the model gets one more turn: arm a loop, a wait or a background
   sub-agent now, or tell you plainly that it cannot watch. It happens at most
-  once per turn. In a chat that a connector started, where the model cannot
-  arm anything, the note only asks it to say so plainly. Sub-agent reports are
+  once per turn. In a chat that a connector started, the note names only the tools that the
+  sender may use (see above); with none, it only asks the model to say so
+  plainly. Sub-agent reports are
   not checked. The matcher reads English, Italian, Spanish, French and German
   and ignores questions, offers and promises that wait for you.
 - **The prompt** is plain text, or a skill: `/<skill-name>` (or
@@ -650,7 +661,8 @@ curl -X POST .../api/chats/import -d "{\"chat\": $(cat chat.json)}"
 Attach files with `multipart/form-data` on `POST /api/chats/{id}/messages`
 (see above). In the chat page, one **Attach file** button takes files of any
 type (images, audio, documents, archives such as `.zip`); you can also paste an
-image or drop files on the chat. What the model gets depends on the file and
+image, or drag files over the page and drop them. The same works on Home. A
+drag of text is ignored, and with files off nothing is staged. What the model gets depends on the file and
 the model:
 
 - **Images.** When the chat's model can look at images (a multimodal
@@ -858,7 +870,9 @@ In the chat:
 - **The Files pane** lists what the chat made for you first. The working
   files are in a group of their own under it, **Working files · N**, folded
   and quieter; open it to see and preview them. The files you attached are
-  listed as before.
+  listed as before. **Download all files as ZIP**, at the top of the pane,
+  saves every file of the list, working files included, in one ZIP with the
+  folder layout kept. It is off when the list is empty.
 - **The preview** that opens by itself after a turn shows the newest file
   that is not a working file. A working file never opens it by itself.
 - **The chips under the answer** name only what the chat made for you.
@@ -1829,7 +1843,7 @@ The **Files** page in the sidebar is a file browser for all of this.
 - **Filter and search.** Typing in the box filters the open folder by name. Press Enter, or choose **Search all files**, to search the names and the text of every file.
 - **Upload.** Use **Upload** (its arrow also uploads a whole folder), drop files or folders anywhere on the page, or paste with Ctrl+V; a pasted screenshot gets the date and time as its name. A drop on a folder row, or on a folder of the breadcrumb, uploads into that folder. The upload panel at the bottom right shows each file with its progress, speed and time left, and the total for all of them. You can cancel a file, try a failed one again (the panel says why it failed), and keep working: an upload keeps going when you open another folder or another page of the app, and the browser asks before you close the tab while files are still on their way. A file over the server's limit is refused before it is sent. When an upload has the name of a file that is in the folder already, the page asks: **Replace** it, **Keep both** (the new one gets a new name) or **Skip** it.
 - **Select.** Click a row to select it, Ctrl-click (Cmd on a Mac) to add one, Shift-click for a range, or use the boxes. The bar above the list then offers **Download**, **Move to…** and **Move to Trash** for the selection.
-- **Act.** Each row has a menu (⋮, or a right click): **Preview** or **Open**, **Download**, **Rename**, **Move to…** and **Move to Trash**. A folder of your own also has **Share…** when the server has accounts (see [Share a folder of your home](#share-a-folder-of-your-home)). Drag rows onto a folder to move them there. **New folder** and **New file** add one in place, with a name you can type over. A move, a rename and a delete show a message with **Undo**.
+- **Act.** Each row has a menu (⋮, or a right click): **Preview** or **Open**, **Download**, **Rename**, **Extract here** (on an archive; see [Extract an archive](#extract-an-archive)), **Move to…** and **Move to Trash**. A folder of your own also has **Share…** when the server has accounts (see [Share a folder of your home](#share-a-folder-of-your-home)). Drag rows onto a folder to move them there. **New folder** and **New file** add one in place, with a name you can type over. A move, a rename and a delete show a message with **Undo**.
 - **Keyboard.** Arrows move between rows (and tiles), Shift+arrows extend the selection, Space selects, Enter opens, F2 renames, Delete moves to the Trash, Ctrl+A selects all, Escape clears the selection, Backspace opens the parent folder, and typing the start of a name jumps to it.
 - **Preview.** Opening a file shows it in a side pane, the same views as the preview pane of a chat, with **Download**, **Rename**, **Move to…** and **Move to Trash**. On a phone it is a sheet from the bottom. Escape closes it.
 - **Trash and History.** The **Trash** tab restores what you deleted, deletes one item for good, or empties the Trash; each of those asks first and says how many files and how much space it removes, and **Empty Trash** is off while the Trash is empty. The **History** tab undoes a change of the open folder.
@@ -1841,6 +1855,25 @@ folder per chat. **Files** lists your own files first and these two last,
 under **Managed by LocalAI**; the list API marks them with `managed`
 (`localai` or `chats`). Moving one to the Trash or renaming it asks first and
 says what stops working.
+
+### Extract an archive
+
+Choose **Extract here** in the menu of an archive on the Files page to unpack it. For a large archive this is the best way: the server does the work and no chat is needed. The same call is `POST /api/chats/files/extract {"path": "/report.zip"}`. Add `"dest": "/some/folder"` to choose the folder.
+
+- **Formats.** ZIP, TAR, and TAR with gzip, bzip2, xz, zstd, brotli, lz4 or snappy (`.tar.gz`, `.tgz`, `.tar.bz2`, `.tar.xz`, `.tar.zst` and so on). 7z and RAR are off by default; see [7z and RAR](#7z-and-rar-risk). A single compressed file, such as `notes.txt.gz`, is not an archive and is refused.
+- **Where the files go.** By default into a new folder next to the archive, named like it without the extension: `report.zip` and `report.tar.gz` both give `report/`. When that name is taken, the folder is `report 2`, `report 3` and so on. With `dest`, the files go into that folder, which is created when it is missing. A folder that LocalAI manages (`LocalAI`, `Chats`, `Memory`, `pages`, `.skills`) is refused.
+- **One change.** All files are written as one change, so one **Undo** removes the whole extraction. The toast that shows the result has the Undo button. The change is also in the History tab.
+- **A name that is taken.** An existing file is never replaced. The new file is saved next to it as a copy named `name (from <user>).ext`, and the answer lists it under `conflicts`. A file with the same content as the existing one is not written again.
+- **What is skipped.** Symbolic links, hard links, devices, sockets and pipes are not extracted. A name that is not valid UTF-8, a name that the Files page does not allow, a path deeper than 64 levels, a repeated name, an encrypted ZIP entry and a file over 256 MiB are skipped too. The answer lists them under `skipped` with a reason. A nested archive is written as a plain file; it is not unpacked.
+- **Paths that leave the folder.** An entry with an absolute path, a `..` part or a NUL byte makes the whole archive refused with a 400 error, and nothing is written. A backslash in a name counts as a folder separator.
+- **Limits.** The limits are counted on the bytes that are really read, not on the sizes that the archive says. They are: most bytes in all files (1 GiB by default), most entries (20,000 by default), 256 MiB for one file, a ratio of 1,000 between the expanded size and the size read (checked after 64 MiB), and 10 minutes. An archive over a limit writes nothing and the answer says which limit it was (413, or 408 for the time). An administrator sets the first two in **Settings > Tools** (`chats_extract_max_bytes` and `chats_extract_max_entries`, see [Runtime settings](/features/runtime-settings/)).
+- **Names with other encodings.** A ZIP made by an old tool may store names in a local code page. Those names are not valid UTF-8, so they are skipped and listed. Extract such an archive in a chat sandbox with a tool that knows the code page.
+
+The model has no tool for this on purpose: a tool would cost tokens in every chat. A chat can unpack a small archive in its sandbox. The `localai` skill tells the model to point you to the Files page for a large one.
+
+#### 7z and RAR (risk) {#7z-and-rar-risk}
+
+The readers for 7z and RAR run inside the LocalAI server. They take sizes from the file and allocate memory for them before they read any data, and they have no memory limit. A crafted 7z or RAR file can make the server run out of memory and stop. For this reason they are off by default. An administrator can turn them on with **Extract: allow 7z and RAR** (`chats_extract_7z_rar`). Do this only when you trust every user who can upload files. The byte, entry, time and ratio limits still apply, but they cannot stop an allocation that happens before the first byte is read. ZIP and TAR are not affected: the ZIP entry count is read from the end of the file and checked before the reader loads the directory, and the zstd and xz readers have a fixed memory cap.
 
 ### Your own rules: AGENTS.md
 
