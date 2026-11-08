@@ -83,8 +83,8 @@ func (s *Service) chatTools(ctx context.Context, x session.Access) (session.Turn
 		// The loop tools come last: a sub-agent may arm a loop of its own and
 		// wait, whatever tools its parent gave it.
 		tools = append(slices.Clone(tools), s.loopTools(ctx, a, rec)...)
-		// The folder line goes first so the note cap never cuts it (#1668); the
-		// date line follows (fork: chats_date_note).
+		// The folder line goes first so the note cap never cuts it (upstream #13153); the
+		// date line follows (fork: chats_date_note, mudler/LocalAI#13042).
 		return session.TurnTools{Tools: tools, Prompt: prompt, Note: strings.TrimSpace(workNote + " " + s.todayLine())}, nil
 	}
 	tools, missing, heldAddons, err := s.scopedHostTools(ctx, a)
