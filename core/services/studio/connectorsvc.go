@@ -56,9 +56,6 @@ type ConnectorInput struct {
 	// SendFiles sends the files a turn makes to the sender. Nil means on for
 	// a new binding and unchanged for an update.
 	SendFiles *bool
-	// InboundMedia is connectors.Binding.InboundMedia. Nil means none (every
-	// kind) for a new binding and unchanged for an update.
-	InboundMedia *[]string
 	// Options are the choices for the options of the kind. Nil means the
 	// defaults for a new binding and unchanged for an update.
 	Options map[string]string
@@ -94,6 +91,9 @@ type ConnectorInput struct {
 	// ConfirmDuplicate must be DuplicateConfirmation to save an enabled
 	// connection that is the same bot as another enabled one. Not stored.
 	ConfirmDuplicate string
+	// InboundMedia is connectors.Binding.InboundMedia. Nil means none (every
+	// kind) for a new binding and unchanged for an update.
+	InboundMedia *[]string
 }
 
 // apply sets the fields of the input that an owner writes on a binding.
@@ -128,12 +128,6 @@ func (in ConnectorInput) apply(b *connectors.Binding) {
 	if in.SendFiles != nil {
 		b.FilesOff = !*in.SendFiles
 	}
-	if in.InboundMedia != nil {
-		b.InboundMedia = nil
-		if len(*in.InboundMedia) > 0 {
-			b.InboundMedia = append([]string(nil), *in.InboundMedia...)
-		}
-	}
 	if in.Options != nil {
 		b.Options = maps.Clone(in.Options)
 	}
@@ -161,6 +155,12 @@ func (in ConnectorInput) apply(b *connectors.Binding) {
 	}
 	if in.Approval != nil {
 		b.Approval = in.Approval.Cleaned()
+	}
+	if in.InboundMedia != nil {
+		b.InboundMedia = nil
+		if len(*in.InboundMedia) > 0 {
+			b.InboundMedia = slices.Clone(*in.InboundMedia)
+		}
 	}
 }
 

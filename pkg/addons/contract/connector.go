@@ -451,17 +451,17 @@ type ConnectorMessage struct {
 	// is a voice message, which the host transcribes, and the transcript is
 	// the text of the turn.
 	Media []string `json:"media,omitempty"`
+	// Roles are the IDs of the roles (ConnectorKind.Roles) that the sender
+	// has, at most MaxMessageRoles. The host drops an ID the kind does not
+	// declare, and the whole field for a kind with no roles. Roles are never
+	// authority for a sensitive capability.
+	Roles []string `json:"roles,omitempty"`
 	// MediaKinds names the kind of each file of Media, one of
 	// ConnectorMediaKinds, at the same index. The host reads it before it
 	// reads a file, so a binding that does not accept a kind never reads
 	// such a file. An add-on that cannot tell the kinds leaves it out; a
 	// binding that accepts only some kinds then reads none of the files.
 	MediaKinds []string `json:"mediaKinds,omitempty"`
-	// Roles are the IDs of the roles (ConnectorKind.Roles) that the sender
-	// has, at most MaxMessageRoles. The host drops an ID the kind does not
-	// declare, and the whole field for a kind with no roles. Roles are never
-	// authority for a sensitive capability.
-	Roles []string `json:"roles,omitempty"`
 }
 
 // ConnectorInbound is the argument object of ConnectorInboundOp. It names the

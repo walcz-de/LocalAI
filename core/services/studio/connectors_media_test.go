@@ -229,9 +229,7 @@ func limitedRig(m *media.Service, answer string, inbound *[]string) (*connRig, *
 	tg := studiobot.Telegram(api)
 	var reads atomic.Int32
 	withHost := tg.WithHost
-	tg.WithHost = func(h testhost.Host) contract.ConnectorRuntime {
-		return countedMedia{inner: withHost(h), n: &reads}
-	}
+	tg.WithHost = func(h testhost.Host) contract.ConnectorRuntime { return countedMedia{inner: withHost(h), n: &reads} }
 	r := newConnRigWith(sh, connStore(), studiobot.NewTransport(tg), connSay(answer), nil)
 	r.bot = bot
 	r.bind(studio.ConnectorInput{Allow: []string{"11"}, InboundMedia: inbound})

@@ -192,11 +192,6 @@ type Binding struct {
 	// zero value sends them, so a binding stored before the option sends
 	// them too.
 	FilesOff bool
-	// InboundMedia lists the kinds of file (contract.ConnectorMediaKinds)
-	// that the binding takes from senders. Empty takes every kind. A file of
-	// another kind is never read: the sender is told, and the text of the
-	// message still goes to the agent.
-	InboundMedia []string
 	// Options are the choices the owner made for the options that the kind of
 	// the binding declares (contract.ConnectorKind.Options), by option ID. An
 	// option that is not here has its default.
@@ -250,6 +245,11 @@ type Binding struct {
 	// it, and for an add-on that does not tell. Two enabled bindings of one
 	// owner and kind with the same AccountID are the same bot.
 	AccountID string
+	// InboundMedia lists the kinds of file (contract.ConnectorMediaKinds)
+	// that the binding takes from senders. Empty takes every kind. A file of
+	// another kind is never read: the sender is told, and the text of the
+	// message still goes to the agent.
+	InboundMedia []string
 	// Token is the bot token. In a Store it is sealed bytes; the Store returns
 	// what it was given. It is empty for an AuthOAuth2 binding.
 	Token   []byte
@@ -619,13 +619,6 @@ func (b Binding) ConversationMode() string {
 	return b.Conversation
 }
 
-// Accepts tells whether the binding takes a file of a media kind from a
-// sender. A binding that lists no kinds takes every file; one that lists
-// some never takes a file of an unknown kind ("").
-func (b Binding) Accepts(kind string) bool {
-	return len(b.InboundMedia) == 0 || (kind != "" && slices.Contains(b.InboundMedia, kind))
-}
-
 // ReplyLang is the reply language setting of a binding, with the default
 // filled in: hostmsg.Auto or a language code.
 func (b Binding) ReplyLang() string {
@@ -633,6 +626,13 @@ func (b Binding) ReplyLang() string {
 		return hostmsg.Auto
 	}
 	return b.ReplyLanguage
+}
+
+// Accepts tells whether the binding takes a file of a media kind from a
+// sender. A binding that lists no kinds takes every file; one that lists
+// some never takes a file of an unknown kind ("").
+func (b Binding) Accepts(kind string) bool {
+	return len(b.InboundMedia) == 0 || (kind != "" && slices.Contains(b.InboundMedia, kind))
 }
 
 // SendsFiles tells whether the files a turn makes go to the sender.
@@ -677,7 +677,6 @@ func (b Binding) Allows(senderID, username string) bool {
 
 func (b Binding) clone() Binding {
 	b.Allow = append([]string(nil), b.Allow...)
-	b.InboundMedia = append([]string(nil), b.InboundMedia...)
 	b.AllowTrust = maps.Clone(b.AllowTrust)
 	b.Token = append([]byte(nil), b.Token...)
 	b.Options = maps.Clone(b.Options)
@@ -692,6 +691,7 @@ func (b Binding) clone() Binding {
 	}
 	b.Resources = slices.Clone(b.Resources)
 	b.Channels = slices.Clone(b.Channels)
+	b.InboundMedia = slices.Clone(b.InboundMedia)
 	return b
 }
 

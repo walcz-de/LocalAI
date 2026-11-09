@@ -960,35 +960,6 @@ the sender attached.
 
 An update without `send_files` keeps the stored value.
 
-### Limit the files a person can send (`inbound_media`)
-
-Empty by default: the bot takes every file that its platform hands over. A list takes
-only those kinds:
-
-| Kind | What it is |
-|---|---|
-| `photo` | A picture sent as a photo |
-| `voice` | A voice message recorded in the app; it is transcribed |
-| `audio` | An audio file; it is transcribed |
-| `video_note` | A short round video message |
-| `document` | Any file sent as a file: a PDF, an uncompressed picture, a text file |
-
-```
-curl -X PUT .../api/chats/connectors/<id> -d '{"name": "Support bot", "agent_id": "<id>", "enabled": true, "allow": ["12345678"], "inbound_media": ["voice"]}'
-```
-
-- The check is made by the server, before the file is read: a file of a kind that
-  the binding does not take is never downloaded, never stored and never reaches the
-  model. The sender gets one sentence that names the kind, for example "This bot
-  does not accept photos.", and the text or caption of the message still goes to the
-  agent. A message with nothing else gets only the sentence and starts no turn.
-- The add-on tells the server the kind of each file. Telegram names every kind. An
-  add-on that names none (Slack, for now) hands over files of an unknown kind, which
-  a binding with a list never reads.
-- An unknown or repeated kind is a `400`. An update without `inbound_media` keeps the
-  stored list; `[]` takes every kind again. The binding returns the list (`[]` when
-  it takes every kind).
-
 ### Reply language (`reply_language`)
 
 The bot writes some sentences itself, without the model: the confirmation of a new chat,
@@ -1031,6 +1002,38 @@ always read by the host before any model turn, so it never reaches the model.
 The value is stored with the binding. An update without `reply_language` keeps the stored
 value; an unknown value is a 400. Instructions to the model (tool descriptions, the note
 about held back tools, the thread block) stay in English.
+
+### Limit the files a person can send (`inbound_media`)
+
+Empty by default: a sender who may send files (`files.upload`) can send every kind that
+the platform hands over. A list takes only those kinds:
+
+| Kind | What it is |
+|---|---|
+| `photo` | A picture sent as a photo |
+| `voice` | A voice message recorded in the app; it is transcribed |
+| `audio` | An audio file; it is transcribed |
+| `video_note` | A short round video message |
+| `document` | Any file sent as a file: a PDF, an uncompressed picture, a text file |
+
+```
+curl -X PUT .../api/chats/connectors/<id> -d '{"name": "Support bot", "agent_id": "<id>", "enabled": true, "allow": ["12345678"], "caps": ["files.upload"], "inbound_media": ["voice"]}'
+```
+
+- The check is made by the server, before the file is read: a file of a kind that
+  the binding does not take is never downloaded, never stored and never reaches the
+  model. The sender gets one sentence that names the kind, for example "This bot
+  does not accept photos.", and the text or caption of the message still goes to the
+  agent. A message with nothing else gets only the sentence and starts no turn.
+- The add-on tells the server the kind of each file. Telegram names every kind. An
+  add-on that names none (Slack and Discord, for now) hands over files of an unknown kind, which
+  a binding with a list never reads.
+- The list narrows `files.upload`, it does not replace it: a sender still needs the
+  [capability](#capabilities-roles-and-pairing) `files.upload` to send any file, voice messages
+  included; the example above enables both.
+- An unknown or repeated kind is a `400`. An update without `inbound_media` keeps the
+  stored list; `[]` takes every kind again. The binding returns the list (`[]` when
+  it takes every kind).
 
 ## Who may use the bot
 
@@ -1534,7 +1537,7 @@ trigger stays in Studio. Nothing runs before the owner confirms.
   `time_zone`; a time that has passed today means the next day). It must be at least one
   minute and at most 365 days ahead. It reports to the chat where it was set, runs once,
   and is then removed, also when the run failed (a failed timer says so at once). A
-  recurring trigger from a chat still runs at most once an hour. The proposal text states
+  recurring trigger from a chat runs at most once every 5 minutes. The proposal text states
   the cost: every run is one model run.
 - **Where a run reports.** The proposal sets `delivery`: `inbox` (the default),
   `origin` (the chat and thread of the proposal) or `channel` (a channel of the binding that

@@ -280,6 +280,30 @@ var _ = Describe("Chats connectors endpoints", func() {
 		}
 	})
 
+	It("stores the reply language, keeps it when an update leaves it out, and refuses an unknown one", func() {
+		ag := agent("alice", "Language", "test-model")
+		rec := create("alice", map[string]any{"name": "Language bot", "token": specToken, "agent_id": ag})
+		Expect(rec.Code).To(Equal(http.StatusCreated), rec.Body.String())
+		Expect(decodeJSON(rec)).To(HaveKeyWithValue("reply_language", "auto"), "the default follows the sender")
+		id := decodeJSON(rec)["id"].(string)
+		rec = s.do("alice", http.MethodPut, "/api/chats/connectors/"+id, map[string]any{"name": "Language bot", "agent_id": ag, "reply_language": "it"})
+		Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+		rec = s.do("alice", http.MethodGet, "/api/chats/connectors/"+id, nil)
+		Expect(decodeJSON(rec)).To(HaveKeyWithValue("reply_language", "it"))
+		rec = s.do("alice", http.MethodPut, "/api/chats/connectors/"+id, map[string]any{"name": "Language bot", "agent_id": ag})
+		Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+		Expect(decodeJSON(rec)).To(HaveKeyWithValue("reply_language", "it"), "an update without the field keeps it")
+		rec = s.do("alice", http.MethodPut, "/api/chats/connectors/"+id, map[string]any{"name": "Language bot", "agent_id": ag, "reply_language": "pt-BR"})
+		Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+		Expect(decodeJSON(rec)).To(HaveKeyWithValue("reply_language", "pt-BR"))
+		rec = s.do("alice", http.MethodPut, "/api/chats/connectors/"+id, map[string]any{"name": "Language bot", "agent_id": ag, "reply_language": "auto"})
+		Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+		Expect(decodeJSON(rec)).To(HaveKeyWithValue("reply_language", "auto"))
+		for _, bad := range []string{"klingon", "pt", "IT", "it-IT"} {
+			rec = s.do("alice", http.MethodPut, "/api/chats/connectors/"+id, map[string]any{"name": "Language bot", "agent_id": ag, "reply_language": bad})
+			Expect(rec.Code).To(Equal(http.StatusBadRequest), "%q: %s", bad, rec.Body.String())
+		}
+	})
 	It("stores the media kinds a binding accepts, keeps them when absent, and refuses an unknown kind", func() {
 		ag := agent("alice", "Media", "test-model")
 		rec := create("alice", map[string]any{"name": "Media bot", "token": specToken, "agent_id": ag})
@@ -307,31 +331,6 @@ var _ = Describe("Chats connectors endpoints", func() {
 		Expect(decodeJSON(rec)).To(HaveKeyWithValue("inbound_media", BeEmpty()))
 		rec = s.do("alice", http.MethodGet, "/api/chats/connectors/"+id, nil)
 		Expect(decodeJSON(rec)).To(HaveKeyWithValue("inbound_media", BeEmpty()))
-	})
-
-	It("stores the reply language, keeps it when an update leaves it out, and refuses an unknown one", func() {
-		ag := agent("alice", "Language", "test-model")
-		rec := create("alice", map[string]any{"name": "Language bot", "token": specToken, "agent_id": ag})
-		Expect(rec.Code).To(Equal(http.StatusCreated), rec.Body.String())
-		Expect(decodeJSON(rec)).To(HaveKeyWithValue("reply_language", "auto"), "the default follows the sender")
-		id := decodeJSON(rec)["id"].(string)
-		rec = s.do("alice", http.MethodPut, "/api/chats/connectors/"+id, map[string]any{"name": "Language bot", "agent_id": ag, "reply_language": "it"})
-		Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
-		rec = s.do("alice", http.MethodGet, "/api/chats/connectors/"+id, nil)
-		Expect(decodeJSON(rec)).To(HaveKeyWithValue("reply_language", "it"))
-		rec = s.do("alice", http.MethodPut, "/api/chats/connectors/"+id, map[string]any{"name": "Language bot", "agent_id": ag})
-		Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
-		Expect(decodeJSON(rec)).To(HaveKeyWithValue("reply_language", "it"), "an update without the field keeps it")
-		rec = s.do("alice", http.MethodPut, "/api/chats/connectors/"+id, map[string]any{"name": "Language bot", "agent_id": ag, "reply_language": "pt-BR"})
-		Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
-		Expect(decodeJSON(rec)).To(HaveKeyWithValue("reply_language", "pt-BR"))
-		rec = s.do("alice", http.MethodPut, "/api/chats/connectors/"+id, map[string]any{"name": "Language bot", "agent_id": ag, "reply_language": "auto"})
-		Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
-		Expect(decodeJSON(rec)).To(HaveKeyWithValue("reply_language", "auto"))
-		for _, bad := range []string{"klingon", "pt", "IT", "it-IT"} {
-			rec = s.do("alice", http.MethodPut, "/api/chats/connectors/"+id, map[string]any{"name": "Language bot", "agent_id": ag, "reply_language": bad})
-			Expect(rec.Code).To(Equal(http.StatusBadRequest), "%q: %s", bad, rec.Body.String())
-		}
 	})
 
 	It("checks a new token with the platform and refuses one that the platform refuses", func() {

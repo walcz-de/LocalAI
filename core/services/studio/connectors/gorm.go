@@ -31,7 +31,6 @@ type bindingRow struct {
 	Conversation  string `gorm:"size:16"`
 	WindowMinutes int
 	FilesOff      bool
-	InboundMedia  string // JSON, like Allow; empty takes every kind
 	// ReplyLanguage is added by AutoMigrate; a row stored before it reads as auto.
 	ReplyLanguage string `gorm:"size:8"`
 	// UILanguage is added by AutoMigrate; a row stored before it reads as unknown.
@@ -65,9 +64,12 @@ type bindingRow struct {
 	WriteTickRemoved bool
 	// AccountID is added by AutoMigrate; a row stored before it has none.
 	AccountID string `gorm:"size:128"`
-	Token     []byte
-	Created   time.Time
-	Updated   time.Time
+	// InboundMedia is JSON, added by AutoMigrate; a row stored before it takes
+	// every kind.
+	InboundMedia string
+	Token        []byte
+	Created      time.Time
+	Updated      time.Time
 }
 
 func (bindingRow) TableName() string { return "studio_connectors" }
@@ -153,11 +155,6 @@ func (r bindingRow) binding() (Binding, error) {
 			return b, err
 		}
 	}
-	if r.InboundMedia != "" {
-		if err := json.Unmarshal([]byte(r.InboundMedia), &b.InboundMedia); err != nil {
-			return b, err
-		}
-	}
 	if r.Options != "" {
 		if err := json.Unmarshal([]byte(r.Options), &b.Options); err != nil {
 			return b, err
@@ -166,7 +163,7 @@ func (r bindingRow) binding() (Binding, error) {
 	for _, f := range []struct {
 		raw string
 		dst any
-	}{{r.Caps, &b.Caps}, {r.AllowTrust, &b.AllowTrust}, {r.Grants, &b.Grants}, {r.Paired, &b.Paired}, {r.Resources, &b.Resources}, {r.Channels, &b.Channels}, {r.Approval, &b.Approval}} {
+	}{{r.Caps, &b.Caps}, {r.AllowTrust, &b.AllowTrust}, {r.Grants, &b.Grants}, {r.Paired, &b.Paired}, {r.Resources, &b.Resources}, {r.Channels, &b.Channels}, {r.Approval, &b.Approval}, {r.InboundMedia, &b.InboundMedia}} {
 		if f.raw == "" {
 			continue
 		}
@@ -183,19 +180,14 @@ func (s *gormStore) PutBinding(ctx context.Context, b Binding) error {
 		raw, _ := json.Marshal(b.Allow)
 		allow = string(raw)
 	}
-	inbound := ""
-	if len(b.InboundMedia) > 0 {
-		raw, _ := json.Marshal(b.InboundMedia)
-		inbound = string(raw)
-	}
 	options := ""
 	if len(b.Options) > 0 {
 		raw, _ := json.Marshal(b.Options)
 		options = string(raw)
 	}
-	return s.db.WithContext(ctx).Save(&bindingRow{AllowTrust: encJSON(b.AllowTrust, len(b.AllowTrust) == 0), Approval: encJSON(b.Approval, b.Approval.IsZero()), WriteMode: b.WriteMode, Resources: encList(b.Resources), Channels: encList(b.Channels), Caps: encList(b.Caps), WriteTickRemoved: b.WriteTickRemoved, Grants: encList(b.Grants), Paired: encList(b.Paired), ID: b.ID, Owner: b.Owner, Kind: b.Kind, AddonID: b.AddonID, Name: b.Name, AgentID: b.AgentID, Enabled: b.Enabled,
+	return s.db.WithContext(ctx).Save(&bindingRow{AllowTrust: encJSON(b.AllowTrust, len(b.AllowTrust) == 0), Approval: encJSON(b.Approval, b.Approval.IsZero()), WriteMode: b.WriteMode, Resources: encList(b.Resources), Channels: encList(b.Channels), Caps: encList(b.Caps), WriteTickRemoved: b.WriteTickRemoved, Grants: encList(b.Grants), Paired: encList(b.Paired), InboundMedia: encList(b.InboundMedia), ID: b.ID, Owner: b.Owner, Kind: b.Kind, AddonID: b.AddonID, Name: b.Name, AgentID: b.AgentID, Enabled: b.Enabled,
 		AcceptAny: b.AcceptAny, Allow: allow, NotifyChat: b.NotifyChat, Reply: b.Reply, Conversation: b.Conversation, WindowMinutes: b.WindowMinutes,
-		FilesOff: b.FilesOff, ReplyLanguage: b.ReplyLanguage, InboundMedia: inbound, UILanguage: b.UILanguage, AccountID: b.AccountID, Options: options, FileReceiveMax: b.FileReceiveMax, FileSendMax: b.FileSendMax,
+		FilesOff: b.FilesOff, ReplyLanguage: b.ReplyLanguage, UILanguage: b.UILanguage, AccountID: b.AccountID, Options: options, FileReceiveMax: b.FileReceiveMax, FileSendMax: b.FileSendMax,
 		AuthKind: b.AuthKind, Token: b.Token, Created: b.Created, Updated: b.Updated}).Error
 }
 

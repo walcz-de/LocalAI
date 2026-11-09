@@ -171,7 +171,7 @@ var _ = Describe("a connector add-on pushing a message", func() {
 		code, body := push(incarnation, inbound(m))
 		Expect(code).To(Equal(http.StatusOK), body)
 		Eventually(func() int { return len(r.bot.answers()) }, "10s").Should(Equal(2))
-		Expect(r.bot.answers()[0]).To(Equal("This bot does not accept this kind of file."))
+		Expect(r.bot.answers()[0]).To(Equal("This bot does not accept other files."))
 		chats, _ := r.svc.List(ctx, alice, 20)
 		Expect(chats).To(HaveLen(1))
 		Expect(r.h.Sent(chats[0].ID)).To(Equal([]string{"the caption"}))

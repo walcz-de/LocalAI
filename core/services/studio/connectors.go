@@ -949,11 +949,12 @@ var hostNoteCodes = map[string]string{
 // about a file that could not be read or was too large. It reports false when
 // the message must not start a turn: nothing is left to send, or a voice
 // message cannot be transcribed. A file of a kind that the binding does not
-// take is never read: the sender is told, and the text still goes.
+// take (see connectors.Binding.InboundMedia) is never read: the sender is
+// told, and the text still goes.
 func (c *Connectors) inputs(ctx context.Context, b connectors.Binding, token string, m contract.ConnectorMessage, say func(string), v hostmsg.Voice) (string, []session.Upload, bool) {
 	refs, refused := c.accepted(b, m)
 	if len(refused) > 0 {
-		say(v.T("media.refused", "kinds", refusedKinds(refused, v)))
+		say(v.T("media.refused", "kinds", refusedKinds(v, refused)))
 	}
 	got, note := c.media(ctx, b, token, refs, v)
 	if note != "" {
@@ -1019,26 +1020,16 @@ func (c *Connectors) accepted(b connectors.Binding, m contract.ConnectorMessage)
 	return refs, refused
 }
 
-// refusedNouns name the catalog keys of the media kinds in the sentence
-// media.refused (refusedKinds).
-var refusedNouns = map[string]string{
-	contract.ConnectorMediaPhoto:     "media.kind.photo",
-	contract.ConnectorMediaVoice:     "media.kind.voice",
-	contract.ConnectorMediaAudio:     "media.kind.audio",
-	contract.ConnectorMediaVideoNote: "media.kind.video_note",
-	contract.ConnectorMediaDocument:  "media.kind.document",
-}
-
-// refusedKinds names the kinds for the one sentence (media.refused) for the files of a message that a
-// binding does not take, such as "This bot does not accept photos."
-func refusedKinds(kinds []string, v hostmsg.Voice) string {
+// refusedKinds names the media kinds of the files that a binding did not
+// take, for the sentence "This bot does not accept photos." Each kind is
+// named once; a file of an unknown kind is one of "other files".
+func refusedKinds(v hostmsg.Voice, kinds []string) string {
 	var nouns []string
 	for _, k := range kinds {
-		key := refusedNouns[k]
-		if key == "" {
-			key = "media.kind.other"
+		if k == "" || !hostmsg.Has("media.kind."+k) {
+			k = "other"
 		}
-		if n := v.T(key); !slices.Contains(nouns, n) {
+		if n := v.T("media.kind." + k); !slices.Contains(nouns, n) {
 			nouns = append(nouns, n)
 		}
 	}
