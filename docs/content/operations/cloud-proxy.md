@@ -311,7 +311,7 @@ proxy:
   upstream_model: mistral-large-latest
 ```
 
-For OpenAI-compatible upstreams, translate mode rewrites nullable type unions in tool schemas (`"type": ["null", "array"]`) to the plain type (`"type": "array"`) before sending. LocalAI's built-in tools mark every list and pointer parameter as nullable, and some providers validate tool schemas against a narrower dialect: Mistral, for example, rejects the whole request with `Invalid tool schema: None is not of type 'array'` (code 3260). Optional parameters stay optional through `required`. Unions with more than one non-null type keep those types.
+For OpenAI-compatible upstreams, translate mode rewrites nullable type unions in tool schemas (`"type": ["null", "array"]`) to the plain type (`"type": "array"`) before sending. LocalAI's built-in tools mark every list and pointer parameter as nullable, and some providers validate tool schemas against a narrower dialect: Mistral, for example, rejects the whole request with `Invalid tool schema: None is not of type 'array'` (code 3260). Optional parameters stay optional through `required`. Unions with more than one non-null type keep those types. A `required` or `enum` that is `null` (an empty Go list, as on the built-in `list_files` tool) is left out for the same reason.
 
 #### Anthropic prompt caching
 
