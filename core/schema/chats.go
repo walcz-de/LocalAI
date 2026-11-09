@@ -1403,17 +1403,23 @@ type ChatsBuiltinToolList struct {
 // ChatsNotification is one item of the inbox. Kind is run_ended, run_failed or
 // needs_attention; Status is ok or failed. Source is what sent it: trigger,
 // connector or system (empty on items stored before sources existed). Link is
-// the in-app path that opens what it is about.
+// the in-app path that opens what it is about. Code and Params are set on the
+// items that the UI words itself, in the language of the person (the update
+// digest and the results of automatic updates, for example): Code names the
+// kind and Params holds its numbers and names. Title and Body are then the
+// English fallback, and the text of push and Telegram.
 type ChatsNotification struct {
-	ID      int64     `json:"id"`
-	Kind    string    `json:"kind"`
-	Status  string    `json:"status"`
-	Source  string    `json:"source,omitempty"`
-	Title   string    `json:"title"`
-	Body    string    `json:"body"`
-	Link    string    `json:"link"`
-	Read    bool      `json:"read"`
-	Created time.Time `json:"created"`
+	ID      int64          `json:"id"`
+	Kind    string         `json:"kind"`
+	Status  string         `json:"status"`
+	Source  string         `json:"source,omitempty"`
+	Title   string         `json:"title"`
+	Body    string         `json:"body"`
+	Link    string         `json:"link"`
+	Read    bool           `json:"read"`
+	Created time.Time      `json:"created"`
+	Code    string         `json:"code,omitempty"`
+	Params  map[string]any `json:"params,omitempty"`
 }
 
 // ChatsNotificationList is the response of the inbox list endpoint.
@@ -1459,10 +1465,15 @@ type ChatsTrigger struct {
 	Folder       string `json:"folder,omitempty"`
 	QuietSeconds int    `json:"quiet_seconds,omitempty"`
 	DailyCap     int    `json:"daily_cap"`
-	Enabled      bool   `json:"enabled"`
-	AgentID      string `json:"agent_id,omitempty"`
-	Model        string `json:"model,omitempty"`
-	SourceChatID string `json:"source_chat_id,omitempty"`
+	// RunLimit is the longest one run may take, as a duration such as 30m;
+	// empty means the administrator's run limit. EffectiveRunLimit is what
+	// applies now: the least of RunLimit and the administrator's limit.
+	RunLimit          string `json:"run_limit,omitempty"`
+	EffectiveRunLimit string `json:"effective_run_limit"`
+	Enabled           bool   `json:"enabled"`
+	AgentID           string `json:"agent_id,omitempty"`
+	Model             string `json:"model,omitempty"`
+	SourceChatID      string `json:"source_chat_id,omitempty"`
 	// Summary says when it runs in plain words. NextRun is set for a schedule
 	// trigger that is on.
 	Summary string     `json:"summary"`
@@ -1583,7 +1594,11 @@ type ChatsTriggerWrite struct {
 	Folder       string `json:"folder,omitempty"`
 	QuietSeconds int    `json:"quiet_seconds,omitempty"`
 	DailyCap     int    `json:"daily_cap,omitempty"`
-	Enabled      bool   `json:"enabled"`
+	// RunLimit is the longest one run may take, a duration from 1m to 24h such
+	// as 30m. Empty or 0 means the administrator's run limit, which is also
+	// the ceiling: a longer value is accepted and runs cut to it.
+	RunLimit string `json:"run_limit,omitempty"`
+	Enabled  bool   `json:"enabled"`
 	// AgentID is optional. Model is needed when neither the agent nor the source
 	// chat names one.
 	AgentID      string `json:"agent_id,omitempty"`

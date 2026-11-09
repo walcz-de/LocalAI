@@ -62,7 +62,9 @@
       "remoteNote": "{{model}} ist ein entfernter Dienst: Was ein Lauf liest, verlässt diesen Server.",
       "stopWidget": "Pausiere ihn im Widget oder lösche ihn unter Trigger",
       "stop": "Schalte ihn aus oder lösche ihn unter Trigger",
-      "actsLabel": "Berechtigungen"
+      "actsLabel": "Berechtigungen",
+      "limitLabel": "Zeitlimit",
+      "limitClamped": "{{limit}}, vom Administrator auf {{ceiling}} gekürzt"
     }
   },
   "mcpPage": {
@@ -70,7 +72,7 @@
     "supporting": "Verbinden Sie MCP-Server, um Ihren Chats und Agenten mehr Werkzeuge zu geben, etwa Suche oder Ihre eigenen APIs.",
     "related": "Verwandt",
     "chats": "Chats",
-    "add": "Konnektor hinzufügen",
+    "add": "Neuer Konnektor",
     "learn": "So funktioniert MCP",
     "loading": "Ihre Konnektoren werden geladen",
     "loadFailed": "Ihre Konnektoren konnten nicht geladen werden.",
@@ -168,7 +170,7 @@
       "encrypted": "Verschlüsselt auf dem Server gespeichert. Wird nie wieder angezeigt."
     },
     "sheet": {
-      "addTitle": "Konnektor hinzufügen",
+      "addTitle": "Neuer Konnektor",
       "editTitle": "{{name}} bearbeiten",
       "addDesc": "Verbinden Sie einen MCP-Server. Sie testen ihn, bevor Chats ihn verwenden.",
       "editDesc": "Gespeicherte Geheimnisse bleiben, außer Sie ersetzen oder entfernen sie.",
@@ -329,7 +331,7 @@
         "tooManyLogins": "Es wurden zu viele Anmeldungen gestartet. Schließe die im anderen Tab ab oder warte ein paar Minuten und versuche es erneut."
       },
       "add": {
-        "open": "Verbindung hinzufügen",
+        "open": "Neue Verbindung",
         "title": "Neue Verbindung zu {{name}}",
         "name": "Name",
         "hint": "Ein Name, den du wiedererkennst, etwa Arbeit oder Privat. Wähle nach dem Hinzufügen Verbinden, um dich bei deinem Konto anzumelden.",
@@ -498,7 +500,7 @@
       "sole": "Das ist deine einzige Verbindung, daher wird sie verwendet.",
       "choose": "Wähle mindestens eine Verbindung, um diese Werkzeuge zu nutzen",
       "none": "Noch keine Verbindung",
-      "create": "Verbindung hinzufügen",
+      "create": "Neue Verbindung",
       "byAgent": "Der Agent dieses Chats legt die Verbindungen fest. Ändere sie beim Agenten.",
       "agentLabel": "Verbindungen für Chats dieses Agenten",
       "agentHelp": "Chats dieses Agenten dürfen nur diese Verbindungen nutzen und können sie nicht ändern.",
@@ -708,7 +710,41 @@
     "arrivedMany_other": "{{count}} neue Benachrichtigungen",
     "proposalsWaiting_one": "{{count}} Änderung wartet auf dich",
     "proposalsWaiting_other": "{{count}} Änderungen warten auf dich",
-    "proposalsBody": "Ein Modell hat eine Änderung vorgeschlagen. Nichts wird gespeichert, bevor du antwortest."
+    "proposalsBody": "Ein Modell hat eine Änderung vorgeschlagen. Nichts wird gespeichert, bevor du antwortest.",
+    "codes": {
+      "digest": {
+        "title_one": "{{count}} Backend-Update verfügbar",
+        "title_other": "{{count}} Backend-Updates verfügbar",
+        "more": "{{items}} und {{count}} weitere"
+      },
+      "result": {
+        "family": {
+          "backends": "Backends",
+          "addons": "Add-ons"
+        },
+        "title": "{{family}}: {{parts}}",
+        "join": ", ",
+        "updated_one": "{{count}} automatisch aktualisiert",
+        "updated_other": "{{count}} automatisch aktualisiert",
+        "failed_one": "{{count}} fehlgeschlagen",
+        "failed_other": "{{count}} fehlgeschlagen",
+        "held_one": "{{count}} wartet auf Freigabe",
+        "held_other": "{{count}} warten auf Freigabe",
+        "bodyUpdated": "Aktualisiert: {{items}}.",
+        "bodyFailed": "Fehlgeschlagen: {{items}}.",
+        "bodyHeld": "Wartet auf Ihre Freigabe: {{items}}.",
+        "more": "{{items}} und {{count}} weitere"
+      },
+      "checkFailed": {
+        "title": "Die Update-Prüfung ist fehlgeschlagen",
+        "body": "Nicht prüfbar: {{sources}}. Die letzten beiden automatischen Prüfungen sind fehlgeschlagen, daher fehlen in der Liste möglicherweise Updates.",
+        "source": {
+          "gallery": "Backend-Galerie",
+          "library": "Backend-Bibliothek",
+          "addons": "Add-ons"
+        }
+      }
+    }
   },
   "change": {
     "loading": "Die Trigger-Änderung wird gelesen...",
@@ -750,7 +786,8 @@
       "acts": "Was ein Lauf tun darf",
       "delivery": "Wohin Antworten gehen",
       "agent": "Agent",
-      "model": "Modell"
+      "model": "Modell",
+      "run_limit": "Zeitlimit"
     },
     "receipt": {
       "update": "Geändert:",
@@ -1310,5 +1347,8 @@
     "accounts": "Konten",
     "messaging": "Messaging",
     "mcp": "MCP-Server"
+  },
+  "triggersPage": {
+    "runLimit": "Zeitlimit eines Laufs"
   }
 }

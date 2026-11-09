@@ -62,7 +62,9 @@
       "remoteNote": "{{model}}은(는) 원격 서비스입니다. 실행이 읽는 내용이 이 서버 밖으로 나갑니다.",
       "stopWidget": "위젯에서 일시 중지하거나 트리거에서 삭제하세요",
       "stop": "트리거에서 끄거나 삭제하세요",
-      "actsLabel": "권한"
+      "actsLabel": "권한",
+      "limitLabel": "시간 제한",
+      "limitClamped": "{{limit}}, 관리자가 {{ceiling}}(으)로 제한"
     }
   },
   "mcpPage": {
@@ -70,7 +72,7 @@
     "supporting": "MCP 서버를 연결해 채팅과 에이전트에 검색이나 직접 만든 API 같은 도구를 더하세요.",
     "related": "관련 항목",
     "chats": "채팅",
-    "add": "커넥터 추가",
+    "add": "새 커넥터",
     "learn": "MCP 작동 방식",
     "loading": "커넥터를 불러오는 중",
     "loadFailed": "커넥터를 불러올 수 없습니다.",
@@ -168,7 +170,7 @@
       "encrypted": "서버에 암호화해 저장되며 다시 표시되지 않습니다."
     },
     "sheet": {
-      "addTitle": "커넥터 추가",
+      "addTitle": "새 커넥터",
       "editTitle": "{{name}} 편집",
       "addDesc": "MCP 서버를 연결합니다. 채팅에서 쓰기 전에 테스트합니다.",
       "editDesc": "저장된 비밀 값은 교체하거나 제거하지 않는 한 유지됩니다.",
@@ -329,7 +331,7 @@
         "tooManyLogins": "로그인을 너무 많이 시작했습니다. 다른 탭의 로그인을 마치거나 몇 분 기다린 뒤 다시 시도하세요."
       },
       "add": {
-        "open": "연결 추가",
+        "open": "새 연결",
         "title": "새 {{name}} 연결",
         "name": "이름",
         "hint": "업무, 개인처럼 알아보기 쉬운 이름입니다. 연결을 추가한 뒤 연결을 선택해 계정에 로그인하세요.",
@@ -498,7 +500,7 @@
       "sole": "하나뿐인 연결이므로 이 연결을 씁니다.",
       "choose": "이 도구를 쓰려면 연결을 하나 이상 선택하세요",
       "none": "아직 연결이 없습니다",
-      "create": "연결 추가",
+      "create": "새 연결",
       "byAgent": "이 채팅의 에이전트가 연결을 정합니다. 에이전트에서 바꾸세요.",
       "agentLabel": "이 에이전트 채팅의 연결",
       "agentHelp": "이 에이전트의 채팅은 이 연결만 쓸 수 있으며 바꿀 수 없습니다.",
@@ -708,7 +710,41 @@
     "arrivedMany_other": "새 알림 {{count}}개",
     "proposalsWaiting_one": "변경 {{count}}개가 기다리고 있습니다",
     "proposalsWaiting_other": "변경 {{count}}개가 기다리고 있습니다",
-    "proposalsBody": "모델이 변경을 제안했습니다. 답하기 전에는 아무것도 저장되지 않습니다."
+    "proposalsBody": "모델이 변경을 제안했습니다. 답하기 전에는 아무것도 저장되지 않습니다.",
+    "codes": {
+      "digest": {
+        "title_one": "백엔드 업데이트 {{count}}개 사용 가능",
+        "title_other": "백엔드 업데이트 {{count}}개 사용 가능",
+        "more": "{{items}} 외 {{count}}개"
+      },
+      "result": {
+        "family": {
+          "backends": "백엔드",
+          "addons": "애드온"
+        },
+        "title": "{{family}}: {{parts}}",
+        "join": ", ",
+        "updated_one": "{{count}}개 자동 업데이트됨",
+        "updated_other": "{{count}}개 자동 업데이트됨",
+        "failed_one": "{{count}}개 실패",
+        "failed_other": "{{count}}개 실패",
+        "held_one": "{{count}}개 승인 대기 중",
+        "held_other": "{{count}}개 승인 대기 중",
+        "bodyUpdated": "업데이트됨: {{items}}.",
+        "bodyFailed": "실패: {{items}}.",
+        "bodyHeld": "승인 대기 중: {{items}}.",
+        "more": "{{items}} 외 {{count}}개"
+      },
+      "checkFailed": {
+        "title": "업데이트 확인에 실패했습니다",
+        "body": "확인할 수 없음: {{sources}}. 최근 자동 확인 두 번이 실패해서 목록에 일부 업데이트가 없을 수 있습니다.",
+        "source": {
+          "gallery": "백엔드 갤러리",
+          "library": "백엔드 라이브러리",
+          "addons": "애드온"
+        }
+      }
+    }
   },
   "change": {
     "loading": "트리거 변경 사항을 읽는 중...",
@@ -750,7 +786,8 @@
       "acts": "실행이 할 수 있는 일",
       "delivery": "답변이 가는 곳",
       "agent": "에이전트",
-      "model": "모델"
+      "model": "모델",
+      "run_limit": "시간 제한"
     },
     "receipt": {
       "update": "변경됨:",
@@ -1310,5 +1347,8 @@
     "accounts": "계정",
     "messaging": "메시징",
     "mcp": "MCP 서버"
+  },
+  "triggersPage": {
+    "runLimit": "실행 시간 제한"
   }
 }

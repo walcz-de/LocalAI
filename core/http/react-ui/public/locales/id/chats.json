@@ -62,7 +62,9 @@
       "remoteNote": "{{model}} adalah layanan jarak jauh: apa yang dibaca sebuah jalan meninggalkan server ini.",
       "stopWidget": "Jeda dari widget, atau hapus di Pemicu",
       "stop": "Matikan atau hapus di Pemicu",
-      "actsLabel": "Izin"
+      "actsLabel": "Izin",
+      "limitLabel": "Batas waktu",
+      "limitClamped": "{{limit}}, dibatasi menjadi {{ceiling}} oleh administrator"
     }
   },
   "mcpPage": {
@@ -70,7 +72,7 @@
     "supporting": "Hubungkan server MCP untuk memberi chat dan agen Anda lebih banyak alat, seperti pencarian atau API Anda sendiri.",
     "related": "Terkait",
     "chats": "Chat",
-    "add": "Tambah konektor",
+    "add": "Konektor baru",
     "learn": "Cara kerja MCP",
     "loading": "Memuat konektor Anda",
     "loadFailed": "Tidak dapat memuat konektor Anda.",
@@ -168,7 +170,7 @@
       "encrypted": "Disimpan terenkripsi di server. Tidak pernah ditampilkan lagi."
     },
     "sheet": {
-      "addTitle": "Tambah konektor",
+      "addTitle": "Konektor baru",
       "editTitle": "Ubah {{name}}",
       "addDesc": "Hubungkan server MCP. Anda mengujinya sebelum chat memakainya.",
       "editDesc": "Rahasia yang tersimpan tetap ada kecuali Anda mengganti atau menghapusnya.",
@@ -329,7 +331,7 @@
         "tooManyLogins": "Terlalu banyak login yang dimulai. Selesaikan login di tab lain, atau tunggu beberapa menit lalu coba lagi."
       },
       "add": {
-        "open": "Tambah koneksi",
+        "open": "Koneksi baru",
         "title": "Koneksi {{name}} baru",
         "name": "Nama",
         "hint": "Nama yang mudah Anda kenali, misalnya Kerja atau Pribadi. Setelah koneksi ditambahkan, pilih Hubungkan untuk masuk ke akun Anda.",
@@ -498,7 +500,7 @@
       "sole": "Ini satu-satunya koneksi Anda, jadi dipakai.",
       "choose": "Pilih setidaknya satu koneksi untuk memakai alat ini",
       "none": "Belum ada koneksi",
-      "create": "Tambah koneksi",
+      "create": "Koneksi baru",
       "byAgent": "Agen chat ini menetapkan koneksi. Ubah di agen.",
       "agentLabel": "Koneksi untuk chat agen ini",
       "agentHelp": "Chat agen ini hanya boleh memakai koneksi ini dan tidak bisa mengubahnya.",
@@ -708,7 +710,41 @@
     "arrivedMany_other": "{{count}} notifikasi baru",
     "proposalsWaiting_one": "{{count}} perubahan menunggu Anda",
     "proposalsWaiting_other": "{{count}} perubahan menunggu Anda",
-    "proposalsBody": "Model mengusulkan perubahan. Tidak ada yang disimpan sampai Anda menjawab."
+    "proposalsBody": "Model mengusulkan perubahan. Tidak ada yang disimpan sampai Anda menjawab.",
+    "codes": {
+      "digest": {
+        "title_one": "{{count}} pembaruan backend tersedia",
+        "title_other": "{{count}} pembaruan backend tersedia",
+        "more": "{{items}} dan {{count}} lainnya"
+      },
+      "result": {
+        "family": {
+          "backends": "Backend",
+          "addons": "Add-on"
+        },
+        "title": "{{family}}: {{parts}}",
+        "join": ", ",
+        "updated_one": "{{count}} diperbarui otomatis",
+        "updated_other": "{{count}} diperbarui otomatis",
+        "failed_one": "{{count}} gagal",
+        "failed_other": "{{count}} gagal",
+        "held_one": "{{count}} menunggu persetujuan",
+        "held_other": "{{count}} menunggu persetujuan",
+        "bodyUpdated": "Diperbarui: {{items}}.",
+        "bodyFailed": "Gagal: {{items}}.",
+        "bodyHeld": "Menunggu persetujuan Anda: {{items}}.",
+        "more": "{{items}} dan {{count}} lainnya"
+      },
+      "checkFailed": {
+        "title": "Pemeriksaan pembaruan gagal",
+        "body": "Tidak dapat memeriksa: {{sources}}. Dua pemeriksaan otomatis terakhir gagal, jadi daftar mungkin tidak memuat semua pembaruan.",
+        "source": {
+          "gallery": "galeri backend",
+          "library": "pustaka backend",
+          "addons": "add-on"
+        }
+      }
+    }
   },
   "change": {
     "loading": "Membaca perubahan pemicu...",
@@ -750,7 +786,8 @@
       "acts": "Yang boleh dilakukan satu jalan",
       "delivery": "Ke mana jawaban dikirim",
       "agent": "Agen",
-      "model": "Model"
+      "model": "Model",
+      "run_limit": "Batas waktu"
     },
     "receipt": {
       "update": "Diubah:",
@@ -1310,5 +1347,8 @@
     "accounts": "Akun",
     "messaging": "Pesan",
     "mcp": "Server MCP"
+  },
+  "triggersPage": {
+    "runLimit": "Batas waktu satu proses"
   }
 }

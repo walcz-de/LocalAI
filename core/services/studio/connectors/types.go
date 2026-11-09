@@ -443,7 +443,7 @@ func needsAgent(b Binding) string {
 		return "permissions"
 	case len(b.Paired) > 0:
 		return "pairing"
-	case !b.Approval.IsZero():
+	case !b.Approval.IsDefault():
 		return "trigger approval"
 	}
 	return ""

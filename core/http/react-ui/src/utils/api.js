@@ -4,12 +4,16 @@ import { chatsListPath } from './chatsQuery'
 import { addonsApi } from './addonsClient'
 import { createSharesApi } from './sharesApi'
 import { createFolderSharesApi } from './folderSharesApi'
+import { reportUnauthorized } from './sessionEvents'
 
 const enc = encodeURIComponent
 const userQ = (userId) => userId ? `?user_id=${enc(userId)}` : ''
 
 async function handleResponse(response) {
   if (!response.ok) {
+    // One place hears every expired session. The session provider decides
+    // whether this 401 ends it; the call still fails as before.
+    if (response.status === 401) reportUnauthorized(response.url)
     let errorMessage = `HTTP ${response.status}`
     let errorBody = null
     try {
@@ -129,9 +133,11 @@ export const backendsApi = {
   installExternal: (body) => postJSON(API_CONFIG.endpoints.installExternalBackend, body),
   getJob: (uid) => fetchJSON(API_CONFIG.endpoints.backendJob(uid)),
   deleteInstalled: (name) => postJSON(API_CONFIG.endpoints.deleteInstalledBackend(name), {}),
-  checkUpgrades: () => fetchJSON(API_CONFIG.endpoints.backendsUpgrades),
-  forceCheckUpgrades: () => postJSON(API_CONFIG.endpoints.backendsUpgradesCheck, {}),
   upgrade: (name) => postJSON(API_CONFIG.endpoints.upgradeBackend(name), {}),
+  // The read model of the Updates page. checkUpdates answers from the cache;
+  // checkUpdatesNow runs a real check and waits for it (at most 45 s).
+  updates: () => fetchJSON(API_CONFIG.endpoints.backendUpdates),
+  checkUpdatesNow: () => postJSON(API_CONFIG.endpoints.backendUpdatesCheck, {}),
 }
 
 // Chats API: conversations the server keeps. A message sent while a turn runs
