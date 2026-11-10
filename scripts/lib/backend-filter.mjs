@@ -85,12 +85,6 @@ export function inferBackendPath(item) {
     // via a thin wrapper Makefile. Changes to either dir should retrigger it.
     return `backend/cpp/turboquant/`;
   }
-  if (item.dockerfile.endsWith("rocmfp4")) {
-    // rocmfp4 is a llama.cpp fork carrying the ROCmFP4 weight formats; like
-    // bonsai it reuses backend/cpp/llama-cpp sources via a wrapper Makefile.
-    // Must stay above the generic llama-cpp suffix test.
-    return `backend/cpp/rocmfp4/`;
-  }
   if (item.dockerfile.endsWith("bonsai")) {
     // bonsai is a llama.cpp fork that reuses backend/cpp/llama-cpp sources
     // via a thin wrapper Makefile. Changes to either dir should retrigger it.
@@ -165,7 +159,7 @@ export function backendChanged(backend, pathPrefix, changedFiles) {
 
   // Fork backends reuse backend/cpp/llama-cpp sources via thin wrappers;
   // changes to either directory must retrigger their pipelines.
-  return (backend === "turboquant" || backend === "bonsai" || backend === "rocmfp4") &&
+  return (backend === "turboquant" || backend === "bonsai") &&
     changedFiles.some(file => file.startsWith("backend/cpp/llama-cpp/"));
 }
 
