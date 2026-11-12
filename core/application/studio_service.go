@@ -178,6 +178,7 @@ func (a *Application) initStudioService() {
 		FindUser:          a.studioFindUser(),
 		FolderDirectory:   a.studioFolderDirectory(),
 		SharedPagesOn:     func() bool { return !a.applicationConfig.DisableSharedPages },
+		PageAreaOn:        func() bool { return !a.applicationConfig.DisablePageArea },
 		Modalities:        a.studioModalities,
 		MCPContent:        studioMCPContent{a: a},
 		AgentOptions:      a.studioAgentOptions,
