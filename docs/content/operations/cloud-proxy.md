@@ -293,6 +293,13 @@ the upstream's full feature set.
 
 In translate mode, an Anthropic response with `stop_reason: "refusal"` is returned to the client as an error instead of an empty successful reply, for both non-streaming and streaming requests. A streamed response may already have delivered partial content when the refusal arrives. Responses that end normally (`end_turn`) are unaffected, even when their content is empty.
 
+With `provider: openai`, the model's `reasoning_effort` (the model YAML
+field, or the request's `reasoning_effort`) is sent upstream as
+`reasoning_effort`. Some OpenAI reasoning models reject function tools on
+`/v1/chat/completions` unless it is `"none"`, so a tool-using agent on such a
+model needs `reasoning_effort: none` in its YAML. When it is unset the field is
+omitted and the upstream applies its own default.
+
 With `provider: openai`, the response content may be a string (OpenAI) or an
 array of typed parts, as sent by Mistral's reasoning models and other
 OpenAI-compatible APIs. Text parts become the answer and `thinking` parts

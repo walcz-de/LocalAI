@@ -36,6 +36,7 @@ type openAIRequest struct {
 	PresencePenalty  *float64        `json:"presence_penalty,omitempty"`
 	Tools            json.RawMessage `json:"tools,omitempty"`
 	ToolChoice       json.RawMessage `json:"tool_choice,omitempty"`
+	ReasoningEffort  string          `json:"reasoning_effort,omitempty"`
 }
 
 type openAIMessage struct {
@@ -174,6 +175,13 @@ func buildOpenAIRequest(opts *pb.PredictOptions, cfg *proxyConfig, stream bool) 
 	// own defaults.
 	if n := opts.GetTokens(); n > 0 {
 		req.MaxTokens = &n
+	}
+	// Forward the model's reasoning_effort (model YAML or request metadata).
+	// Some OpenAI reasoning models reject function tools on
+	// /v1/chat/completions unless reasoning_effort is "none"; without
+	// forwarding, the upstream default applies and every tool call fails.
+	if e := opts.GetMetadata()["reasoning_effort"]; e != "" {
+		req.ReasoningEffort = e
 	}
 	if p := opts.GetFrequencyPenalty(); p != 0 {
 		v := float64(p)
