@@ -854,13 +854,23 @@ over 100 MB and more than 128 MB of media in one message stay files only.
 ## The files of a chat
 
 Each chat lists the files that belong to it: the files you attached, the files
-the model created, and the files it changed. The model gets the same list at
-every turn, so it knows which files exist and where they are now.
+the model created, and the files it changed. The model gets the list in front
+of your message whenever it changed since the model last read it, so it knows
+which files exist and where they are now. The list is not in the system
+prompt: it changes at most turns that write a file, and a changed system
+prompt makes a backend with a prompt cache read the whole conversation again.
 
 - **Where attachments live.** In the chat's own folder in your files:
-  `/Chats/<date> <title>/<name>`, for example `/Chats/2026-10-29 Budget/q1.csv`.
-  The model sees the same file as
-  `/workspace/home/Chats/2026-10-29 Budget/q1.csv`. The folder is made at the
+  `/Chats/<date>-<title slug>/<name>`, for example
+  `/Chats/2026-10-29-budget/q1.csv`. The name is the creation date and the
+  title in lowercase ASCII letters and digits joined by dashes (accents are
+  dropped; a character with no ASCII form, such as a middle dot, becomes a
+  dash), so it never holds a space or a character that a shell would split or
+  mangle. A title with no ASCII letter or digit gives `new-chat`. When two
+  chats get the same name, the second gets `-2`, then `-3`. The model sees the
+  same file as `/workspace/home/Chats/2026-10-29-budget/q1.csv`. A chat made
+  before this form keeps its folder, such as `/Chats/2026-10-29 Budget/`, and
+  that folder is not renamed when the title changes. The folder is made at the
   first attachment. In a chat whose agent works in [one
   folder]({{%relref "features/chats-agents#folders-of-an-agent" %}}), the
   model sees the chat folder at `/workspace/chat` instead (the file above is
@@ -871,8 +881,9 @@ every turn, so it knows which files exist and where they are now.
   or with a file tool such as `write_file`. The list is read from the
   history of your files, so a file that you or the model moved or deleted
   later is not listed at its old path.
-- **Rename.** Renaming a chat renames its folder to match the new title, and
-  the list gives the new paths at once. Earlier messages keep the old paths.
+- **Rename.** Renaming a chat renames its folder to match the new title (the
+  new slug), and the list gives the new paths at once. A folder in the old
+  form (`<date> <title>`, with a space) is left where it is. Earlier messages keep the old paths.
   The model is told at its next turn that the folder was renamed and which
   path is current.
 - **Delete.** Deleting a chat removes its transcript and its sandbox. Its
@@ -888,12 +899,12 @@ trigger or frontend), open the [change feed](/features/workspace-feed/)
 
 ```bash
 curl .../api/chats/3f1c.../files
-# {"files":[{"name":"q1.csv","path":"/Chats/2026-10-29 Budget/q1.csv",
-#   "guest_path":"/workspace/home/Chats/2026-10-29 Budget/q1.csv","size":2048,
+# {"files":[{"name":"q1.csv","path":"/Chats/2026-10-29-budget/q1.csv",
+#   "guest_path":"/workspace/home/Chats/2026-10-29-budget/q1.csv","size":2048,
 #   "mime":"text/csv","origin":"user","turn":1,"at":"..."},
 #  {"name":"report.md","path":"/report.md","guest_path":"/workspace/home/report.md",
 #   "size":930,"mime":"text/markdown","origin":"model","turn":2,"at":"..."}],
-#  "folder":"/workspace/home/Chats/2026-10-29 Budget/","folder_path":"/Chats/2026-10-29 Budget"}
+#  "folder":"/workspace/home/Chats/2026-10-29-budget/","folder_path":"/Chats/2026-10-29-budget"}
 ```
 
 `origin` is `user` (you attached it, or put it in the chat folder), `model`
@@ -929,8 +940,10 @@ tool's:
   `host_exec` for this machine).
 
 Only what the command saves under `/workspace/home` (or a writable shared
-folder) is kept. `bash` starts in `/workspace/home`, so a relative path such as
-`report.docx` is in your home. A file written anywhere else, such as
+folder) is kept. `bash` starts in the chat's [work
+folder](#working-files-and-the-work-folder) and has its path in `$WORK`, so a
+relative path such as `report.docx` is in that folder (a chat with no work
+folder yet starts in `/workspace/home`, with no `$WORK`). A file written anywhere else, such as
 `/workspace/report.docx` or `/tmp`, is not saved, and the result of the call
 says so by name. When you or a file tool changed a file while the command ran,
 your version stays and the command's version is saved as a copy; the result
@@ -949,12 +962,24 @@ starts, so every frontend of a cluster gives the same one.
 
 A chat that makes a document often writes a script, some intermediate data or
 a log on the way. These working files must not mix with your own files, so
-every chat has a work folder: `/Chats/<date> <title>/work/` in your files
-(`/workspace/home/Chats/<date> <title>/work/` for the model), next to the
+every chat has a work folder: `/Chats/<date>-<title slug>/work/` in your files
+(`/workspace/home/Chats/<date>-<title slug>/work/` for the model), next to the
 chat's attachments. It is a normal, visible folder.
 
+- **Where a command starts.** Every shell of the chat starts in the work
+  folder, and `$WORK` holds its path: the `bash` of the Sandbox, the `bash` on
+  this machine and the [background jobs](#background-jobs) of both. The
+  folder is made before the shell starts. A chat with no work folder yet (or
+  with the steering off) starts in `/workspace/home`, as before, and has no
+  `$WORK`. The model can still write anywhere in your files: nothing
+  restricts where a command writes. On this machine `$WORK` is a path of the
+  scratch folder, not of `/workspace`.
 - **What the model is told.** At every turn the note in front of your message
-  names the chat's work folder, and the prompt says: scripts, helper code, intermediate data, logs, drafts and
+  names the chat's work folder (the file tools take that path), says that the
+  shell starts there and that `$WORK` holds it, and gives the quoting rule:
+  use `$WORK` or relative paths instead of typing absolute paths, quote every
+  path with double quotes, and never type out a name with spaces or non-ASCII
+  characters but take it from `ls` or a glob. The prompt says: scripts, helper code, intermediate data, logs, drafts and
   anything else you did not ask for go there; the file you asked for (the
   document, the spreadsheet, the image) goes where you said, or at the top of
   your home, and nowhere else; no new top-level folders for scripts; a command
@@ -969,7 +994,7 @@ chat's attachments. It is a normal, visible folder.
 - **When the folder is made.** The chat takes the name of its folder at its
   first turn, but makes the folder only when it is used: before a `bash`
   command runs, or when a file is saved there. A chat that saves nothing
-  leaves no folder behind. `bash` still starts in `/workspace/home`.
+  leaves no folder behind.
 - **A gentle nudge, no refusal.** When `write_file`, `move_file` or a command
   leaves a helper file (see below) outside the work folder, its result gets
   one line that suggests moving it there, at most once a turn. Nothing is
@@ -990,7 +1015,7 @@ and puts it on the file list (`kind`), on the files of a command's card
 ```bash
 curl .../api/chats/3f1c.../files
 # {"files":[{"name":"summary.docx","path":"/summary.docx","kind":"deliverable",...},
-#  {"name":"build_document.py","path":"/Chats/2026-10-31 Summary/work/build_document.py",
+#  {"name":"build_document.py","path":"/Chats/2026-10-31-summary/work/build_document.py",
 #   "kind":"working",...}], ...}
 ```
 
@@ -1453,8 +1478,10 @@ shown when the Sandbox is already installed, or when add-ons are off.
   [Folders of an agent]({{%relref "features/chats-agents#folders-of-an-agent" %}}).
 - **Your files.** Each chat gets a scratch folder with your files: `home/`
   there is `/workspace/home` of the file tools, and `shared-<name>/` is a
-  shared folder. A command starts in `home/`, so a relative path is a path in
-  your home and a shared folder is `../shared-<name>`. The skills are there
+  shared folder. A command starts in the chat's work folder, `$WORK`, which is
+  `home/Chats/<chat>/work` (`home/` itself when the chat has none). So your
+  home is `$WORK/../../..` and a shared folder is
+  `$WORK/../../../../shared-<name>`; quote every path. The skills are there
   too, read-only, at the names the file tools use: `shared-skills/` (shared by
   an administrator), `shared-builtin-skills/` (built in) and
   `shared-addon-skills/` (from add-ons), so user-written skill scripts can run in place. Sandbox document
@@ -1633,6 +1660,18 @@ When a chat fills the model's context window, the older part is
 compacted so the model can go on. The transcript keeps every message; only what
 the model sees shrinks. A `compacted` event reports the size before and after.
 The window comes from `context_size` in the model's configuration.
+
+### Reasoning of earlier turns
+
+A chat asks the model's chat template to keep the reasoning of earlier turns
+(`chat_template_kwargs.preserve_thinking`). Some templates, such as the Qwen
+3 family, otherwise keep the reasoning of the last turn only. A new turn then
+renders the earlier answers without their reasoning, the prompt changes from
+the first answer of the turn before, and a backend with a prompt cache
+(llama.cpp) must read everything after that point again before the reply
+starts. A template that does not know the argument ignores it. To turn it off
+for a model, set `chat_template_kwargs: {preserve_thinking: false}` in its
+configuration. A model served by a remote proxy is not asked.
 
 ### The context window a chat needs
 

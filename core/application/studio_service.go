@@ -182,6 +182,7 @@ func (a *Application) initStudioService() {
 		Modalities:        a.studioModalities,
 		MCPContent:        studioMCPContent{a: a},
 		AgentOptions:      a.studioAgentOptions,
+		PreserveThinking:  a.studioPreserveThinking,
 		Persistent:        a.studioStoreKind != "memory",
 		Files:             a.StudioFiles(),
 		Media:             media.New(a.studioProvider, media.UserLookup(a.studioUsers()), a.studioHelperModel).WithVisionChooser(a.studioVisionModel).WithClient(a.studioMediaClient),
@@ -218,6 +219,13 @@ func (a *Application) initStudioService() {
 					return workspace.View{}, errStudioStarting
 				}
 				return svc.CommandView(ctx, act)
+			},
+			WorkDir: func(ctx context.Context, act workspace.Actor, create bool) string {
+				svc := svcRef.Load()
+				if svc == nil {
+					return ""
+				}
+				return svc.CommandWorkDir(ctx, act, create)
 			},
 		})
 		if r := a.studioHostExec.Unavailable(); r != "" {
@@ -433,6 +441,26 @@ func (a *Application) studioContextTokens(model string) int {
 		return 0
 	}
 	return corebackend.EffectiveRequestContextSize(cfg)
+}
+
+// studioPreserveThinking says whether a chat asks the model's chat template
+// to keep the reasoning of earlier turns. It does unless the model config sets
+// chat_template_kwargs.preserve_thinking to false. A model served by a remote
+// proxy is not asked: its upstream may refuse a field it does not know.
+func (a *Application) studioPreserveThinking(model string) bool {
+	cfg, ok := a.studioModelConfig(model)
+	if !ok || cfg.IsRemoteProxy() {
+		return false
+	}
+	if v, set := cfg.ChatTemplateKwargs["preserve_thinking"]; set {
+		switch t := v.(type) {
+		case bool:
+			return t
+		case string:
+			return t != "false" && t != "0"
+		}
+	}
+	return true
 }
 
 // studioModalities says which inputs a chat model takes natively, from its
