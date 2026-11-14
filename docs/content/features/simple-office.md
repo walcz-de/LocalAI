@@ -92,5 +92,9 @@ or content URLs. Chat folder and read-only access rules still apply. Failed
 parsing or rendering saves no new file. Existing files are never overwritten by
 creation: a conflict saves the new result to a sibling path and reports it.
 Cancellation, authorization, extension checks and atomic workspace storage remain
-in force. These simplified catalog schemas are not evidence of live model tool
-selection or of general native grammar-parser correctness.
+in force. A path with the wrong extension is refused with a message that quotes
+the path as received, so a model can see what it sent; a path wrapped in quotes,
+such as `"/plan.pptx"` with the quotes, also gets the hint to remove them. The
+quotes are not stripped, because a file name may contain quotes. These
+simplified catalog schemas are not evidence of live model tool selection or of
+general native grammar-parser correctness.
