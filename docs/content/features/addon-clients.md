@@ -29,12 +29,12 @@ local owner, so a client credential would add nothing and the routes answer
 
 | Route | Who | What it does |
 |---|---|---|
-| `POST /api/client/pairing-codes` | administrator | Makes a code. Body: `name`, `features` (a list of client features), `addons` (the ids of the add-ons the client may reach; see below), `models` (the names of the models the client may use; see below), `expiresInMinutes`, `keyExpiresIn` (for example `90d`). Returns the code once. When LocalAI serves TLS, the answer also has `tlsFingerprint` and `tlsDigest` (see [TLS and the pinned certificate](#tls-and-the-pinned-certificate)). |
+| `POST /api/client/pairing-codes` | administrator | Makes a code. Body: `name`, `features` (a list of client features), `addons` (the ids of the add-ons the client may reach; see below), `models` (the names of the models the client may use; see below), `readFolders` and `writeFolder` (the folder grant, see [Folders of the owner](#folders-of-the-owner)), `expiresInMinutes`, `keyExpiresIn` (for example `90d`). Returns the code once. When LocalAI serves TLS, the answer also has `tlsFingerprint` and `tlsDigest` (see [TLS and the pinned certificate](#tls-and-the-pinned-certificate)). |
 | `GET /api/client/pairing-codes` | administrator | Lists the codes that are not used or expired, with the same `tlsFingerprint` and `tlsDigest` when TLS is on. |
 | `DELETE /api/client/pairing-codes/{id}` | administrator | Cancels a code. |
 | `POST /api/client/pair` | the client, no credential | Body: `code`, optional `name`. Returns the client key once. |
 | `GET /api/client/keys` | administrator | Lists the paired clients, with their features, their add-ons, their models and last use. |
-| `PUT /api/client/keys/{id}` | administrator | Changes the add-ons or the models of a paired client. Body: `{"addons": ["id", ...]}`, `{"models": ["name", ...]}` or both. A field that is absent stays as it is. It applies at the next request. An empty add-on list cuts the client off from every add-on. A key with `client_inference` needs at least one model. |
+| `PUT /api/client/keys/{id}` | administrator | Changes the add-ons, the models or the folder grant of a paired client. Body: `{"addons": ["id", ...]}`, `{"models": ["name", ...]}`, `{"readFolders": [...], "writeFolder": "..."}` or any of them. A field that is absent stays as it is. It applies at the next request. An empty add-on list cuts the client off from every add-on. A key with `client_inference` needs at least one model. |
 | `DELETE /api/client/keys/{id}` | administrator | Revokes a client. It stops at the next request, and it closes a realtime session that is open (see below). |
 | `GET /api/client/self` | the client | Returns what the key may use in one call: `id`, `name`, `features`, `addons`, `models`, the expiry, and the `version` and `commit` of the instance. `version` is the tag of a release, or `dev` for a source build. Needs `client_self`. |
 
@@ -60,6 +60,7 @@ routes of the web UI.
 | `client_self` | `GET /api/client/self` |
 | `client_addons` | `/api/client/addons/{addon}/...`, for the add-ons in the list of the key (see below) |
 | `client_inference` | The seven inference routes below, for the models in the list of the key |
+| `client_folders` | No route. It switches on the folder grant of the key (`readFolders`, `writeFolder`), which the add-on reaches with the `client.workspace.*` host operations (see [Folders of the owner](#folders-of-the-owner)) |
 
 A code without a list gets `client_self`. A key with only `client_inference`
 cannot read `GET /api/client/self`: add `client_self` when the client should
@@ -189,7 +190,8 @@ because LocalAI does not know the certificate of the proxy.
 ## The routes of an add-on
 
 The add-on declares the routes in `manifest.json`, under `capabilities.client`.
-This needs `featureLevel` 7 and `capabilities.service`.
+This needs `featureLevel` 7 (8 when a route uses a wildcard tail) and
+`capabilities.service`.
 
 ```json
 {
@@ -212,12 +214,43 @@ This needs `featureLevel` 7 and `capabilities.service`.
 |---|---|
 | `id` | Names the route in the request. Lower case letters, digits and dashes. |
 | `method` | `GET`, `POST`, `PUT`, `PATCH` or `DELETE`. |
-| `path` | Starts with `/`. A segment is lower case letters, digits, `-` or `_`, or `{name}` for one variable segment. At most 6 segments and 128 characters. No dot, no escape, no empty segment. |
+| `path` | Starts with `/`. A segment is lower case letters, digits, `-` or `_`, or `{name}` for one variable segment. The last segment may be `{name...}`, a wildcard tail (see below). At most 6 segments and 128 characters. No dot, no escape, no empty segment. |
 | `stream` | `true` for a server-sent event stream. The method must be `GET`. |
 | `maxBodyBytes` | The largest request body. Default 65536, at most 1048576. A `GET` or `DELETE` takes no body. |
 | `timeoutSeconds` | The time one call may run. Default 10, at most 60. Not for a stream. |
 
 At most 32 routes. Two routes that match the same request are refused.
+
+### A wildcard tail
+
+The last segment of a path may be `{name...}`. It matches **one or more**
+segments, so `/files/{path...}` serves `/files/notes.md` and
+`/files/2026/11/trip.md`, and not `/files`. This needs `featureLevel` 8. A host
+of level 7 refuses the manifest with the plain reason "needs a newer LocalAI",
+and LocalAI refuses a manifest that uses a tail and declares a lower level.
+
+- Each matched part follows the rule of a variable segment: 1 to 128 characters
+  from letters, digits, `_`, `.`, `~`, `:` and `-`. A part that is `.` or `..`,
+  an empty part, a percent escape, a backslash and a space match nothing. This
+  is the same rule as for `{name}`, applied to every part.
+- The add-on gets the parts as one parameter, joined with `/`: for
+  `/files/2026/11/trip.md` the parameter `path` is `2026/11/trip.md`.
+  **The add-on must validate it itself** before it uses it as a path of its own.
+  The host cannot know what the add-on does with the value. It guarantees only
+  the rules above, so a name such as `.hidden` or `a.b` still arrives, and a
+  link or a long path is for the add-on to refuse.
+- A tail has no name clash: a name may be used once in a path, tail included.
+- A route without a tail wins over a route with one, whatever the order in the
+  manifest, so `/files/index` beats `/files/{path...}` for `/files/index`. Between
+  two routes with a tail, the one with the longer fixed part wins. The rule is
+  applied for each method: a route that does not tail only shadows the tail
+  routes of its own method. With `PUT /files/index` and `GET /files/{path...}`,
+  a `GET` of `/files/index` reaches the tail, and a `PUT` reaches the literal
+  route. Two routes of the same method and shape (`/a/{x...}` and `/a/{y...}`) are a manifest error.
+- Limits: a route with a tail takes a request path of at most 256 characters and
+  12 segments, since a path to a file needs more room than a fixed route. A
+  route without a tail keeps 128 characters and 6 segments. The declared path
+  keeps 6 segments and 128 characters, tail included.
 
 A client calls `/api/client/addons/{addon id}{path}` with its key. LocalAI
 forwards the request only if the method and the path match a declared route:
@@ -285,19 +318,162 @@ fills its parameters. It cannot send a prompt of its own.
 | `client.jobs.cancel` | `id` | the job |
 
 The owner must grant the add-on the operations as for any host operation (for
-example the prefix `client.` in the host policy), and must hold the `mcp_jobs`
-feature.
+example the prefix `client.jobs.` in the host policy), and must hold the
+`mcp_jobs` feature. Prefer the narrow prefix: the prefix `client.` also covers
+`client.list` and `client.workspace.*`, and so gives the add-on the files of
+the client folders.
 
 The client is not an argument. LocalAI records each forwarded call under the
 owner and the client key. The add-on passes the `operationId` of the call to the
 host with each operation, and LocalAI finds the client in its own record. During
-a call that a client made, the add-on can use the `client.` operations and no
-others. A stream call lasts as long as the stream, so the add-on can ask for the
+a call that a client made, the add-on can use the operations that this page names
+for a client call and no others: the three job operations, and the three folder
+operations of [Folders of the owner](#folders-of-the-owner). The host checks the
+exact name, so a new operation under `client.` stays closed to a client call
+until it is named. A stream call lasts as long as the stream, so the add-on can ask for the
 state of a job while the client is connected. Each operation checks that the key
 is still paired.
 
 A client sees only the jobs that were started for it. It may run 3 jobs at once.
 Ended jobs do not count against this limit.
+
+### Which clients an add-on can reach
+
+An add-on that wants to address one client (for example to prepare a file for
+it) asks which clients exist. The operation is not for a client call: the add-on
+uses it while it works for the owner.
+
+| Operation | Arguments | Result |
+|---|---|---|
+| `client.list` | none | `{"clients": [{"id": "...", "name": "..."}]}` |
+
+The host decides who is in the list, not the add-on:
+
+- Only clients of the owner of the call. The add-on is the one that made the
+  call, and an argument cannot name another add-on, another owner or a client.
+- Only clients that may reach this add-on (they hold `client_addons` and the
+  add-on is in their list) and that stand now: not revoked, not expired, not
+  paused, with an owner that is still an active administrator.
+- Only the `id` and the `name` (printable characters, at most 64 bytes, as in
+  `ClientRequest`). No key, no hash and no feature list.
+
+The call needs the owner to grant the add-on `client.list` (the prefix
+`client.list` is enough, and narrower than `client.`), and the actor must be an administrator. Otherwise the add-on
+gets the same refusal as for any host operation it does not hold. A call that
+a client made never reaches `client.list`: during such a call the add-on can use
+only the job and folder operations of this page, by exact name and not by
+prefix.
+
+### Folders of the owner
+
+A paired client may work with a few folders of the owner's files, through an
+add-on. The owner decides which, per client. The add-on never decides, and the
+home of the owner is never the rule.
+
+**The grant.** A client key carries `readFolders` (up to 8) and `writeFolder`
+(at most one). Both are paths relative to the owner's files, for example
+`Notes` or `Memory/agents/kitchen`. The owner sets them when it makes the
+pairing code, together with the feature `client_folders`, and changes them
+later with `PUT /api/client/keys/{id}` (`{"readFolders": [...], "writeFolder":
+"..."}`; an empty list or an empty string takes the access away). Only an
+administrator can do this, and the client cannot change its own grant. Empty
+means no access. The feature and the grant go together: a code with
+`client_folders` needs at least one folder, and a code with a folder needs the
+feature. A key can read its write folder as well.
+
+A folder name is refused when it is an absolute path, has a `..` or `.`
+segment, an empty segment (so no trailing slash), a NUL or other control
+character, or a backslash. It names at least one folder, so no grant covers all
+of the files.
+
+| Operation | Arguments | Result |
+|---|---|---|
+| `client.workspace.list` | `path` (a folder; `""` lists the granted folders) | `entries` with `name`, `dir` and `size` |
+| `client.workspace.read` | `path` (a file) | `path`, `size`, `content` |
+| `client.workspace.write` | `path` (a file), `content` | `path`, `bytes`, `sha256`, `revision` |
+
+Rules the host enforces, for each call:
+
+- The key is read from the store at each call. A key that is revoked, expired or
+  paused, whose owner is no longer an active administrator, that may not reach
+  the add-on, or that has no grant gets one generic refusal. The same refusal
+  answers an add-on that was not granted the operations, an owner without
+  the files feature and a call that no client made.
+- A path must lie inside a folder of the grant. `list` and `read` take the read
+  folders and the write folder, and `write` takes the write folder only. A write
+  to a read-only folder, to a parent or to a sibling of the write folder is
+  refused. The path is checked by the host before the store sees it, and the
+  store holds the call to the one granted folder as well. The owner's files are
+  a versioned store, not a directory on disk, so there is no link to follow.
+- Text formats only: `.md`, `.txt` and `.json`. A `.json` file must be valid
+  JSON. `list` shows these files and folders only.
+- Names below the write folder use letters, digits, `_`, `.`, `~` and `-`, no
+  leading dot, 128 characters per name, 16 segments per path.
+- Sizes: `read` returns a file of at most 512 KiB, and an answer that would be
+  over the 1 MiB payload of a host operation once it is JSON-encoded (a file
+  full of `<` takes six bytes a character) is refused. `list` returns at most
+  200 entries a page, sorted by name; when more follow, the answer has
+  `"truncated": true` and `next`, which the add-on passes back as `after`. `write` takes a file of at most
+  256 KiB and keeps at most 50 MiB in the write folder; replacing a file counts
+  the new size only.
+- A write is one change in the history of the owner's files, made as the owner,
+  with the title "Paired client <id> wrote <name>", so the owner can tell which
+  client wrote a file and undo it. The write folder is counted once and the
+  count is kept up to date by the writes (it is counted again after 30 seconds),
+  with at most 4096 files and folders in it. Writes to one folder run one at a
+  time; a write that waits reads the grant again before it runs, so a key that is
+  revoked, paused or narrowed meanwhile does not complete it.
+- **Audit.** The host logs each write with the add-on, the id of the client,
+  the path, the byte count and the SHA-256 of the content, and each refused
+  operation with its reason, at the info level with the other host operation
+  logs. The log never holds the content or a credential. The reason of a
+  refusal on the grant (a key that is revoked, paused, without a grant, or a path
+  outside the folders) is not sent to the add-on: it gets the generic refusal.
+  A refusal about the request itself is sent, in fixed words and with no path: a
+  file type that is not allowed, an invalid file name, a file or answer that is
+  too large, a folder that is full or has too many files, content that is not
+  text or not valid JSON.
+
+**The envelope of a client call.** A client call is recorded with the read
+scope. A call on a route that changes things (any method except `GET`) is
+recorded with the apply scope, which `client.workspace.write` needs. Streams and
+`GET` routes keep the read scope, and no client call gets the act scope. Apply
+does not widen what a client call may do: the broker allows a client call only
+the operations it names, by exact name, and these are the job operations and the
+three folder operations. Declare the folder operations in `hostOperations` and
+ask the owner for the prefix `client.workspace.`, not for `client.`: that prefix
+also covers `client.list`, and every operation added under it later.
+
+**Example: a write folder that the memory loader reads.** The built-in memory
+reads `Memory/index.md` and, next to each index, topic files that the model
+opens by name (`core/services/studio/memory.go` lists the three indexes,
+`core/services/studio/contextfiles/loader.go` reads `<index folder>/<topic>.md`).
+The folders with an index are `Memory/`, `Memory/agents/<agent>/` and
+`Memory/channels/<channel>/`. A write folder inside one of them needs no
+proposal: the files are read as the owner's own notes.
+
+**Security: this lets a paired client plant text that the owner's chats load.**
+What a client writes there is read like a note that the owner or the assistant
+saved. A client that is compromised, or an add-on that passes on what a person
+told it, can write text that steers the chats that read the folder. Memory
+notes come in a block that the prompt marks as saved data, but the model still
+reads it. Give such a folder only to a client that you trust as much as your own
+notes, keep it to one saved agent, and look at the history of the files, where
+each write has the client id in its title.
+
+```json
+{ "name": "kitchen", "features": ["client_self", "client_addons", "client_folders"],
+  "addons": ["notes-sync"], "writeFolder": "Memory/agents/kitchen-helper" }
+```
+
+The add-on saves `PUT /files/Memory/agents/kitchen-helper/pantry.md` (the demo
+route `/files/{path...}`), and chats of the saved agent `kitchen-helper` can
+open the topic `pantry`. Three limits to know. A topic name is letters, digits,
+`_` and `-` (at most 64), so a file named `pantry.v2.md` is stored but never
+loaded as a topic. A folder deeper than the one with the index, such as
+`Memory/clients/kitchen`, is stored but not read by the loader. And a write
+folder that holds `index.md` lets the client replace that index: give the
+client a folder of its own, or name the topics yourself.
 
 ### Which tools a job can use
 

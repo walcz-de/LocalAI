@@ -22056,11 +22056,19 @@ const docTemplate = `{
         "modeladmin.VRAMResponse": {
             "type": "object",
             "properties": {
+                "block_count": {
+                    "description": "BlockCount is the number of layers of the model, read\nfrom the GGUF metadata. Absent when it is unknown.",
+                    "type": "integer"
+                },
                 "context_length": {
                     "type": "integer"
                 },
                 "context_note": {
                     "type": "string"
+                },
+                "expert_count": {
+                    "description": "ExpertCount is the number of experts of a mixture-of-experts model, read\nfrom the GGUF metadata. Absent for a dense model or when it is unknown.",
+                    "type": "integer"
                 },
                 "model_max_context": {
                     "type": "integer"
