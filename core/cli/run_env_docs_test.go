@@ -22,7 +22,7 @@ var _ = Describe("run command environment variables named in the auth docs", fun
 				known[strings.TrimSpace(name)] = true
 			}
 		}
-		doc, err := os.ReadFile("../../docs/content/features/authentication.md")
+		doc, err := os.ReadFile("../../docs/content/administration/authentication.md")
 		Expect(err).NotTo(HaveOccurred())
 		named := regexp.MustCompile("`(LOCALAI_[A-Z0-9_]+)").FindAllStringSubmatch(string(doc), -1)
 		Expect(named).NotTo(BeEmpty())
