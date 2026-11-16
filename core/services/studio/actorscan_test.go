@@ -47,11 +47,9 @@ var actorAllowlist = map[string]string{
 	"contextturn.go:homeReader.ReadFile":                                "the host reads the user's notes at paths the loader builds from the chat record, never from the model; the chat's fence is not widened",
 	"service.go:New":                                                    "the administrator of the change feed and the trigger watcher",
 	"../../application/studio_files.go:Application.initStudioTextIndex": "the administrator of the text index",
-	// The client.workspace operations of a paired client: no chat makes them,
-	// so there is no chat access to take. The folder grant of the client key
-	// decides what they reach, and the actor is fenced to the one granted folder.
-	"../addons/hostops/engine_client_folders.go:ClientFolderHost.fence":        "finds the granted folder of a client key and fences the owner's actor to it",
-	"../addons/hostops/engine_client_folders.go:ClientFolderHost.ensureFolder": "makes the write folder the owner named in the client key's grant, before it can be fenced",
+	// Folder operations of a paired client: the grant of its key bounds them, not a chat.
+	"../addons/hostops/engine_client_folders.go:ClientFolderHost.fence":        "looks up the one granted folder, then returns the owner's actor fenced to that folder node; the path was checked against the key's grant first",
+	"../addons/hostops/engine_client_folders.go:ClientFolderHost.ensureFolder": "makes the write folder that the key's grant names, as the owner; no chat is involved and the model never chooses the path",
 }
 
 // actorBuilds returns the places in src that build an actor, as
@@ -96,7 +94,7 @@ func actorBuilds(fset *token.FileSet, f *ast.File) map[string][]string {
 // of its own would see more than the turn's access: the home of a scoped
 // chat. viewBuilds finds, in the same folders:
 //   - a call of BuildView or SkillLayerMounts;
-//   - a call of NewAccess, UserAccess, ScopedAccess or PersonAccess;
+//   - a call of NewAccess, UserAccess, UserAccessProjects, ScopedAccess or PersonAccess;
 //   - a call X.View(ctx, actor, mounts) with three arguments: a store's View.
 //     (session.Access.View takes none.)
 var viewAllowlist = map[string]string{
@@ -125,7 +123,7 @@ func viewBuilds(fset *token.FileSet, f *ast.File) map[string][]string {
 		switch {
 		case name == "BuildView" || name == "SkillLayerMounts":
 			return name
-		case name == "NewAccess" || name == "UserAccess" || name == "ScopedAccess" || name == "PersonAccess":
+		case name == "NewAccess" || name == "UserAccess" || name == "UserAccessProjects" || name == "ScopedAccess" || name == "PersonAccess":
 			return name
 		case name == "View" && len(x.Args) == 3:
 			return "a store's View"
