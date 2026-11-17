@@ -674,6 +674,16 @@ func (h *Triggers) ApplyChange(ctx context.Context, user, id string) (triggers.T
 		h.releaseChange(ctx, rec, triggers.OutcomeAccepted)
 		return triggers.Trigger{}, err
 	}
+	// The person may answer a day after the change was asked for: the
+	// connection may be off since, or the channel no longer approved. Only a
+	// change that moves the destination is checked: a rename or a pause must
+	// stay possible when the connection is gone.
+	if !sameDestination(live.Route, t.Route) {
+		if err := h.checkLiveConnection(ctx, t); err != nil {
+			h.releaseChange(ctx, rec, triggers.OutcomeAccepted)
+			return triggers.Trigger{}, err
+		}
+	}
 	t.ID = live.ID
 	t.Outcome, t.OutcomeAt, t.Touched = live.Outcome, live.OutcomeAt, live.Touched || live.Outcome != ""
 	t = triggers.Arm(&live, t, h.o.Clock())
@@ -777,6 +787,14 @@ func (h *Triggers) UndoChange(ctx context.Context, user, id string) (triggers.Tr
 	if err := t.Validate(); err != nil {
 		return triggers.Trigger{}, bad("%v", err)
 	}
+	// An undo that brings back a different destination stores it only while
+	// the connection and the channel are still usable; otherwise the trigger
+	// stays as it is. An undo that leaves the destination alone is not checked.
+	if !sameDestination(live.Route, t.Route) {
+		if err := h.checkLiveConnection(ctx, t); err != nil {
+			return triggers.Trigger{}, err
+		}
+	}
 	// An undo that brings back a trigger that is on is a switch on: refused
 	// while the project of its agent is not available.
 	if t.Enabled && !live.Enabled {
@@ -824,4 +842,10 @@ func changeNote(t triggers.Trigger, name string) string {
 		return fmt.Sprintf("the %s of %q undone by the user", t.Change.Op, name)
 	}
 	return ""
+}
+
+// sameDestination reports whether two routes report to the same place: the
+// same target, connection and channel. The mode does not count.
+func sameDestination(a, b triggers.Route) bool {
+	return a.TargetOrDefault() == b.TargetOrDefault() && a.Connection == b.Connection && a.Channel == b.Channel
 }
