@@ -10,7 +10,7 @@ keywords = ["quickstart", "install", "first model", "run", "getting started"]
 
 {{< diagram "quickstart-journey" "Quickstart in four steps: install with the script, Docker or the desktop app; start LocalAI; pick a model; talk to it in the web UI or the API. Then build an agent, install add-ons or add machines." >}}
 
-Run open models for chat, images, speech and video on your own machines. The API speaks the OpenAI and Anthropic formats. Your team gets chats, files and documents on top. No GPU needed for the engine, and a GPU makes it faster.
+Run open models for chat, images, speech and video on your own machines. The API speaks the OpenAI and Anthropic formats. Your team gets chats, files and documents on top, and the assistant can write and run code. No GPU needed for the engine, and a GPU makes it faster.
 
 ## Install and start LocalAI
 
@@ -30,7 +30,7 @@ On Windows, on an Intel Mac, or when you prefer a container, use Docker instead:
 docker run -p 8080:8080 --name local-ai -ti localai/localai:latest
 ```
 
-A desktop app for macOS and Linux comes with the next release. Test builds are on the dev-master pre-release. See the [install guide]({{% relref "/start/install" %}}) for the other ways to install.
+A desktop app for macOS and Linux is in the 5.0 release. See the [install guide]({{% relref "/start/install" %}}) for the other ways to install.
 
 For a GPU in a container, use the image that matches your hardware:
 

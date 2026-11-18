@@ -3,19 +3,20 @@
 {{- $eng := len hugo.Data.engines.engines -}}
 <main id="main">
 
-<aside class="notice" aria-label="Release status"><div class="shell"><p><b>In development builds:</b> Projects, the desktop app, Office, Sandbox, Team, Pages and add-ons. The latest release is 4.12.1. <a href="#whats-new">See what is new</a></p></div></aside>
+<aside class="notice" aria-label="Release status"><div class="shell"><p><b>LocalAI 5.0 is out:</b> Projects, the desktop app, Office, Sandbox, Team, Pages and add-ons. <a href="{{ "blog/localai-5-0/" | relURL }}">Read the release post</a></p></div></aside>
 
 <section class="hero">
   <div class="shell duo">
     <div>
       <h1>Your own AI, on your own hardware.</h1>
-      <p class="lede">Run open models for chat, images, speech and video on your own machines. The API speaks the OpenAI and Anthropic formats. Your team gets chats, files and documents on top.</p>
+      <p class="lede">Run open models for chat, images, speech and video on your own machines. The API speaks the OpenAI and Anthropic formats. Your team gets chats, files and documents on top, and the assistant can write and run code.</p>
+      <p class="alts hero__oss">Open source under the MIT licence. {{ if ge $s.stars 50000 }}{{ lang.FormatNumberCustom 0 (mul (div $s.stars 1000) 1000) }}+{{ else }}{{ lang.FormatNumberCustom 0 $s.stars }}{{ end }} <a href="{{ .Site.Params.github }}">stars on GitHub</a>.</p>
       <div class="acts">
         <a class="btn" href="{{ "get-started/" | relURL }}">Get started</a>
         <a class="btn btn--o" href="#whats-new">See what is new</a>
       </div>
       <div class="cmd"><span class="p" aria-hidden="true">$</span><code>curl -sSL https://localai.io/install.sh | sh</code><button class="cpy" type="button" data-copy="curl -sSL https://localai.io/install.sh | sh" aria-label="Copy the install command">copy</button></div>
-      <div class="hero__dl">{{ partial "download-buttons.html" (dict "site" . "cls" "btn btn--o") }}</div>
+      <div class="hero__dl">{{ partial "download-buttons.html" (dict "site" . "cls" "btn btn--o" "id" "hero") }}</div>
       <p class="alts">Or a <a href="{{ .Site.Params.docsURL }}start/install/containers/">container</a>, the <a href="{{ .Site.Params.docsURL }}start/install/desktop/">desktop app</a> or <a href="{{ .Site.Params.docsURL }}start/install/kubernetes/">Kubernetes</a>. Then open <code>http://localhost:8080</code>.</p>
     </div>
     <div class="heroFilm">
