@@ -281,6 +281,9 @@ type Deps struct {
 	// name, a shortcut, a schedule) to a user who did not choose. Read at each
 	// turn, so a change applies at once. Nil: on.
 	SuggestionsDefault func() bool
+	// DateNote says whether the note of each turn starts with today's date.
+	// Read at each turn, so a change applies at once. Nil: off.
+	DateNote func() bool
 	// EgressSettings returns the administrator's limits of the Sandbox
 	// network (chats_egress_*), read at each check. Nil: the ceiling is off and
 	// no command reaches the network.
@@ -314,7 +317,8 @@ type Deps struct {
 	// host's own settings (the memory switch and save level, under
 	// HostSettingsID). Nil: the settings cannot be changed.
 	SetUserSetting func(ctx context.Context, user, addonID, key, value string) error
-	// Clock is the time the offer limits use. Nil: time.Now. It is for tests.
+	// Clock is the time the offer limits and the date of the turn note use.
+	// Nil: time.Now. It is for tests.
 	Clock func() time.Time
 	// Harness replaces the nib harness. It is for tests.
 	Harness session.Harness

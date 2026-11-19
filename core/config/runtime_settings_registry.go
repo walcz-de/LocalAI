@@ -849,6 +849,12 @@ var runtimeSettingsFields = []fieldSpec{
 		func(o *ApplicationConfig) bool { return !o.DisableChatSuggestions },
 		func(o *ApplicationConfig, v bool) { o.DisableChatSuggestions = !v }),
 
+	// Today's date in the note of each chat turn. Read at each turn.
+	field("chats_date_note",
+		func(s *RuntimeSettings) **bool { return &s.ChatsDateNote },
+		func(o *ApplicationConfig) bool { return o.ChatsDateNote },
+		func(o *ApplicationConfig, v bool) { o.ChatsDateNote = v }),
+
 	// Pages of shared folders: stored as the negation, like the assistant.
 	field("shared_pages_enabled",
 		func(s *RuntimeSettings) **bool { return &s.SharedPagesEnabled },

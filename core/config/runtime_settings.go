@@ -170,6 +170,10 @@ type RuntimeSettings struct {
 	// Read at each turn, so a change applies at once.
 	ChatsSuggestions *bool `json:"chats_suggestions,omitempty"` // negation of DisableChatSuggestions (default: true)
 
+	// Today's date at the start of every chat turn (default: false). Read at
+	// each turn, so a change applies at once.
+	ChatsDateNote *bool `json:"chats_date_note,omitempty"`
+
 	// Pages of shared folders — read live by the pages handlers on every
 	// request, so switching them off stops open pages at their next call.
 	SharedPagesEnabled *bool `json:"shared_pages_enabled,omitempty"` // negation of DisableSharedPages
