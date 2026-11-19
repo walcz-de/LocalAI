@@ -34,6 +34,7 @@ ARG CMAKE_VERSION=3.31.10
 ARG GRPC_VERSION=v1.65.0
 ARG GRPC_MAKEFLAGS="-j4 -Otarget"
 ARG SKIP_DRIVERS=false
+ARG ROCM_PACKAGES="amdrocm-blas-dev10.1"
 ARG TARGETARCH
 ARG TARGETVARIANT
 ARG GO_VERSION=1.25.4
@@ -53,6 +54,7 @@ ENV BUILD_TYPE=${BUILD_TYPE} \
     GRPC_VERSION=${GRPC_VERSION} \
     GRPC_MAKEFLAGS=${GRPC_MAKEFLAGS} \
     SKIP_DRIVERS=${SKIP_DRIVERS} \
+    ROCM_PACKAGES=${ROCM_PACKAGES} \
     TARGETARCH=${TARGETARCH} \
     UBUNTU_VERSION=${UBUNTU_VERSION} \
     APT_MIRROR=${APT_MIRROR} \
@@ -84,6 +86,7 @@ WORKDIR /build
 # Ohne Secret verhaelt sich der Build unveraendert (anonym) — CI bleibt unberuehrt.
 RUN --mount=type=bind,source=.docker/install-base-deps.sh,target=/usr/local/sbin/install-base-deps \
     --mount=type=bind,source=.docker/apt-mirror.sh,target=/usr/local/sbin/apt-mirror \
+    --mount=type=bind,source=.docker/rocm-compat-links.sh,target=/usr/local/sbin/rocm-compat-links \
     --mount=type=secret,id=gh_token \
     if [ -s /run/secrets/gh_token ]; then \
         git config --global url."https://$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \
