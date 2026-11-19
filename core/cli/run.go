@@ -198,6 +198,7 @@ type RunCMD struct {
 	TriggerRunKeep           int           `env:"LOCALAI_TRIGGER_RUN_KEEP" default:"200" help:"Finished runs kept for each trigger, beyond those of the last two days (-1 keeps all)" group:"chats"`
 	TriggerRunRetention      int           `name:"trigger-run-retention-days" env:"LOCALAI_TRIGGER_RUN_RETENTION_DAYS" default:"30" help:"Days to keep finished trigger runs (-1 keeps them forever)" group:"chats"`
 	MCPCIJobTimeout          time.Duration `name:"mcp-ci-job-timeout" env:"LOCALAI_MCP_CI_JOB_TIMEOUT" default:"10m" help:"Longest an agent job may run" group:"chats"`
+	ChatsDateNote            bool          `env:"LOCALAI_CHATS_DATE_NOTE" default:"false" help:"Tell the model today's date at the start of every chat turn (runtime setting chats_date_note)" group:"chats"`
 
 	// Collections (the knowledge base)
 	DisableCollections         bool   `env:"LOCALAI_DISABLE_COLLECTIONS" default:"false" help:"Disable the collections service (the knowledge base API under /api/collections)" group:"collections"`
@@ -225,6 +226,7 @@ type RunCMD struct {
 	OIDCClientSecret     string `env:"LOCALAI_OIDC_CLIENT_SECRET" help:"OIDC Client Secret" group:"auth"`
 	ExternalBaseURL      string `env:"LOCALAI_BASE_URL" help:"External base URL of this instance (e.g. https://localhost:8080). Used for OAuth callbacks and self-referential links (generated images/videos, job status). When unset, derived from X-Forwarded-Proto/Host or Forwarded headers." group:"api"`
 	AuthAdminEmail       string `env:"LOCALAI_ADMIN_EMAIL" help:"Email address to auto-promote to admin role" group:"auth"`
+	AuthLegacyOwnerEmail string `env:"LOCALAI_AUTH_LEGACY_OWNER" help:"Email address of the account that keeps the agents, collections, skills and jobs created while auth was off (root storage area)" group:"auth"`
 	AuthRegistrationMode string `env:"LOCALAI_REGISTRATION_MODE" default:"open" help:"Registration mode: 'open' (default), 'approval', or 'invite' (invite code required)" group:"auth"`
 	DisableLocalAuth     bool   `env:"LOCALAI_DISABLE_LOCAL_AUTH" default:"false" help:"Disable local email/password registration and login (use with OAuth/OIDC-only setups)" group:"auth"`
 	AuthAPIKeyHMACSecret string `env:"LOCALAI_AUTH_HMAC_SECRET" help:"HMAC secret for API key hashing (auto-generated if empty)" group:"auth"`
@@ -735,6 +737,9 @@ func (r *RunCMD) Run(ctx *cliContext.Context) (result error) {
 	if r.SkipBindingCapsMigration {
 		opts = append(opts, config.SkipBindingCapsMigration)
 	}
+	if r.ChatsDateNote {
+		opts = append(opts, config.WithChatsDateNote(true))
+	}
 	opts = append(opts, config.WithAgentJobRetentionDays(r.AgentJobRetentionDays), config.WithMCPCIJobTimeout(r.MCPCIJobTimeout))
 	opts = append(opts, config.WithTriggerRunRetention(r.TriggerRunKeep, r.TriggerRunRetention))
 
@@ -836,6 +841,9 @@ func (r *RunCMD) Run(ctx *cliContext.Context) (result error) {
 		}
 		if r.AuthAdminEmail != "" {
 			opts = append(opts, config.WithAuthAdminEmail(r.AuthAdminEmail))
+		}
+		if r.AuthLegacyOwnerEmail != "" {
+			opts = append(opts, config.WithAuthLegacyOwnerEmail(r.AuthLegacyOwnerEmail))
 		}
 		if r.AuthRegistrationMode != "" {
 			opts = append(opts, config.WithAuthRegistrationMode(r.AuthRegistrationMode))

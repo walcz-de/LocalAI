@@ -552,6 +552,12 @@ type ApplicationConfig struct {
 	// /api/settings as chats_suggestions (stored as the negation).
 	DisableChatSuggestions bool
 
+	// ChatsDateNote starts the note of every chat turn with today's date
+	// ("Today is Monday, 2 November 2026 (Europe/Berlin)."), so the model does
+	// not answer with the date of its training data. Off by default.
+	// Runtime-toggleable via /api/settings as chats_date_note.
+	ChatsDateNote bool
+
 	// LegacyNavigation shows the previous sidebar. See WithLegacyNavigation.
 	LegacyNavigation bool
 
@@ -586,6 +592,7 @@ type AuthConfig struct {
 	OIDCClientID        string
 	OIDCClientSecret    string
 	AdminEmail          string // auto-promote to admin on login
+	LegacyOwnerEmail    string // account that keeps the root storage area created while auth was off
 	RegistrationMode    string // "open", "approval" (default when empty), "invite"
 	DisableLocalAuth    bool   // disable local email/password registration and login
 	APIKeyHMACSecret    string // HMAC secret for API key hashing; auto-generated if empty
@@ -1444,6 +1451,12 @@ func WithAuthAdminEmail(email string) AppOption {
 	}
 }
 
+func WithAuthLegacyOwnerEmail(email string) AppOption {
+	return func(o *ApplicationConfig) {
+		o.Auth.LegacyOwnerEmail = email
+	}
+}
+
 func WithAuthRegistrationMode(mode string) AppOption {
 	return func(o *ApplicationConfig) {
 		o.Auth.RegistrationMode = mode
@@ -1543,6 +1556,13 @@ func WithChatsAutoResume(on bool) AppOption {
 }
 
 // WithChatsHostExec sets who gets the chats' built-in bash: off, ask or on.
+// WithChatsDateNote tells the model today's date in every chat turn.
+func WithChatsDateNote(on bool) AppOption {
+	return func(o *ApplicationConfig) {
+		o.ChatsDateNote = on
+	}
+}
+
 func WithChatsHostExec(mode string) AppOption {
 	return func(o *ApplicationConfig) {
 		o.SetChatsHostExec(mode)

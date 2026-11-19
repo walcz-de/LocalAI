@@ -297,6 +297,31 @@ the upstream's full feature set.
 
 In translate mode, an Anthropic response with `stop_reason: "refusal"` is returned to the client as an error instead of an empty successful reply, for both non-streaming and streaming requests. A streamed response may already have delivered partial content when the refusal arrives. Responses that end normally (`end_turn`) are unaffected, even when their content is empty.
 
+With `provider: openai`, the model's `reasoning_effort` (the model YAML
+field, or the request's `reasoning_effort`) is sent upstream as
+`reasoning_effort`. Some OpenAI reasoning models reject function tools on
+`/v1/chat/completions` unless it is `"none"`, so a tool-using agent on such a
+model needs `reasoning_effort: none` in its YAML. When it is unset the field is
+omitted and the upstream applies its own default.
+
+With `provider: openai`, the response content may be a string (OpenAI) or an
+array of typed parts, as sent by Mistral's reasoning models and other
+OpenAI-compatible APIs. Text parts become the answer and `thinking` parts
+become the reasoning (the `reasoning` field of the chat response), in
+both non-streaming and streaming responses. Parts of other types are ignored.
+
+```yaml
+name: mistral-large
+backend: cloud-proxy
+
+proxy:
+  mode: translate
+  provider: openai
+  upstream_url: https://api.mistral.ai/v1/chat/completions
+  api_key_env: MISTRAL_API_KEY
+  upstream_model: mistral-large-latest
+```
+
 For OpenAI-compatible upstreams, translate mode rewrites nullable type unions in tool schemas (`"type": ["null", "array"]`) to the plain type (`"type": "array"`) before sending. LocalAI's built-in tools mark every list and pointer parameter as nullable, and some providers validate tool schemas against a narrower dialect: Mistral, for example, rejects the whole request with `Invalid tool schema: None is not of type 'array'` (code 3260). Optional parameters stay optional through `required`. Unions with more than one non-null type keep those types. A `required` or `enum` that is `null` (an empty Go list, as on the built-in `list_files` tool) is left out for the same reason.
 
 #### Anthropic prompt caching
