@@ -169,3 +169,33 @@ func TestPredict_RejectedInPassthroughMode(t *testing.T) {
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("only valid in translate"))
 }
+
+// OpenAI rejects function tools on /v1/chat/completions for some reasoning
+// models unless reasoning_effort is "none". The model's reasoning_effort
+// (model YAML or request metadata) must reach the upstream; without it the
+// field stays off the wire so other providers see an unchanged request.
+func TestPredict_OpenAI_ForwardsReasoningEffort(t *testing.T) {
+	g := NewWithT(t)
+	var raw map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		raw = map[string]any{}
+		_ = json.Unmarshal(b, &raw)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`)
+	}))
+	defer srv.Close()
+	cp := newTranslateCloudProxy(t, srv.URL)
+
+	_, err := cp.Predict(&pb.PredictOptions{
+		Messages: []*pb.Message{{Role: "user", Content: "hi"}},
+		Tools:    `[{"type":"function","function":{"name":"f","parameters":{"type":"object"}}}]`,
+		Metadata: map[string]string{"reasoning_effort": "none"},
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(raw).To(HaveKeyWithValue("reasoning_effort", "none"))
+
+	_, err = cp.Predict(&pb.PredictOptions{Messages: []*pb.Message{{Role: "user", Content: "hi"}}})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(raw).NotTo(HaveKey("reasoning_effort"))
+}
