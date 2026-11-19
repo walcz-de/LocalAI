@@ -146,9 +146,10 @@ What happens to each part when you switch authentication on:
 - **Old agents, tasks, skills, Telegram connectors and saved chats** of the
   previous agent pool are converted at start and given to the account that owned
   them (see [Chats migration]({{% relref "/features/chats-migration" %}})). With
-  authentication on, an old item that belongs to no user is not converted: the
-  report at `/app/chats/conversion` lists it as skipped, and you make it again
-  under the intended account.
+  authentication on, an old item that belongs to no user goes to the legacy
+  owner (`LOCALAI_AUTH_LEGACY_OWNER`, see below) when one is configured and has an
+  account; otherwise it is not converted: the report at `/app/chats/conversion`
+  lists it as skipped, and you make it again under the intended account.
 
 {{% callout style="warning" %}}
 LocalAI does not migrate, delete or pause anything when you enable

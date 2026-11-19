@@ -8,14 +8,11 @@ import (
 	"github.com/mudler/xlog"
 )
 
-// getUserID extracts the scoped user ID from the request context.
-// Returns empty string when auth is not active (backward compat).
+// getUserID returns the user ID that scopes per-user storage: the
+// authenticated user's ID, the root area (empty) for the legacy owner, and
+// empty when auth is not active (backward compat). See auth.GetStorageUserID.
 func getUserID(c echo.Context) string {
-	user := auth.GetUser(c)
-	if user == nil {
-		return ""
-	}
-	return user.ID
+	return auth.GetStorageUserID(c)
 }
 
 // decodedParam returns the named path parameter, URL-decoding it.
