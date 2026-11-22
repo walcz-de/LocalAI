@@ -1,12 +1,14 @@
 /* eslint-disable no-unused-vars -- components used only inside JSX look unused to this config, which has no eslint-plugin-react */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useOutletContext } from 'react-router-dom'
+import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import { useActivityFeed } from '../hooks/useActivityFeed'
 import { useOperationActions, isRetryable } from '../hooks/useOperationActions'
+import { isAddonInstallOp } from '../utils/addonQueue'
 import { CANCEL_UNDO_MS, useUndoableCancel } from '../hooks/useUndoableCancel'
 import { backendsApi, modelsApi } from '../utils/api'
-import PageHeader from '../components/PageHeader'
+import AdminPage from '../components/admin/AdminPage'
+import AdminFilterBar from '../components/admin/AdminFilterBar'
 import OperationCard from '../components/OperationCard'
 import HomeUndoToast from '../components/home/HomeUndoToast'
 import Icon from '../components/Icon'
@@ -81,6 +83,10 @@ export default function Activity() {
   const addToast = outlet?.addToast
   const { operations, history, fetchHistory, clearHistory, cancelOperation, pauseOperation } = useActivityFeed()
   const { retry, dismiss } = useOperationActions(addToast)
+  const navigate = useNavigate()
+  // An add-on install is reviewed again on the Add-ons page, where its host
+  // access is shown; the link opens that review.
+  const reviewAddon = useCallback((op) => navigate(`/app/addons?review=${encodeURIComponent(op.name)}`), [navigate])
 
   const [filter, setFilter] = useState('all')
 
@@ -136,30 +142,25 @@ export default function Activity() {
   else supporting = t('activity.summaryIdle')
 
   return (
-    <div className="page page--wide op-page activity-page">
-      <PageHeader
-        title={t('activity.title')}
-        supporting={supporting}
-        actions={history.length > 0 ? (
-          <button type="button" className="dk-btn dk-btn--ghost" onClick={clearHistory}>
-            {t('activity.clearHistory')}
-          </button>
-        ) : null}
+    <AdminPage
+      width="full"
+      className="op-page activity-page"
+      title={t('activity.title')}
+      supporting={supporting}
+      action={history.length > 0 ? (
+        <button type="button" className="dk-btn dk-btn--ghost" onClick={clearHistory}>
+          {t('activity.clearHistory')}
+        </button>
+      ) : null}
+    >
+      <AdminFilterBar
+        chips={{
+          label: t('activity.filterLabel'),
+          value: filter,
+          onChange: setFilter,
+          options: FILTERS.map(entry => ({ id: entry.id, label: t(entry.labelKey) })),
+        }}
       />
-
-      <div className="activity-filters" role="group" aria-label={t('activity.filterLabel')}>
-        {FILTERS.map((entry) => (
-          <button
-            key={entry.id}
-            type="button"
-            className="dk-chip activity-chip"
-            aria-pressed={filter === entry.id}
-            onClick={() => setFilter(entry.id)}
-          >
-            {t(entry.labelKey)}
-          </button>
-        ))}
-      </div>
 
       {liveOps.length > 0 && (
         <section className="activity-section" aria-labelledby="activity-live">
@@ -192,6 +193,7 @@ export default function Activity() {
                 operation={op}
                 onDismiss={dismiss}
                 onRetry={isRetryable(op) ? retry : undefined}
+                onReview={isAddonInstallOp(op) ? reviewAddon : undefined}
               />
             ))}
           </div>
@@ -268,6 +270,6 @@ export default function Activity() {
           onExpire={cancelling.commit}
         />
       )}
-    </div>
+    </AdminPage>
   )
 }

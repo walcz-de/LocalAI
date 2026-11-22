@@ -2643,52 +2643,6 @@
       template:
         use_tokenizer_template: true
 - kind: model
-  id: deepseek-v4.1-flash-1017
-  name: deepseek-v4.1-flash-1017
-  version: 0.0.0-gallery.bfa32c31c263
-  description: "# DeepSeek-V4.1-Flash-1017\n\nTechnical Report \U0001F441️\n\n## Introduction\n\n**DeepSeek-V4.1-Flash-1017** is a minor update to **DeepSeek-V4.1-Flash**, delivering substantial improvements across reasoning, coding, agentic tasks, and visual benchmarks. Alongside these gains, the model reduces task execution time and output length, enabling users to complete tasks faster and at lower cost and advancing the performance–cost Pareto frontier across multiple agent harnesses.\n\n*† denotes the text-only subset of HLE. We use the Claude Code harness for Terminal-Bench 4.0 and the Mini-SWE-V2 harness for DeepSWE v1.1.*\n\n## Prompt Encoding\n\nThis release does not include a Jinja-format chat template. The `encoding` folder contains a self-contained Python reference implementation (`encoding.py`) with test cases for multi-turn conversations, tool calling, thinking mode, numeric reasoning effort, mid-conversation system messages, and interleaved image content.\n\n...\n"
-  license: mit
-  urls:
-    - https://huggingface.co/unsloth/DeepSeek-V4.1-Flash-1017-GGUF
-  tags:
-    - llm
-    - gguf
-    - deepseek
-  icon: https://github.com/deepseek-ai/DeepSeek-V2/blob/main/figures/logo.svg
-  channel: gallery
-  policy:
-    requireSignature: false
-  schemaVersion: 1
-  model:
-    url: github:mudler/LocalAI/gallery/virtual.yaml@master
-    files:
-      - filename: llama-cpp/models/dspark-DeepSeek-V4.1-Flash-1017-Q8_0/dspark-DeepSeek-V4.1-Flash-1017-Q8_0.gguf
-        sha256: 6ba6ac1b331c540691a209e7fc97dec2a24e295acb1e755c84c7d24a4373927a
-        uri: https://huggingface.co/unsloth/DeepSeek-V4.1-Flash-1017-GGUF/resolve/main/dspark-DeepSeek-V4.1-Flash-1017-Q8_0.gguf
-      - filename: llama-cpp/mmproj/dspark-DeepSeek-V4.1-Flash-1017-Q8_0/mmproj-F16.gguf
-        sha256: dad8ad13f1d9a25757e121592d7b4f8ca83620d1172048004998b7c0b964b18e
-        uri: https://huggingface.co/unsloth/DeepSeek-V4.1-Flash-1017-GGUF/resolve/main/mmproj-F16.gguf
-    overrides:
-      backend: llama-cpp
-      function:
-        automatic_tool_parsing_fallback: true
-        grammar:
-          disable: true
-      known_usecases:
-        - chat
-      mmproj: llama-cpp/mmproj/dspark-DeepSeek-V4.1-Flash-1017-Q8_0/mmproj-F16.gguf
-      options:
-        - use_jinja:true
-      parameters:
-        min_p: 0
-        model: llama-cpp/models/dspark-DeepSeek-V4.1-Flash-1017-Q8_0/dspark-DeepSeek-V4.1-Flash-1017-Q8_0.gguf
-        repeat_penalty: 1
-        temperature: 1
-        top_k: -1
-        top_p: 1
-      template:
-        use_tokenizer_template: true
-- kind: model
   id: humanizer-12b-bf16
   name: humanizer-12b-bf16
   version: 0.0.0-gallery.5a9c8fba6573
@@ -6205,7 +6159,7 @@
     files:
       - filename: ds4flash.gguf
         uri: https://huggingface.co/unsloth/DeepSeek-V4-Flash-Vision-Exp-GGUF
-        sha256: f2c0b5c86e4aeebfd7b932937a00ea42cbee41ca81d99083d9be9ef3339d8745
+        sha256: 8e286354e3a1c7d0435ae4eb2768e83d775840abdadfd214c876e5f54cb570a7
     overrides:
       backend: ds4
       function:
@@ -20077,6 +20031,266 @@
         use_tokenizer_template: true
     variants:
       - model: inkling-small-iq2-m
+- kind: model
+  id: inkling-2-mini
+  name: inkling-2-mini
+  version: 0.0.0-gallery.31c133fdde5c
+  description: |
+    Inkling 2 Mini from Thinking Machines Lab, in Unsloth's UD-Q4_K_XL GGUF quantization (17.6 GB).
+    It is a 26.2B-parameter mixture-of-experts model with 3.4B active parameters,
+    built as a looped transformer: the middle 12 of its 24 layers run three times
+    with shared weights. It accepts text and images (the F16 vision projector is
+    included) and generates text. It reasons before it answers and supports tool use.
+    A smaller build is available as a variant.
+
+    The entry uses the Mainline_Support build of the weights, the layout that
+    mainline llama.cpp reads, and pairs it with Unsloth's Q8_0 DSpark drafter
+    (0.4 GB) for speculative decoding with blocks of 3 draft tokens. The drafter
+    is meant to speed up generation on a GPU. In one CPU-only test it accepted
+    40 to 67 percent of the drafted tokens and gave no speed-up.
+
+    Limits from the model card: the model can get stuck in long reasoning loops,
+    so set limits on output tokens and on agent turns. Setting the reasoning effort
+    to its minimum does not turn reasoning off completely. It is less reliable than
+    larger models at following detailed tool instructions, so run agents in a
+    sandbox and confirm destructive actions. Output quality can be lower outside
+    English. Sampling follows the card: temperature 1.0 with no truncation.
+
+    Needs a LocalAI build whose llama.cpp backend supports the inkling2_loop
+    architecture and the DSpark drafter.
+  license: apache-2.0
+  urls:
+    - https://huggingface.co/thinkingmachines/Inkling-2-Mini
+    - https://huggingface.co/unsloth/Inkling-2-Mini-GGUF
+  tags:
+    - llm
+    - gguf
+    - vision
+    - multimodal
+    - reasoning
+    - moe
+    - dflash
+    - cpu
+    - gpu
+  icon: https://cdn-uploads.huggingface.co/production/uploads/630e8f0bf6f6d700f50ebd2e/AvmDwmrWRMnKjOWvmLieg.png
+  channel: gallery
+  policy:
+    requireSignature: false
+  schemaVersion: 1
+  model:
+    url: github:mudler/LocalAI/gallery/virtual.yaml@master
+    files:
+      - filename: llama-cpp/models/Inkling-2-Mini-GGUF/Inkling-2-Mini-UD-Q4_K_XL.gguf
+        sha256: e64276656f072e9b2197a61723667cbdb71da66a716ffd966e572c21088f3cd3
+        uri: https://huggingface.co/unsloth/Inkling-2-Mini-GGUF/resolve/main/Mainline_Support/Inkling-2-Mini-UD-Q4_K_XL.gguf_file
+      - filename: llama-cpp/mmproj/Inkling-2-Mini-GGUF/mmproj-F16.gguf
+        sha256: 3bff75ffeb2d6e0371ba7bd42e30d26a7d98aea681fa44b03b5a20891cfa2c5f
+        uri: https://huggingface.co/unsloth/Inkling-2-Mini-GGUF/resolve/main/mmproj-F16.gguf
+      - filename: llama-cpp/models/Inkling-2-Mini-GGUF/dspark-Inkling-2-Mini-Q8_0.gguf
+        sha256: 2ec78510da837e8fc3be54a14757a0c5fbd2d8d9e85a0d92853fafdf674f3773
+        uri: https://huggingface.co/unsloth/Inkling-2-Mini-GGUF/resolve/main/dspark-Inkling-2-Mini-Q8_0.gguf
+    overrides:
+      backend: llama-cpp
+      context_size: 32768
+      draft_model: llama-cpp/models/Inkling-2-Mini-GGUF/dspark-Inkling-2-Mini-Q8_0.gguf
+      function:
+        automatic_tool_parsing_fallback: true
+        grammar:
+          disable: true
+      known_input_modalities:
+        - text
+        - image
+      known_usecases:
+        - chat
+        - vision
+      mmproj: llama-cpp/mmproj/Inkling-2-Mini-GGUF/mmproj-F16.gguf
+      options:
+        - use_jinja:true
+        - spec_type:draft-dspark
+        - spec_n_max:3
+      parameters:
+        min_p: 0
+        model: llama-cpp/models/Inkling-2-Mini-GGUF/Inkling-2-Mini-UD-Q4_K_XL.gguf
+        temperature: 1.0
+        top_k: 0
+        top_p: 1.0
+      template:
+        use_tokenizer_template: true
+    variants:
+      - model: inkling-2-mini-q3
+      - model: inkling-2-mini-q2
+- kind: model
+  id: inkling-2-mini-q3
+  name: inkling-2-mini-q3
+  version: 0.0.0-gallery.c901eec5dd81
+  description: |
+    Inkling 2 Mini from Thinking Machines Lab, in Unsloth's UD-Q3_K_XL GGUF quantization (13.6 GB).
+    It is a 26.2B-parameter mixture-of-experts model with 3.4B active parameters,
+    built as a looped transformer: the middle 12 of its 24 layers run three times
+    with shared weights. It accepts text and images (the F16 vision projector is
+    included) and generates text. It reasons before it answers and supports tool use.
+    This entry is the Q3_K_XL build (13.6 GB) for hosts with less memory; the Q4_K_XL build is the default.
+
+    The entry uses the Mainline_Support build of the weights, the layout that
+    mainline llama.cpp reads, and pairs it with Unsloth's Q8_0 DSpark drafter
+    (0.4 GB) for speculative decoding with blocks of 3 draft tokens. The drafter
+    is meant to speed up generation on a GPU. In one CPU-only test it accepted
+    40 to 67 percent of the drafted tokens and gave no speed-up.
+
+    Limits from the model card: the model can get stuck in long reasoning loops,
+    so set limits on output tokens and on agent turns. Setting the reasoning effort
+    to its minimum does not turn reasoning off completely. It is less reliable than
+    larger models at following detailed tool instructions, so run agents in a
+    sandbox and confirm destructive actions. Output quality can be lower outside
+    English. Sampling follows the card: temperature 1.0 with no truncation.
+
+    Needs a LocalAI build whose llama.cpp backend supports the inkling2_loop
+    architecture and the DSpark drafter.
+  license: apache-2.0
+  urls:
+    - https://huggingface.co/thinkingmachines/Inkling-2-Mini
+    - https://huggingface.co/unsloth/Inkling-2-Mini-GGUF
+  tags:
+    - llm
+    - gguf
+    - vision
+    - multimodal
+    - reasoning
+    - moe
+    - dflash
+    - cpu
+    - gpu
+  icon: https://cdn-uploads.huggingface.co/production/uploads/630e8f0bf6f6d700f50ebd2e/AvmDwmrWRMnKjOWvmLieg.png
+  channel: gallery
+  policy:
+    requireSignature: false
+  schemaVersion: 1
+  model:
+    url: github:mudler/LocalAI/gallery/virtual.yaml@master
+    files:
+      - filename: llama-cpp/models/Inkling-2-Mini-GGUF/Inkling-2-Mini-UD-Q3_K_XL.gguf
+        sha256: e2d03e8c92ac21cff0e3309b95f40dfd27d1825184f0d2bc09db249797273639
+        uri: https://huggingface.co/unsloth/Inkling-2-Mini-GGUF/resolve/main/Mainline_Support/Inkling-2-Mini-UD-Q3_K_XL.gguf_file
+      - filename: llama-cpp/mmproj/Inkling-2-Mini-GGUF/mmproj-F16.gguf
+        sha256: 3bff75ffeb2d6e0371ba7bd42e30d26a7d98aea681fa44b03b5a20891cfa2c5f
+        uri: https://huggingface.co/unsloth/Inkling-2-Mini-GGUF/resolve/main/mmproj-F16.gguf
+      - filename: llama-cpp/models/Inkling-2-Mini-GGUF/dspark-Inkling-2-Mini-Q8_0.gguf
+        sha256: 2ec78510da837e8fc3be54a14757a0c5fbd2d8d9e85a0d92853fafdf674f3773
+        uri: https://huggingface.co/unsloth/Inkling-2-Mini-GGUF/resolve/main/dspark-Inkling-2-Mini-Q8_0.gguf
+    overrides:
+      backend: llama-cpp
+      context_size: 32768
+      draft_model: llama-cpp/models/Inkling-2-Mini-GGUF/dspark-Inkling-2-Mini-Q8_0.gguf
+      function:
+        automatic_tool_parsing_fallback: true
+        grammar:
+          disable: true
+      known_input_modalities:
+        - text
+        - image
+      known_usecases:
+        - chat
+        - vision
+      mmproj: llama-cpp/mmproj/Inkling-2-Mini-GGUF/mmproj-F16.gguf
+      options:
+        - use_jinja:true
+        - spec_type:draft-dspark
+        - spec_n_max:3
+      parameters:
+        min_p: 0
+        model: llama-cpp/models/Inkling-2-Mini-GGUF/Inkling-2-Mini-UD-Q3_K_XL.gguf
+        temperature: 1.0
+        top_k: 0
+        top_p: 1.0
+      template:
+        use_tokenizer_template: true
+    variants: []
+- kind: model
+  id: inkling-2-mini-q2
+  name: inkling-2-mini-q2
+  version: 0.0.0-gallery.c6dec2511feb
+  description: |
+    Inkling 2 Mini from Thinking Machines Lab, in Unsloth's UD-Q2_K_XL GGUF quantization (9.1 GB).
+    It is a 26.2B-parameter mixture-of-experts model with 3.4B active parameters,
+    built as a looped transformer: the middle 12 of its 24 layers run three times
+    with shared weights. It accepts text and images (the F16 vision projector is
+    included) and generates text. It reasons before it answers and supports tool use.
+    This entry is the Q2_K_XL build (9.1 GB) for hosts with less memory; the Q4_K_XL build is the default.
+
+    The entry uses the Mainline_Support build of the weights, the layout that
+    mainline llama.cpp reads, and pairs it with Unsloth's Q8_0 DSpark drafter
+    (0.4 GB) for speculative decoding with blocks of 3 draft tokens. The drafter
+    is meant to speed up generation on a GPU. In one CPU-only test it accepted
+    40 to 67 percent of the drafted tokens and gave no speed-up.
+
+    Limits from the model card: the model can get stuck in long reasoning loops,
+    so set limits on output tokens and on agent turns. Setting the reasoning effort
+    to its minimum does not turn reasoning off completely. It is less reliable than
+    larger models at following detailed tool instructions, so run agents in a
+    sandbox and confirm destructive actions. Output quality can be lower outside
+    English. Sampling follows the card: temperature 1.0 with no truncation.
+
+    Needs a LocalAI build whose llama.cpp backend supports the inkling2_loop
+    architecture and the DSpark drafter.
+  license: apache-2.0
+  urls:
+    - https://huggingface.co/thinkingmachines/Inkling-2-Mini
+    - https://huggingface.co/unsloth/Inkling-2-Mini-GGUF
+  tags:
+    - llm
+    - gguf
+    - vision
+    - multimodal
+    - reasoning
+    - moe
+    - dflash
+    - cpu
+    - gpu
+  icon: https://cdn-uploads.huggingface.co/production/uploads/630e8f0bf6f6d700f50ebd2e/AvmDwmrWRMnKjOWvmLieg.png
+  channel: gallery
+  policy:
+    requireSignature: false
+  schemaVersion: 1
+  model:
+    url: github:mudler/LocalAI/gallery/virtual.yaml@master
+    files:
+      - filename: llama-cpp/models/Inkling-2-Mini-GGUF/Inkling-2-Mini-UD-Q2_K_XL.gguf
+        sha256: b42841608ea380ddde5a3f1125081357128a3c71b80d006246de4e31292fc6c1
+        uri: https://huggingface.co/unsloth/Inkling-2-Mini-GGUF/resolve/main/Mainline_Support/Inkling-2-Mini-UD-Q2_K_XL.gguf_file
+      - filename: llama-cpp/mmproj/Inkling-2-Mini-GGUF/mmproj-F16.gguf
+        sha256: 3bff75ffeb2d6e0371ba7bd42e30d26a7d98aea681fa44b03b5a20891cfa2c5f
+        uri: https://huggingface.co/unsloth/Inkling-2-Mini-GGUF/resolve/main/mmproj-F16.gguf
+      - filename: llama-cpp/models/Inkling-2-Mini-GGUF/dspark-Inkling-2-Mini-Q8_0.gguf
+        sha256: 2ec78510da837e8fc3be54a14757a0c5fbd2d8d9e85a0d92853fafdf674f3773
+        uri: https://huggingface.co/unsloth/Inkling-2-Mini-GGUF/resolve/main/dspark-Inkling-2-Mini-Q8_0.gguf
+    overrides:
+      backend: llama-cpp
+      context_size: 32768
+      draft_model: llama-cpp/models/Inkling-2-Mini-GGUF/dspark-Inkling-2-Mini-Q8_0.gguf
+      function:
+        automatic_tool_parsing_fallback: true
+        grammar:
+          disable: true
+      known_input_modalities:
+        - text
+        - image
+      known_usecases:
+        - chat
+        - vision
+      mmproj: llama-cpp/mmproj/Inkling-2-Mini-GGUF/mmproj-F16.gguf
+      options:
+        - use_jinja:true
+        - spec_type:draft-dspark
+        - spec_n_max:3
+      parameters:
+        min_p: 0
+        model: llama-cpp/models/Inkling-2-Mini-GGUF/Inkling-2-Mini-UD-Q2_K_XL.gguf
+        temperature: 1.0
+        top_k: 0
+        top_p: 1.0
+      template:
+        use_tokenizer_template: true
+    variants: []
 - kind: model
   id: inkling-small-iq2-m
   name: inkling-small-iq2-m
@@ -100835,5 +101049,234 @@
         - use_jinja:true
       parameters:
         model: llama-cpp/models/LFM3-1.7B-Uncensored-AD-Q4_K_M/LFM3-1.7B-Uncensored-AD-Q4_K_M.gguf
+      template:
+        use_tokenizer_template: true
+- kind: model
+  id: olala-v1.0-mini-7a1b-q5-k-m
+  name: olala-v1.0-mini-7a1b-q5-k-m
+  version: 0.0.0-gallery.1f7ef0df3b15
+  description: |
+    Olala v1.0 mini 7A1B by OVHai LLM: a 6.8B-parameter hybrid model (Mamba3 state space layers
+    with mixture-of-experts, about 1B active parameters) with a 32768 token context, 36 languages,
+    reasoning with four effort levels and tool calling. This build is 5-bit (Q5_K_M), about 6.0 GB, the smallest file with no measured quality loss. For x86 CPU and Apple Silicon.
+    It runs only on the olala backend, which builds the OVHai llama.cpp fork: upstream llama.cpp
+    cannot load the olala architecture. Context is at most 32768 and is shared by parallel
+    requests. The chat template takes a reasoning effort of disabled, low, medium (default) or high.
+    Do not quantize this model with generic recipes: they can produce NaN.
+  license: apache-2.0
+  urls:
+    - https://huggingface.co/OVHaiLLM/Olala-v1.0-mini-7A1B
+    - https://huggingface.co/OVHaiLLM/Olala-v1.0-mini-7A1B-GGUF
+    - https://github.com/OVHai-LLM/llama.cpp
+  icon: https://cdn-avatars.huggingface.co/v1/production/uploads/62cd7b157a036fc9941bb688/d22dF7Bz4v-4LTxgLYALu.jpeg
+  tags:
+    - llm
+    - gguf
+    - chat
+    - reasoning
+    - tools
+    - moe
+    - mamba
+    - multilingual
+    - cpu
+  channel: gallery
+  policy:
+    requireSignature: false
+  schemaVersion: 1
+  model:
+    url: github:mudler/LocalAI/gallery/virtual.yaml@master
+    files:
+      - filename: olala/models/Olala-v1.0-mini-7A1B-q5_k_m.gguf
+        sha256: ed353d2632c406be9ca2022b35e4c13049d6f8f7390b1c1bb61d6a7d6b971860
+        uri: huggingface://OVHaiLLM/Olala-v1.0-mini-7A1B-GGUF/Olala-v1.0-mini-7A1B-q5_k_m.gguf
+    overrides:
+      backend: olala
+      context_size: 32768
+      function:
+        automatic_tool_parsing_fallback: true
+        grammar:
+          disable: true
+      known_usecases:
+        - chat
+      name: olala-v1.0-mini-7a1b-q5-k-m
+      options:
+        - use_jinja:true
+      parameters:
+        model: olala/models/Olala-v1.0-mini-7A1B-q5_k_m.gguf
+        temperature: 0.8
+        top_k: 40
+        top_p: 0.9
+      template:
+        use_tokenizer_template: true
+- kind: model
+  id: olala-v1.0-mini-7a1b-q6-k
+  name: olala-v1.0-mini-7a1b-q6-k
+  version: 0.0.0-gallery.7886d5aadbe9
+  description: |
+    Olala v1.0 mini 7A1B by OVHai LLM: a 6.8B-parameter hybrid model (Mamba3 state space layers
+    with mixture-of-experts, about 1B active parameters) with a 32768 token context, 36 languages,
+    reasoning with four effort levels and tool calling. This build is 6-bit (Q6_K), about 6.3 GB. For x86 CPU and Apple Silicon.
+    It runs only on the olala backend, which builds the OVHai llama.cpp fork: upstream llama.cpp
+    cannot load the olala architecture. Context is at most 32768 and is shared by parallel
+    requests. The chat template takes a reasoning effort of disabled, low, medium (default) or high.
+    Do not quantize this model with generic recipes: they can produce NaN.
+  license: apache-2.0
+  urls:
+    - https://huggingface.co/OVHaiLLM/Olala-v1.0-mini-7A1B
+    - https://huggingface.co/OVHaiLLM/Olala-v1.0-mini-7A1B-GGUF
+    - https://github.com/OVHai-LLM/llama.cpp
+  icon: https://cdn-avatars.huggingface.co/v1/production/uploads/62cd7b157a036fc9941bb688/d22dF7Bz4v-4LTxgLYALu.jpeg
+  tags:
+    - llm
+    - gguf
+    - chat
+    - reasoning
+    - tools
+    - moe
+    - mamba
+    - multilingual
+    - cpu
+  channel: gallery
+  policy:
+    requireSignature: false
+  schemaVersion: 1
+  model:
+    url: github:mudler/LocalAI/gallery/virtual.yaml@master
+    files:
+      - filename: olala/models/Olala-v1.0-mini-7A1B-q6_k.gguf
+        sha256: 58a2b658158290687a431705c3c256c1331580ad4e8e99db55d03a8131d223c8
+        uri: huggingface://OVHaiLLM/Olala-v1.0-mini-7A1B-GGUF/Olala-v1.0-mini-7A1B-q6_k.gguf
+    overrides:
+      backend: olala
+      context_size: 32768
+      function:
+        automatic_tool_parsing_fallback: true
+        grammar:
+          disable: true
+      known_usecases:
+        - chat
+      name: olala-v1.0-mini-7a1b-q6-k
+      options:
+        - use_jinja:true
+      parameters:
+        model: olala/models/Olala-v1.0-mini-7A1B-q6_k.gguf
+        temperature: 0.8
+        top_k: 40
+        top_p: 0.9
+      template:
+        use_tokenizer_template: true
+- kind: model
+  id: olala-v1.0-mini-7a1b-q8-0
+  name: olala-v1.0-mini-7a1b-q8-0
+  version: 0.0.0-gallery.f7972b3d7025
+  description: |
+    Olala v1.0 mini 7A1B by OVHai LLM: a 6.8B-parameter hybrid model (Mamba3 state space layers
+    with mixture-of-experts, about 1B active parameters) with a 32768 token context, 36 languages,
+    reasoning with four effort levels and tool calling. This build is 8-bit (q8_0-safe2), about 6.9 GB. For x86 CPU.
+    It runs only on the olala backend, which builds the OVHai llama.cpp fork: upstream llama.cpp
+    cannot load the olala architecture. Context is at most 32768 and is shared by parallel
+    requests. The chat template takes a reasoning effort of disabled, low, medium (default) or high.
+    Do not quantize this model with generic recipes: they can produce NaN.
+  license: apache-2.0
+  urls:
+    - https://huggingface.co/OVHaiLLM/Olala-v1.0-mini-7A1B
+    - https://huggingface.co/OVHaiLLM/Olala-v1.0-mini-7A1B-GGUF
+    - https://github.com/OVHai-LLM/llama.cpp
+  icon: https://cdn-avatars.huggingface.co/v1/production/uploads/62cd7b157a036fc9941bb688/d22dF7Bz4v-4LTxgLYALu.jpeg
+  tags:
+    - llm
+    - gguf
+    - chat
+    - reasoning
+    - tools
+    - moe
+    - mamba
+    - multilingual
+    - cpu
+  channel: gallery
+  policy:
+    requireSignature: false
+  schemaVersion: 1
+  model:
+    url: github:mudler/LocalAI/gallery/virtual.yaml@master
+    files:
+      - filename: olala/models/Olala-v1.0-mini-7A1B-q8_0-safe2.gguf
+        sha256: 0bb4560fa6800b41d16a15507ad1843ca17c0849ce0cc989bca337dcf55136d7
+        uri: huggingface://OVHaiLLM/Olala-v1.0-mini-7A1B-GGUF/Olala-v1.0-mini-7A1B-q8_0-safe2.gguf
+    overrides:
+      backend: olala
+      context_size: 32768
+      function:
+        automatic_tool_parsing_fallback: true
+        grammar:
+          disable: true
+      known_usecases:
+        - chat
+      name: olala-v1.0-mini-7a1b-q8-0
+      options:
+        - use_jinja:true
+      parameters:
+        model: olala/models/Olala-v1.0-mini-7A1B-q8_0-safe2.gguf
+        temperature: 0.8
+        top_k: 40
+        top_p: 0.9
+      template:
+        use_tokenizer_template: true
+- kind: model
+  id: olala-v1.0-mini-7a1b-bf16
+  name: olala-v1.0-mini-7a1b-bf16
+  version: 0.0.0-gallery.b879cb8f481d
+  description: |
+    Olala v1.0 mini 7A1B by OVHai LLM: a 6.8B-parameter hybrid model (Mamba3 state space layers
+    with mixture-of-experts, about 1B active parameters) with a 32768 token context, 36 languages,
+    reasoning with four effort levels and tool calling. This build is BF16 (16-bit), about 13.6 GB. Use this file on an NVIDIA GPU: the quantized files can produce NaN on GPU backends.
+    It runs only on the olala backend, which builds the OVHai llama.cpp fork: upstream llama.cpp
+    cannot load the olala architecture. Context is at most 32768 and is shared by parallel
+    requests. The chat template takes a reasoning effort of disabled, low, medium (default) or high.
+    Do not quantize this model with generic recipes: they can produce NaN.
+  license: apache-2.0
+  urls:
+    - https://huggingface.co/OVHaiLLM/Olala-v1.0-mini-7A1B
+    - https://huggingface.co/OVHaiLLM/Olala-v1.0-mini-7A1B-GGUF
+    - https://github.com/OVHai-LLM/llama.cpp
+  icon: https://cdn-avatars.huggingface.co/v1/production/uploads/62cd7b157a036fc9941bb688/d22dF7Bz4v-4LTxgLYALu.jpeg
+  tags:
+    - llm
+    - gguf
+    - chat
+    - reasoning
+    - tools
+    - moe
+    - mamba
+    - multilingual
+    - gpu
+    - cpu
+  channel: gallery
+  policy:
+    requireSignature: false
+  schemaVersion: 1
+  model:
+    url: github:mudler/LocalAI/gallery/virtual.yaml@master
+    files:
+      - filename: olala/models/Olala-v1.0-mini-7A1B-bf16.gguf
+        sha256: b266da8e292fb502b161ef0af413242f40c3d5736ebbcb5153fbf9c16bef5747
+        uri: huggingface://OVHaiLLM/Olala-v1.0-mini-7A1B-GGUF/Olala-v1.0-mini-7A1B-bf16.gguf
+    overrides:
+      backend: olala
+      context_size: 32768
+      function:
+        automatic_tool_parsing_fallback: true
+        grammar:
+          disable: true
+      known_usecases:
+        - chat
+      name: olala-v1.0-mini-7a1b-bf16
+      options:
+        - use_jinja:true
+      parameters:
+        model: olala/models/Olala-v1.0-mini-7A1B-bf16.gguf
+        temperature: 0.8
+        top_k: 40
+        top_p: 0.9
       template:
         use_tokenizer_template: true
