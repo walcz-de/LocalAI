@@ -72,6 +72,11 @@ func Middleware(db *gorm.DB, appConfig *config.ApplicationConfig) echo.Middlewar
 						c.Set(contextKeyStorageUserID, "")
 					}
 					authenticated = true
+					// A paired client's key is a device acting for its owner, not
+					// the person being active.
+					if key, ok := c.Get(contextKeyAPIKey).(*UserAPIKey); !ok || !key.IsClientKey() {
+						TouchLastActive(db, user)
+					}
 
 					// Session rotation for cookie-based sessions
 					if session, ok := c.Get("_auth_session").(*Session); ok {
