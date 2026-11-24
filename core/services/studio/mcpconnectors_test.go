@@ -183,7 +183,7 @@ var _ = Describe("mcpconnectors", func() {
 		for _, c := range panel.Connectors {
 			Expect(c.ID).NotTo(Equal("c4"), "the panel of a plain chat offers the agents-only connector: %+v", panel.Connectors)
 		}
-		draft, err := r.svc.DraftTools(context.Background(), alice, "", "")
+		draft, err := r.svc.DraftTools(context.Background(), alice, "", "", studio.Switches{})
 		Expect(err).NotTo(HaveOccurred())
 		for _, c := range draft.Connectors {
 			Expect(c.ID).NotTo(Equal("c4"), "a new chat offers the agents-only connector: %+v", draft.Connectors)
