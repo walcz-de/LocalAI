@@ -480,6 +480,10 @@ type ApplicationConfig struct {
 	// 0: DefaultChatsMaxIterations. A model's agent.max_iterations wins.
 	// Runtime-settable via /api/settings (chats_max_iterations).
 	ChatsMaxIterations int
+	// ChatsAddonToolLimit is the most add-on tools one chat is offered, 0:
+	// DefaultChatsAddonToolLimit. Runtime-settable via /api/settings
+	// (chats_addon_tool_limit). Guarded by chatsLimitsMu.
+	ChatsAddonToolLimit int
 
 	// ChatsGoalMaxTurns is the most turns the server starts by itself for one
 	// goal of a chat, and ChatsGoalMaxSteps the most model requests the turns
@@ -530,7 +534,8 @@ type ApplicationConfig struct {
 	AdminOffByDeprecatedOption bool
 
 	// ChatsToolSearch is the setting chats_tool_search: whether the large
-	// LocalAI tool groups are replaced by the three tool-search tools. One of
+	// LocalAI tool groups and the deferred add-on tools are replaced by the
+	// three tool-search tools. One of
 	// the ToolSearch* values; empty means auto. Read at each turn.
 	ChatsToolSearch string
 
@@ -1900,6 +1905,33 @@ func (o *ApplicationConfig) EffectiveChatsExtractMaxEntries() int {
 		return n
 	}
 	return DefaultChatsExtractMaxEntries
+}
+
+// Default and bounds of chats_addon_tool_limit, the most add-on tools one chat
+// is offered. Every tool schema is sent to the model on every turn, so a high
+// limit costs context and makes the model choose worse; the floor keeps room
+// for the tools that replace built-in ones (shell, web) and a few add-ons.
+// Each add-on is also limited to 32 tools, whatever this setting says.
+const (
+	DefaultChatsAddonToolLimit = 64
+	MinChatsAddonToolLimit     = 16
+	MaxChatsAddonToolLimit     = 256
+)
+
+func (o *ApplicationConfig) setChatsAddonToolLimit(v int) {
+	o.chatsLimitsMu.Lock()
+	o.ChatsAddonToolLimit = v
+	o.chatsLimitsMu.Unlock()
+}
+
+// EffectiveChatsAddonToolLimit is chats_addon_tool_limit as it applies now.
+func (o *ApplicationConfig) EffectiveChatsAddonToolLimit() int {
+	o.chatsLimitsMu.RLock()
+	defer o.chatsLimitsMu.RUnlock()
+	if o.ChatsAddonToolLimit < MinChatsAddonToolLimit || o.ChatsAddonToolLimit > MaxChatsAddonToolLimit {
+		return DefaultChatsAddonToolLimit
+	}
+	return o.ChatsAddonToolLimit
 }
 
 // DefaultChatsEgressAuditDays is how long the Sandbox network audit keeps a

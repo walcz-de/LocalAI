@@ -862,7 +862,15 @@
           "an empty block",
           "a null windows block",
           "refuses the former top-level execution field",
-          "refuses the block under the key platform"
+          "refuses the block under the key platform",
+          "is accepted on every kind",
+          "keeps an approval ceiling and a title on a deferred write tool",
+          "is refused on a page-only tool",
+          "is refused on a tool that shadows a built-in tool",
+          "is false when omitted and is not written when false",
+          "survives a JSON round trip",
+          "is not counted against the limits of the definitions",
+          "requires featureLevel 11 for a deferred tool, and a level 10 host refuses it"
         ]
       },
       {
@@ -1613,7 +1621,10 @@
       "accepts the upgrades of many different add-ons at once and runs every one",
       "keeps refusing the same add-on twice, a reused operation ID with another body and a stale request while other add-ons queue",
       "fails with a credential error and installs nothing without a rule",
-      "lists and installs with a rule, and sends no credential to the redirect target"
+      "lists and installs with a rule, and sends no credential to the redirect target",
+      "logs the start error as the cause and keeps the previous generation running",
+      "is one bounded line without credentials",
+      "carries the launch stage and reason in the log, bounded and without credentials"
     ],
     "report": ".cache/addons/logs/lifecycle.json"
   },
@@ -1766,7 +1777,25 @@
           "sign",
           "too long",
           "is not waited for when the owner bound the listener",
-          "writes the startup object through a pipe with a deadline"
+          "writes the startup object through a pipe with a deadline",
+          "names a receipt on disk that differs from the journal",
+          "names a missing receipt",
+          "names a manifest that does not fit the host",
+          "names a missing executable and keeps the host path out",
+          "names a data directory that cannot be made",
+          "names a process that cannot start",
+          "gives the exit status and the last line of a process that exits at once",
+          "takes the last line of the standard output too",
+          "says so when the process wrote nothing",
+          "bounds a huge last line",
+          "keeps credentials and control characters out of the last line",
+          "names a process that never became ready, with the last output",
+          "names a process whose health answer does not repeat the registration",
+          "names a start that is refused before a process is made",
+          "is the text of any other error",
+          "names a process that never reports its endpoint",
+          "names a process that reports an endpoint that is not loopback",
+          "names a process that exits before it reports"
         ]
       },
       {
@@ -2147,7 +2176,9 @@
           "carries the jobs tool of an app, which the public apps API leaves out",
           "carries the provider slots and the model-search source of an app, which the public apps API leaves out",
           "carries the credential-slot words and the translated resource nouns of an app",
-          "names the signer of a package from a signed source that is not official"
+          "names the signer of a package from a signed source that is not official",
+          "classifies the lifecycle actions that run for minutes and keeps quick calls short",
+          "lets an owner answer an install after the short deadline and the server write deadline"
         ]
       },
       {
@@ -3708,7 +3739,9 @@
           "carries the jobs tool of an app, which the public apps API leaves out",
           "carries the provider slots and the model-search source of an app, which the public apps API leaves out",
           "carries the credential-slot words and the translated resource nouns of an app",
-          "names the signer of a package from a signed source that is not official"
+          "names the signer of a package from a signed source that is not official",
+          "classifies the lifecycle actions that run for minutes and keeps quick calls short",
+          "lets an owner answer an install after the short deadline and the server write deadline"
         ]
       },
       {
@@ -4139,7 +4172,10 @@
           "accepts the upgrades of many different add-ons at once and runs every one",
           "keeps refusing the same add-on twice, a reused operation ID with another body and a stale request while other add-ons queue",
           "fails with a credential error and installs nothing without a rule",
-          "lists and installs with a rule, and sends no credential to the redirect target"
+          "lists and installs with a rule, and sends no credential to the redirect target",
+          "logs the start error as the cause and keeps the previous generation running",
+          "is one bounded line without credentials",
+          "carries the launch stage and reason in the log, bounded and without credentials"
         ]
       },
       {
@@ -4263,7 +4299,25 @@
           "says why when the launcher refuses, and starts nothing",
           "refuses an executable that is not a Linux program",
           "stops an add-on in WSL that outlives its wsl.exe once the session ends",
-          "is refused on a host without WSL, with the reason"
+          "is refused on a host without WSL, with the reason",
+          "names a receipt on disk that differs from the journal",
+          "names a missing receipt",
+          "names a manifest that does not fit the host",
+          "names a missing executable and keeps the host path out",
+          "names a data directory that cannot be made",
+          "names a process that cannot start",
+          "gives the exit status and the last line of a process that exits at once",
+          "takes the last line of the standard output too",
+          "says so when the process wrote nothing",
+          "bounds a huge last line",
+          "keeps credentials and control characters out of the last line",
+          "names a process that never became ready, with the last output",
+          "names a process whose health answer does not repeat the registration",
+          "names a start that is refused before a process is made",
+          "is the text of any other error",
+          "names a process that never reports its endpoint",
+          "names a process that reports an endpoint that is not loopback",
+          "names a process that exits before it reports"
         ]
       },
       {
@@ -5395,7 +5449,17 @@
       "go: is never offered to a model, and a model cannot call it by name",
       "go: says an add-on without a jobs tool cannot run jobs, and sends nothing",
       "go: refuses invalid arguments before it sends anything, and a plain adapter never calls it",
-      "go: refuses an answer that is too large, malformed, or about another job"
+      "go: refuses an answer that is too large, malformed, or about another job",
+      "go: still offers the add-on that replaces bash when earlier add-ons fill the cap",
+      "go: reports what the cap left out, without changing what is offered",
+      "go: reports nothing when the cap cuts nothing",
+      "go: lets a switched-off add-on free room for the ones that were cut",
+      "go: logs a cut once when it starts or changes, naming add-on IDs and counts only",
+      "go: takes the cap from the limit that is set, read at each discovery",
+      "go: tells the chat consumer which tools are deferred, and no other consumer",
+      "go: lists the same tools with the same wire form whether or not they are deferred (MCP, agents, triggers)",
+      "go: never lists a page-only tool, deferred or not",
+      "go: still runs a deferred tool through the broker like any other"
     ]
   },
   "tables-admin": {
