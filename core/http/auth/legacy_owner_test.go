@@ -23,6 +23,12 @@ func newStorageScopeApp(db *gorm.DB, appConfig *config.ApplicationConfig) *echo.
 		return c.String(http.StatusOK, "["+auth.GetStorageUserID(c)+"]")
 	}
 	e.GET("/scope", scope)
+	// The scope the collection, skill and job endpoints act in (EffectiveUserID):
+	// it must agree with the listing scope, or the owner lists a collection it
+	// then cannot search ("collection not found").
+	e.GET("/effective", func(c echo.Context) error {
+		return c.String(http.StatusOK, "["+auth.EffectiveUserID(c)+"]")
+	})
 	// The routes the agent pool exception is about: the one it needs (knowledge
 	// base search) and root data it must never reach (chat history).
 	e.POST("/api/agents/collections/:name/search", scope)
@@ -83,6 +89,19 @@ var _ = Describe("Legacy owner storage scope", func() {
 		rec := doRequest(appWithOwner(" OWNER@example.test "), http.MethodGet, "/scope", withBearerToken(key))
 		Expect(rec.Code).To(Equal(http.StatusOK))
 		Expect(rec.Body.String()).To(Equal("[]"))
+	})
+
+	It("acts in the root storage area for the legacy owner, as it lists there", func() {
+		key, _, err := auth.CreateAPIKey(db, owner.ID, "consumer", owner.Role, hmacSecret, nil)
+		Expect(err).NotTo(HaveOccurred())
+		app := appWithOwner("owner@example.test")
+		rec := doRequest(app, http.MethodGet, "/effective", withBearerToken(key))
+		Expect(rec.Code).To(Equal(http.StatusOK))
+		Expect(rec.Body.String()).To(Equal("[]"))
+		rec = doRequest(app, http.MethodGet, "/effective", withSessionCookie(session(bob.ID)))
+		Expect(rec.Body.String()).To(Equal("["+bob.ID+"]"), "every other account keeps its own area")
+		rec = doRequest(app, http.MethodGet, "/effective?user_id="+bob.ID, withBearerToken(key))
+		Expect(rec.Body.String()).To(Equal("["+bob.ID+"]"), "an admin still acts for another user with ?user_id=")
 	})
 
 	It("keeps every other account in its own storage area", func() {

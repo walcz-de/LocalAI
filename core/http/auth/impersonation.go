@@ -31,10 +31,9 @@ func LogImpersonation(callerID, targetID, path string) {
 // SECURITY: Only admins may supply ?user_id=<id> to operate on another user's
 // resources. Regular callers always get their own ID regardless of query params.
 func EffectiveUserID(c echo.Context) string {
-	callerID := ""
-	if user := GetUser(c); user != nil {
-		callerID = user.ID
-	}
+	// The storage scope, not the account ID: the legacy owner acts in the root
+	// area it lists (GetStorageUserID), every other account in its own.
+	callerID := GetStorageUserID(c)
 	if targetUID := c.QueryParam(UserIDQueryParam); targetUID != "" && CanImpersonate(c) {
 		if callerID != targetUID {
 			LogImpersonation(callerID, targetUID, c.Path())
