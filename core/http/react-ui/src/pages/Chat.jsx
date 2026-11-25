@@ -110,6 +110,7 @@ import { ChatSendContext } from '../components/chat/chatSendContext'
 import { useAuth } from '../context/AuthContext'
 import { useOperations } from '../hooks/useOperations'
 import { useLoadedModels } from '../hooks/useLoadedModels'
+import { withLoadedAliases } from '../utils/loadedAliases'
 import { copyToClipboard } from '../utils/clipboard'
 import { chatAddress, seqOfSearch } from '../utils/chatSearch'
 import Icon from '../components/Icon'
@@ -316,7 +317,9 @@ function ChatPage() {
     return browserChatStores(st)
   })
   const importInputRef = useRef(null)
-  const { ids: loadedIds, loaded: loadedModels } = useLoadedModels()
+  const { ids: realLoadedIds, loaded: loadedModels } = useLoadedModels()
+  // An alias is warm when its target is loaded: the server lists the target only.
+  const loadedIds = useMemo(() => withLoadedAliases(realLoadedIds, chatModels), [realLoadedIds, chatModels])
   const messagesEndRef = useRef(null)
   const messagesRef = useRef(null)
   const stickToBottomRef = useRef(true)
@@ -1447,16 +1450,14 @@ function ChatPage() {
               </ChatSendContext.Provider>
               </EgressCardsContext.Provider>
 
-              {(chat.running || streaming.text || streaming.reasoning || streaming.tools.length > 0) && (
+              {(chat.running || streaming.text || streaming.reasoning || streaming.tools.length > 0 || streaming.steps.length > 0) && (
                 <StreamingTurn
                   files={chatFiles.files}
                   onOpenFile={filesOn ? openFile : undefined}
                   identity={shownIdentity}
                   model={model}
                   warm={modelWarm}
-                  content={streaming.text}
-                  reasoning={streaming.reasoning}
-                  toolCalls={streaming.tools}
+                  live={chat.live}
                   waiting={(loadProgress || !modelWarm) ? (
                     <LoadCard model={model} progress={loadProgress} />
                   ) : (

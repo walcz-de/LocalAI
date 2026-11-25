@@ -816,6 +816,33 @@
           "body_one": "Se borró {{count}} archivo anterior.",
           "body_other": "Se borraron {{count}} archivos anteriores."
         }
+      },
+      "run": {
+        "title_one": "Actualizando {{count}} elemento",
+        "title_other": "Actualizando {{count}} elementos",
+        "titleAuto_one": "Actualización automática: {{count}} elemento",
+        "titleAuto_other": "Actualización automática: {{count}} elementos",
+        "updated_one": "{{count}} actualizado",
+        "updated_other": "{{count}} actualizados",
+        "running_one": "{{count}} en curso",
+        "running_other": "{{count}} en curso",
+        "waiting_one": "{{count}} en espera",
+        "waiting_other": "{{count}} en espera",
+        "done": "{{done}} de {{total}} hechas",
+        "end": {
+          "attention_one": "{{updated}} actualizados, {{count}} necesita atención",
+          "attention_other": "{{updated}} actualizados, {{count}} necesitan atención",
+          "done_one": "{{count}} actualizado",
+          "done_other": "{{count}} actualizados",
+          "auto": "Automática: {{text}}",
+          "first": "{{name}} sigue en {{version}}.",
+          "firstWhy": "{{name}} sigue en {{version}}: {{reason}}.",
+          "cancelled_one": "Tanda cancelada: {{count}} actualizados",
+          "cancelled_other": "Tanda cancelada: {{count}} actualizados",
+          "cancelledAttention_one": "Tanda cancelada: {{updated}} actualizados, {{count}} necesita atención",
+          "cancelledAttention_other": "Tanda cancelada: {{updated}} actualizados, {{count}} necesitan atención",
+          "firstStart": "{{name}} sigue en {{version}}: la nueva versión no arrancó: {{reason}}."
+        }
       }
     },
     "tabs": {
@@ -852,7 +879,15 @@
       }
     },
     "chatsOff": "Los chats están desactivados",
-    "emptyBodyNoChats": "Aquí aparecen las actualizaciones y las operaciones terminadas."
+    "emptyBodyNoChats": "Aquí aparecen las actualizaciones y las operaciones terminadas.",
+    "runProgress": "Progreso: {{title}}",
+    "runStarted": "Iniciada {{when}}",
+    "viewProgress": "Ver el progreso",
+    "seeRun": "Ver la tanda",
+    "openUpdates": "Abrir Actualizaciones",
+    "updatesPending_one": "{{count}} actualización disponible",
+    "updatesPending_other": "{{count}} actualizaciones disponibles",
+    "updatesNone": "Todo está al día"
   },
   "change": {
     "loading": "Leyendo el cambio del disparador...",
@@ -1519,7 +1554,10 @@
     "mcp": "Servidores MCP"
   },
   "triggersPage": {
-    "runLimit": "Límite de tiempo de una ejecución"
+    "runLimit": "Límite de tiempo de una ejecución",
+    "presets": {
+      "event": "Cuando llega un evento"
+    }
   },
   "sandboxProfile": {
     "label": "Perfil de sandbox",
@@ -1594,6 +1632,46 @@
       "title": "El tamaño de contexto de este chat es demasiado pequeño",
       "reason": "El ajuste de este chat es de {{window}} tokens y el chat necesita al menos {{minimum}}.",
       "fix": "Usar la ventana del modelo"
+    }
+  },
+  "event": {
+    "listening": "A la escucha:",
+    "announceAccepted": "Creado {{name}}. Copia ahora su secreto: se muestra una sola vez.",
+    "sentence": {
+      "typed": "Cuando {{source}} envía {{type}}",
+      "any": "Cuando {{source}} envía cualquier evento",
+      "where": " donde {{matches}}",
+      "and": " y "
+    },
+    "hook": {
+      "title": "Dirección del hook y secreto",
+      "urlLabel": "URL del hook",
+      "secretLabel": "Secreto (se muestra una vez)",
+      "curlLabel": "Llamada de ejemplo",
+      "copy": "Copiar",
+      "copied": "Copiado",
+      "copyUrl": "Copiar la URL del hook",
+      "copySecret": "Copiar el secreto",
+      "copyCurl": "Copiar la llamada de ejemplo",
+      "paste": "Pega la URL y el secreto en la configuración de webhook del remitente. El secreto no se vuelve a mostrar.",
+      "noSecret": "El secreto no se vuelve a mostrar. Rótalo para obtener uno nuevo.",
+      "rotate": "Rotar secreto",
+      "rotateTitle": "¿Rotar el secreto de {{name}}?",
+      "rotateBody": "El secreto anterior deja de funcionar de inmediato. Pon el nuevo en el remitente antes de su próximo evento.",
+      "rotateConfirm": "Rotar",
+      "rotated": "Secreto nuevo creado.",
+      "rotateFailed": "No se pudo rotar el secreto: {{message}}"
+    },
+    "form": {
+      "source": "Remitente",
+      "sourceHint": "El nombre del remitente, por ejemplo github.",
+      "sourceEmpty": "Indica el remitente de los eventos.",
+      "type": "Tipo de evento",
+      "typeHint": "Déjalo vacío para aceptar cualquier tipo de evento.",
+      "matches": "Solo cuando (un campo=valor por línea)",
+      "matchesHint": "Hasta 8 líneas, por ejemplo action=opened.",
+      "createdTitle": "{{name}} está listo",
+      "done": "Hecho"
     }
   }
 }

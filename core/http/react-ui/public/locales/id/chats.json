@@ -816,6 +816,33 @@
           "body_one": "{{count}} berkas lama dihapus.",
           "body_other": "{{count}} berkas lama dihapus."
         }
+      },
+      "run": {
+        "title_one": "Memperbarui {{count}} item",
+        "title_other": "Memperbarui {{count}} item",
+        "titleAuto_one": "Pembaruan otomatis: {{count}} item",
+        "titleAuto_other": "Pembaruan otomatis: {{count}} item",
+        "updated_one": "{{count}} diperbarui",
+        "updated_other": "{{count}} diperbarui",
+        "running_one": "{{count}} berjalan",
+        "running_other": "{{count}} berjalan",
+        "waiting_one": "{{count}} menunggu",
+        "waiting_other": "{{count}} menunggu",
+        "done": "{{done}} dari {{total}} selesai",
+        "end": {
+          "attention_one": "{{updated}} diperbarui, {{count}} perlu perhatian",
+          "attention_other": "{{updated}} diperbarui, {{count}} perlu perhatian",
+          "done_one": "{{count}} diperbarui",
+          "done_other": "{{count}} diperbarui",
+          "auto": "Otomatis: {{text}}",
+          "first": "{{name}} masih di {{version}}.",
+          "firstWhy": "{{name}} masih di {{version}}: {{reason}}.",
+          "cancelled_one": "Rangkaian dibatalkan: {{count}} diperbarui",
+          "cancelled_other": "Rangkaian dibatalkan: {{count}} diperbarui",
+          "cancelledAttention_one": "Rangkaian dibatalkan: {{updated}} diperbarui, {{count}} perlu perhatian",
+          "cancelledAttention_other": "Rangkaian dibatalkan: {{updated}} diperbarui, {{count}} perlu perhatian",
+          "firstStart": "{{name}} masih di {{version}}: versi baru tidak berjalan: {{reason}}."
+        }
       }
     },
     "tabs": {
@@ -852,7 +879,15 @@
       }
     },
     "chatsOff": "Chats nonaktif",
-    "emptyBodyNoChats": "Pembaruan dan operasi yang selesai muncul di sini."
+    "emptyBodyNoChats": "Pembaruan dan operasi yang selesai muncul di sini.",
+    "runProgress": "Kemajuan: {{title}}",
+    "runStarted": "Dimulai {{when}}",
+    "viewProgress": "Lihat kemajuan",
+    "seeRun": "Lihat rangkaian",
+    "openUpdates": "Buka Pembaruan",
+    "updatesPending_one": "{{count}} pembaruan tersedia",
+    "updatesPending_other": "{{count}} pembaruan tersedia",
+    "updatesNone": "Semuanya sudah terbaru"
   },
   "change": {
     "loading": "Membaca perubahan pemicu...",
@@ -1519,7 +1554,10 @@
     "mcp": "Server MCP"
   },
   "triggersPage": {
-    "runLimit": "Batas waktu satu proses"
+    "runLimit": "Batas waktu satu proses",
+    "presets": {
+      "event": "Saat ada peristiwa masuk"
+    }
   },
   "sandboxProfile": {
     "label": "Profil sandbox",
@@ -1594,6 +1632,46 @@
       "title": "Ukuran konteks chat ini terlalu kecil",
       "reason": "Pengaturan chat ini adalah {{window}} token dan chat membutuhkan minimal {{minimum}}.",
       "fix": "Pakai jendela model"
+    }
+  },
+  "event": {
+    "listening": "Mendengarkan:",
+    "announceAccepted": "{{name}} dibuat. Salin rahasianya sekarang: hanya ditampilkan sekali.",
+    "sentence": {
+      "typed": "Saat {{source}} mengirim {{type}}",
+      "any": "Saat {{source}} mengirim peristiwa apa pun",
+      "where": " dengan {{matches}}",
+      "and": " dan "
+    },
+    "hook": {
+      "title": "Alamat hook dan rahasia",
+      "urlLabel": "URL hook",
+      "secretLabel": "Rahasia (ditampilkan sekali)",
+      "curlLabel": "Contoh panggilan",
+      "copy": "Salin",
+      "copied": "Tersalin",
+      "copyUrl": "Salin URL hook",
+      "copySecret": "Salin rahasia",
+      "copyCurl": "Salin contoh panggilan",
+      "paste": "Tempel URL dan rahasia ke pengaturan webhook pengirim. Rahasia tidak ditampilkan lagi.",
+      "noSecret": "Rahasia tidak ditampilkan lagi. Putar rahasia untuk mendapatkan yang baru.",
+      "rotate": "Putar rahasia",
+      "rotateTitle": "Putar rahasia {{name}}?",
+      "rotateBody": "Rahasia lama langsung berhenti berfungsi. Pasang yang baru di pengirim sebelum peristiwa berikutnya.",
+      "rotateConfirm": "Putar",
+      "rotated": "Rahasia baru dibuat.",
+      "rotateFailed": "Rahasia tidak dapat diputar: {{message}}"
+    },
+    "form": {
+      "source": "Pengirim",
+      "sourceHint": "Nama pengirim, misalnya github.",
+      "sourceEmpty": "Sebutkan pengirim peristiwa.",
+      "type": "Jenis peristiwa",
+      "typeHint": "Kosongkan untuk menerima semua jenis peristiwa.",
+      "matches": "Hanya jika (satu field=nilai per baris)",
+      "matchesHint": "Hingga 8 baris, misalnya action=opened.",
+      "createdTitle": "{{name}} siap",
+      "done": "Selesai"
     }
   }
 }

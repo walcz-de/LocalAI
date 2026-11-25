@@ -816,6 +816,33 @@
           "body_one": "已删除 {{count}} 个旧文件。",
           "body_other": "已删除 {{count}} 个旧文件。"
         }
+      },
+      "run": {
+        "title_one": "正在更新 {{count}} 项",
+        "title_other": "正在更新 {{count}} 项",
+        "titleAuto_one": "自动更新:{{count}} 项",
+        "titleAuto_other": "自动更新:{{count}} 项",
+        "updated_one": "{{count}} 项已更新",
+        "updated_other": "{{count}} 项已更新",
+        "running_one": "{{count}} 项进行中",
+        "running_other": "{{count}} 项进行中",
+        "waiting_one": "{{count}} 项等待中",
+        "waiting_other": "{{count}} 项等待中",
+        "done": "已完成 {{done}}/{{total}}",
+        "end": {
+          "attention_one": "{{updated}} 项已更新,{{count}} 项需要处理",
+          "attention_other": "{{updated}} 项已更新,{{count}} 项需要处理",
+          "done_one": "{{count}} 项已更新",
+          "done_other": "{{count}} 项已更新",
+          "auto": "自动:{{text}}",
+          "first": "{{name}} 仍是 {{version}}。",
+          "firstWhy": "{{name}} 仍是 {{version}}:{{reason}}。",
+          "cancelled_one": "本次更新已取消:{{count}} 项已更新",
+          "cancelled_other": "本次更新已取消:{{count}} 项已更新",
+          "cancelledAttention_one": "本次更新已取消:{{updated}} 项已更新,{{count}} 项需要处理",
+          "cancelledAttention_other": "本次更新已取消:{{updated}} 项已更新,{{count}} 项需要处理",
+          "firstStart": "{{name}} 仍是 {{version}}:新版本未能启动:{{reason}}。"
+        }
       }
     },
     "tabs": {
@@ -852,7 +879,15 @@
       }
     },
     "chatsOff": "聊天会话已关闭",
-    "emptyBodyNoChats": "更新和已完成的操作会显示在这里。"
+    "emptyBodyNoChats": "更新和已完成的操作会显示在这里。",
+    "runProgress": "进度:{{title}}",
+    "runStarted": "开始于{{when}}",
+    "viewProgress": "查看进度",
+    "seeRun": "查看本次更新",
+    "openUpdates": "打开更新",
+    "updatesPending_one": "有 {{count}} 项可用更新",
+    "updatesPending_other": "有 {{count}} 项可用更新",
+    "updatesNone": "全部已是最新"
   },
   "change": {
     "loading": "正在读取触发器更改...",
@@ -1519,7 +1554,10 @@
     "mcp": "MCP 服务器"
   },
   "triggersPage": {
-    "runLimit": "单次运行的时间限制"
+    "runLimit": "单次运行的时间限制",
+    "presets": {
+      "event": "收到事件时"
+    }
   },
   "sandboxProfile": {
     "label": "沙箱配置",
@@ -1594,6 +1632,46 @@
       "title": "此聊天的上下文大小太小",
       "reason": "此聊天的设置为 {{window}} 个 token,聊天至少需要 {{minimum}} 个。",
       "fix": "使用模型的窗口"
+    }
+  },
+  "event": {
+    "listening": "监听中：",
+    "announceAccepted": "已创建 {{name}}。请立即复制它的密钥：密钥只显示一次。",
+    "sentence": {
+      "typed": "当 {{source}} 发送 {{type}}",
+      "any": "当 {{source}} 发送任意事件",
+      "where": " 且 {{matches}}",
+      "and": "、"
+    },
+    "hook": {
+      "title": "钩子地址和密钥",
+      "urlLabel": "钩子 URL",
+      "secretLabel": "密钥（只显示一次）",
+      "curlLabel": "调用示例",
+      "copy": "复制",
+      "copied": "已复制",
+      "copyUrl": "复制钩子 URL",
+      "copySecret": "复制密钥",
+      "copyCurl": "复制调用示例",
+      "paste": "把 URL 和密钥粘贴到发送方的 webhook 设置中。密钥不会再次显示。",
+      "noSecret": "密钥不会再次显示。轮换密钥可获得新的密钥。",
+      "rotate": "轮换密钥",
+      "rotateTitle": "要轮换 {{name}} 的密钥吗？",
+      "rotateBody": "旧密钥会立即失效。请在发送方下一次发送事件之前换成新密钥。",
+      "rotateConfirm": "轮换",
+      "rotated": "已生成新密钥。",
+      "rotateFailed": "无法轮换密钥：{{message}}"
+    },
+    "form": {
+      "source": "发送方",
+      "sourceHint": "发送方的名称，例如 github。",
+      "sourceEmpty": "请填写事件的发送方。",
+      "type": "事件类型",
+      "typeHint": "留空表示接收任意类型的事件。",
+      "matches": "仅当（每行一个 字段=值）",
+      "matchesHint": "最多 8 行，例如 action=opened。",
+      "createdTitle": "{{name}} 已就绪",
+      "done": "完成"
     }
   }
 }
