@@ -23,10 +23,15 @@ import (
 	"github.com/mudler/LocalAI/core/services/p2psplit"
 	"github.com/mudler/LocalAI/core/services/tunnel"
 	"github.com/mudler/LocalAI/internal"
+	ma "github.com/multiformats/go-multiaddr"
 )
 
 // redeemPath is the one route an unpaired peer may call, over P2P only.
 const redeemPath = "/api/p2p/redeem"
+
+// routesPath gives a paired device the current routes to the server. It is
+// served over P2P only, like redeemPath.
+const routesPath = "/api/p2p/routes"
 
 // p2pReloadInterval is how often a running host reloads its allowlist and the
 // pending invites from the store. Another frontend may pair or revoke a
@@ -78,8 +83,9 @@ type p2pNet struct {
 
 // p2pHandlers are the HTTP handlers served over P2P.
 type p2pHandlers struct {
-	main   http.Handler
-	redeem http.Handler
+	main http.Handler
+	// only serves the routes that exist over P2P alone.
+	only http.Handler
 }
 
 // p2pRuntime is one running host and what hangs on it.
@@ -176,11 +182,12 @@ func (a *Application) IsWorkerPeer(_ context.Context, peer string) bool {
 }
 
 // ServeP2PHTTP sets the handlers served over P2P in mode share: main is the
-// application's HTTP handler, which only paired peers reach; redeem serves
-// POST /api/p2p/redeem to any admitted peer. Until it is called, requests
-// over P2P get 503.
-func (a *Application) ServeP2PHTTP(main, redeem http.Handler) {
-	a.p2p().handlers.Store(&p2pHandlers{main: main, redeem: redeem})
+// application's HTTP handler, which only paired peers reach; only serves the
+// routes that exist over P2P alone: POST /api/p2p/redeem, to any admitted
+// peer, and GET /api/p2p/routes, to paired peers. Until it is called,
+// requests over P2P get 503.
+func (a *Application) ServeP2PHTTP(main, only http.Handler) {
+	a.p2p().handlers.Store(&p2pHandlers{main: main, only: only})
 }
 
 // CheckP2PMode checks a requested p2p_mode against this server: share needs
@@ -243,6 +250,48 @@ func (n *p2pNet) runtime() (*p2pRuntime, config.P2PMode) {
 	return n.rt, n.mode
 }
 
+// p2pHostConfig is the host configuration of a mode other than off. In mode
+// share it also returns the allowlist of the host.
+func p2pHostConfig(mode config.P2PMode, s config.P2PSettings, idPath string) (p2pnet.Config, *p2pnet.Allowlist, error) {
+	boot, err := p2pnet.ParsePeerAddrs(s.BootstrapPeers)
+	if err != nil {
+		return p2pnet.Config{}, nil, fmt.Errorf("p2p_bootstrap_peers: %w", err)
+	}
+	var relayAddrs []string
+	for _, r := range s.Relays {
+		relayAddrs = append(relayAddrs, r.Addr)
+	}
+	static, err := p2pnet.ParsePeerAddrs(relayAddrs)
+	if err != nil {
+		return p2pnet.Config{}, nil, fmt.Errorf("p2p_relays: %w", err)
+	}
+	pc := p2pnet.Config{
+		IdentityPath:   idPath,
+		PublicDHT:      !s.DisablePublicDHT,
+		BootstrapPeers: boot,
+		StaticRelays:   static,
+		MDNS:           !s.DisableMDNS,
+		UserAgent:      "localai/" + internal.Version,
+	}
+	var gate *p2pnet.Allowlist
+	if mode == config.P2PModeShare {
+		gate = p2pnet.NewAllowlist()
+		pc.Gate = gate
+		pc.ListenAddrs = s.ListenAddrs
+	}
+	// Mode connect listens too, on the default addresses with ports that
+	// the system picks: a hole punch needs a socket the peer can reach. It
+	// still accepts nobody: the host's own empty allowlist refuses every
+	// inbound connection after the security handshake. Nobody dials it, so
+	// it holds no relay reservation and does not announce itself or connect
+	// to the local network with mDNS.
+	if mode == config.P2PModeConnect {
+		pc.MDNS = false
+		pc.NoReservations = true
+	}
+	return pc, gate, nil
+}
+
 // startRuntime starts a host for the configured mode. It returns nil for off.
 func (n *p2pNet) startRuntime() (*p2pRuntime, config.P2PMode, error) {
 	appCfg := n.app.ApplicationConfig()
@@ -258,35 +307,9 @@ func (n *p2pNet) startRuntime() (*p2pRuntime, config.P2PMode, error) {
 	if err != nil {
 		return nil, mode, err
 	}
-	boot, err := p2pnet.ParsePeerAddrs(s.BootstrapPeers)
+	pc, gate, err := p2pHostConfig(mode, s, idPath)
 	if err != nil {
-		return nil, mode, fmt.Errorf("p2p_bootstrap_peers: %w", err)
-	}
-	var relayAddrs []string
-	for _, r := range s.Relays {
-		relayAddrs = append(relayAddrs, r.Addr)
-	}
-	static, err := p2pnet.ParsePeerAddrs(relayAddrs)
-	if err != nil {
-		return nil, mode, fmt.Errorf("p2p_relays: %w", err)
-	}
-	pc := p2pnet.Config{
-		IdentityPath:   idPath,
-		PublicDHT:      !s.DisablePublicDHT,
-		BootstrapPeers: boot,
-		StaticRelays:   static,
-		MDNS:           !s.DisableMDNS,
-		UserAgent:      "localai/" + internal.Version,
-	}
-	var gate *p2pnet.Allowlist
-	if mode == config.P2PModeShare {
-		gate = p2pnet.NewAllowlist()
-		pc.Gate = gate
-		pc.ListenAddrs = s.ListenAddrs
-	} else {
-		// Connect accepts nobody: no listen address, and the host's own empty
-		// allowlist refuses every inbound connection.
-		pc.ListenAddrs = []string{}
+		return nil, mode, err
 	}
 	ctx, cancel := context.WithCancel(context.WithoutCancel(appContext(appCfg)))
 	host, err := p2pnet.New(ctx, pc)
@@ -326,6 +349,7 @@ func (rt *p2pRuntime) startShare() error {
 		ServerPeer: rt.host.ID(),
 		Addrs:      rt.linkAddrs,
 		LANAddrs:   rt.lanAddrs,
+		Hints:      rt.relayHints,
 		Relays:     rt,
 		Limiter:    rt.limit,
 	}
@@ -431,6 +455,89 @@ func (rt *p2pRuntime) linkAddrs() []p2pnet.Multiaddr {
 		}
 	}
 	return out
+}
+
+// maxRelayHints is how many public relays an invite names for hole punch
+// coordination; the pairing service applies the same cap to its links.
+const maxRelayHints = 2
+
+// relayHints are the public relays on which the host holds a reservation,
+// for the h key of an invite: at most maxRelayHints, one address each. The
+// relays of the settings are left out, because an invite names them as
+// carriers. With the public DHT off, AutoRelay finds no public relay, and
+// there are none.
+func (rt *p2pRuntime) relayHints() []p2pnet.AddrInfo {
+	return rt.publicReservations(maxRelayHints)
+}
+
+// publicReservations lists the relays of the circuit addresses of the host
+// that are not relays of the settings, at most limit of them (all when limit
+// is zero or less).
+func (rt *p2pRuntime) publicReservations(limit int) []p2pnet.AddrInfo {
+	if rt.cfg.DisablePublicDHT {
+		return nil
+	}
+	carriers := map[string]bool{}
+	for _, r := range rt.relayList() {
+		carriers[r.ID] = true
+	}
+	return pickRelayHints(rt.host.Addrs(), carriers, limit)
+}
+
+// pickRelayHints reads the circuit addresses of addrs and returns their
+// relays in the order they first appear, without the relays whose peer ID
+// is in carriers and at most limit of them (all when limit is zero or
+// less). Each relay keeps one transport address, in this order of
+// preference: public IPv4 TCP, public IPv4 QUIC or other UDP, public IPv6,
+// then any other address. TCP comes first because some mobile and guest
+// networks block UDP.
+func pickRelayHints(addrs []p2pnet.Multiaddr, carriers map[string]bool, limit int) []p2pnet.AddrInfo {
+	var out []p2pnet.AddrInfo
+	rank := map[p2pnet.ID]int{}
+	for _, a := range addrs {
+		relay, _ := ma.SplitFunc(a, func(c ma.Component) bool { return c.Protocol().Code == p2pnet.ProtocolCircuit })
+		if len(relay) == 0 || len(relay) == len(a) {
+			continue
+		}
+		ai, err := p2pnet.ParsePeerAddr(relay.String())
+		if err != nil || len(ai.Addrs) != 1 || carriers[ai.ID.String()] {
+			continue
+		}
+		r := hintRank(ai.Addrs[0])
+		i := slices.IndexFunc(out, func(h p2pnet.AddrInfo) bool { return h.ID == ai.ID })
+		switch {
+		case i < 0:
+			out = append(out, *ai)
+			rank[ai.ID] = r
+		case r < rank[ai.ID]:
+			out[i].Addrs = ai.Addrs
+			rank[ai.ID] = r
+		}
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+// hintRank orders the transport addresses of a relay hint: lower is better.
+func hintRank(a p2pnet.Multiaddr) int {
+	r := 4
+	if len(a) > 0 {
+		switch a[0].Protocol().Code {
+		case ma.P_IP4, ma.P_DNS4, ma.P_DNS:
+			r = 1
+			if _, err := a.ValueForProtocol(ma.P_TCP); err == nil {
+				r = 0
+			}
+		case ma.P_IP6, ma.P_DNS6:
+			r = 2
+		}
+	}
+	if !p2pnet.IsPublicAddr(a) {
+		r += 10
+	}
+	return r
 }
 
 // lanAddrs are the addresses of the local networks of the host: private,
@@ -616,7 +723,7 @@ func (rt *p2pRuntime) changed(op string) {
 
 // httpHandler serves the application over P2P. A peer that is not paired was
 // admitted only because an invite is pending: it may call the redeem route and
-// nothing else. The redeem route exists only here.
+// nothing else. The redeem and routes routes exist only here.
 func (rt *p2pRuntime) httpHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := rt.net.handlers.Load()
@@ -635,7 +742,7 @@ func (rt *p2pRuntime) httpHandler() http.Handler {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 				return
 			}
-			h.redeem.ServeHTTP(w, r)
+			h.only.ServeHTTP(w, r)
 			return
 		}
 		if !rt.paired(p) {
@@ -643,6 +750,14 @@ func (rt *p2pRuntime) httpHandler() http.Handler {
 			return
 		}
 		rt.touch(p)
+		if r.URL.Path == routesPath {
+			if r.Method != http.MethodGet {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			h.only.ServeHTTP(w, r)
+			return
+		}
 		h.main.ServeHTTP(w, r)
 	})
 }

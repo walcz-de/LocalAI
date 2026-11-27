@@ -271,6 +271,32 @@ var _ = Describe("Load job generation fencing", func() {
 			return next.Ref()
 		}
 
+		// The staging tracker is keyed by model. A job that has no node yet
+		// must not take the progress of a load of the same model on another
+		// node: it would look like it moved, and its stall would be hidden.
+		It("copies no staging progress into a job that has no node", func() {
+			job, _, err := registry.ClaimLoadJobOn(ctx, "no-node-yet", "", "frontend-a")
+			Expect(err).ToNot(HaveOccurred())
+			router.stagingTracker.Start("no-node-yet", "another-node", 1)
+			router.stagingTracker.UpdateFile("no-node-yet", "model.gguf", 1, 40, 100, "1 MB/s")
+
+			release := make(chan struct{})
+			done := make(chan error, 1)
+			go func() {
+				defer GinkgoRecover()
+				done <- router.runLoadOwner(ctx, job.Ref(), func(context.Context) error { <-release; return nil })
+			}()
+			// Several heartbeats pass while the work runs.
+			Consistently(func() int64 {
+				row, err := registry.GetLoadJobByRef(ctx, job.Ref())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(row).ToNot(BeNil())
+				return row.BytesSent
+			}, 3*loadJobHeartbeatInterval, 100*time.Millisecond).Should(BeZero())
+			close(release)
+			Eventually(done, 10*time.Second).Should(Receive(BeNil()))
+		})
+
 		It("cancels the work when another generation took the model, and leaves that generation alone", func() {
 			job, _, err := registry.ClaimLoadJob(ctx, "stale-owner", "frontend-a")
 			Expect(err).ToNot(HaveOccurred())
@@ -338,7 +364,9 @@ var _ = Describe("Load job generation fencing", func() {
 			waitCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 			defer cancel()
 			waiter := router.loadWaiterChan(loadWaiterKey(job.Ref()))
-			Expect(router.waitForLoadJob(waitCtx, job.Ref(), waiter)).To(HaveOccurred())
+			served, err := router.waitForLoadJob(waitCtx, &routeAttempt{trackingKey: "leaving"}, waitTargetOf(job), waiter)
+			Expect(served).To(BeNil())
+			Expect(err).To(HaveOccurred())
 			router.loadWaitersMu.Lock()
 			defer router.loadWaitersMu.Unlock()
 			Expect(router.loadWaiters).ToNot(HaveKey(loadWaiterKey(job.Ref())))
@@ -398,7 +426,8 @@ var _ = Describe("Load job generation fencing", func() {
 			held, err := registry.GetLoadJob(ctx, modelName)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(held).ToNot(BeNil())
-			_, claimed, err := registry.ClaimLoadJob(ctx, modelName, "frontend-b")
+			Expect(held.NodeID).To(Equal(node.ID), "the job names the node it was claimed for")
+			_, claimed, err := registry.ClaimLoadJobOn(ctx, modelName, held.NodeID, "frontend-b")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(claimed).To(BeFalse())
 
@@ -414,20 +443,89 @@ var _ = Describe("Load job generation fencing", func() {
 			Expect(current.State).To(Equal(LoadJobStatePending))
 		})
 
-		It("does not start a reconciler load while another owner holds the model", func() {
+		It("does not start a reconciler load on a node where another owner loads the model", func() {
 			const modelName = "held-model"
 			blob, err := proto.Marshal(&pb.ModelOptions{Model: "models/held.gguf"})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(registry.UpsertModelLoadInfo(ctx, modelName, "llama-cpp", blob)).To(Succeed())
-			_, claimed, err := registry.ClaimLoadJob(ctx, modelName, "frontend-b")
+			_, claimed, err := registry.ClaimLoadJobOn(ctx, modelName, node.ID, "frontend-b")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(claimed).To(BeTrue())
 
 			_, err = router.ScheduleAndLoadModel(ctx, modelName, nil)
-			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(ErrLoadInProgress), "the only node is busy with this model: not a failure")
 			unloader.mu.Lock()
 			defer unloader.mu.Unlock()
 			Expect(unloader.installCalls).To(BeEmpty())
+		})
+
+		It("starts a reconciler load on another node while one node loads the model", func() {
+			const modelName = "split-model"
+			blob, err := proto.Marshal(&pb.ModelOptions{Model: "models/split.gguf"})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(registry.UpsertModelLoadInfo(ctx, modelName, "llama-cpp", blob)).To(Succeed())
+			other := &BackendNode{Name: "worker-2", NodeType: NodeTypeBackend, Address: "10.0.0.2:50051",
+				TotalVRAM: 64_000_000_000, AvailableVRAM: 64_000_000_000}
+			Expect(registry.Register(ctx, other, true)).To(Succeed())
+			// A slow load of the model runs on worker-1.
+			_, claimed, err := registry.ClaimLoadJobOn(ctx, modelName, node.ID, "frontend-b")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(claimed).To(BeTrue())
+
+			placed, err := router.ScheduleAndLoadModel(ctx, modelName, nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(placed.ID).To(Equal(other.ID))
+		})
+
+		It("lets the cancel of one node's load leave the load on another node", func() {
+			a, _, err := registry.ClaimLoadJobOn(ctx, "two-nodes", "node-a", "frontend-a")
+			Expect(err).ToNot(HaveOccurred())
+			b, _, err := registry.ClaimLoadJobOn(ctx, "two-nodes", "node-b", "frontend-b")
+			Expect(err).ToNot(HaveOccurred())
+
+			outcome, job, err := registry.CancelLoadJob(ctx, a.Ref())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(outcome).To(Equal(CancelRecorded))
+			Expect(job.Generation).To(Equal(a.Generation))
+
+			other, err := registry.GetLoadJobByRef(ctx, b.Ref())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(other.State).To(Equal(LoadJobStatePending))
+			Expect(other.CancelRequested).To(BeFalse())
+
+			// An attempt that is gone is gone: the load on the other node did
+			// not replace it, so it is no conflict.
+			Expect(registry.DeleteFailedLoadJob(ctx, a.Ref())).To(MatchError(ErrStaleLoadJob))
+			Expect(db.Where("generation = ?", a.Generation).Delete(&ModelLoadJob{}).Error).To(Succeed())
+			outcome, job, err = registry.CancelLoadJob(ctx, a.Ref())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(outcome).To(Equal(CancelGone))
+			Expect(job).To(BeNil())
+		})
+
+		It("is a conflict when another attempt replaced it on its node", func() {
+			a, _, err := registry.ClaimLoadJobOn(ctx, "replaced", "node-a", "frontend-a")
+			Expect(err).ToNot(HaveOccurred())
+			var replacement *ModelLoadJob
+			// The attempt ends and a new one claims its node between the
+			// cancel's first read and its lock.
+			cancelLockHook = func() {
+				Expect(db.Where("generation = ?", a.Generation).Delete(&ModelLoadJob{}).Error).To(Succeed())
+				var claimed bool
+				replacement, claimed, err = registry.ClaimLoadJobOn(ctx, "replaced", "node-a", "frontend-b")
+				Expect(err).ToNot(HaveOccurred())
+				Expect(claimed).To(BeTrue())
+			}
+			DeferCleanup(func() { cancelLockHook = nil })
+
+			outcome, job, err := registry.CancelLoadJob(ctx, a.Ref())
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(outcome).To(Equal(CancelConflict))
+			Expect(job.Generation).To(Equal(replacement.Generation))
+			current, err := registry.GetLoadJobByRef(ctx, replacement.Ref())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(current.CancelRequested).To(BeFalse(), "the replacement is not cancelled")
 		})
 	})
 })

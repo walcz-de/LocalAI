@@ -141,6 +141,13 @@ func (t *p2pTunnels) startLocked(tn remotes.Tunnel) (int, error) {
 		}
 		dial = append(dial, o)
 	}
+	if len(tn.Hints) > 0 {
+		o, err := p2pnet.HintsOption(tn.Hints)
+		if err != nil {
+			return fail(err)
+		}
+		dial = append(dial, o)
+	}
 	if t.gate != nil {
 		// The server may redial this host after its own address changed.
 		t.gate.AllowConn(peerID)
@@ -320,7 +327,7 @@ func (t *p2pTunnels) Pair(ctx context.Context, link string, allowOpenRelay bool)
 	}
 	return remotes.Pairing{
 		Peer: l.Peer.String(), ServerName: res.Server.Name, Phrase: res.Phrase, Key: res.ClientKey.Secret,
-		Addrs: l.AddrStrings(), Relays: l.RelayAddrStrings(),
+		Addrs: l.AddrStrings(), Relays: l.RelayAddrStrings(), Hints: l.HintAddrStrings(),
 	}, nil
 }
 
@@ -340,6 +347,9 @@ func pairError(err error) error {
 		msg, reason = "The server saw too many wrong codes from this server. Wait a while and try again.", remotes.ErrInviteRateLimited
 	case errors.Is(err, pairclient.ErrWrongServer):
 		msg = "Another server answered than the one of the invite. Do not use this invite."
+	case errors.Is(err, pairclient.ErrNeedsRelay):
+		xlog.Warn("P2P pairing: no direct connection to the server of the invite", "error", err)
+		msg, reason = "This server and the server of the invite cannot connect directly: their networks block it. The server of the invite needs a relay. Ask its admin to add one, or to run one with 'local-ai p2p relay', then ask for a new invite.", remotes.ErrInviteUnreachable
 	case errors.Is(err, pairclient.ErrNoRoute):
 		xlog.Warn("P2P pairing: the invite names no address and no relay", "error", err)
 		msg, reason = "The invite has no address and no relay, so the server cannot be found from here. Ask for a new invite from a server that has a public address, a relay, or a local network address.", remotes.ErrInviteUnreachable

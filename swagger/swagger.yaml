@@ -5285,6 +5285,13 @@ definitions:
           link. By default the link carries them, so a device on the same network
           can redeem it with no relay and no multicast discovery.
         type: boolean
+      omit_relay_hints:
+        description: |-
+          OmitRelayHints keeps the public relays this server holds reservations
+          on out of the link. By default the link names up to two of them, so a
+          device can reach this server for a hole punch; they never carry data.
+          Relays "none" keeps them unless this is set.
+        type: boolean
       relays:
         description: Relays is "auto", "none" or a list of relay IDs.
         example: auto
@@ -5298,6 +5305,11 @@ definitions:
     properties:
       expires_at:
         type: string
+      hints:
+        description: |-
+          Hints is the number of public relays the link names as relay hints:
+          relays that let a device reach this server for a hole punch only.
+        type: integer
       id:
         type: string
       kind:
@@ -5312,6 +5324,9 @@ definitions:
       relay:
         $ref: '#/definitions/p2p.RelayPass'
       warnings:
+        description: |-
+          Warnings are open_relay, no_relay, punch_only, relay_unreachable and
+          no_public_addr.
         items:
           type: string
         type: array
@@ -5503,6 +5518,32 @@ definitions:
       revoked:
         type: boolean
     type: object
+  p2p.Routes:
+    properties:
+      addrs:
+        description: 'Addrs are the direct addresses: public ones, then local network
+          ones.'
+        items:
+          type: string
+        type: array
+      hints:
+        description: |-
+          Hints are up to two public relays for hole punch coordination only,
+          each ending in /p2p/<relay peer ID>. They never carry data.
+        items:
+          type: string
+        type: array
+      relays:
+        description: |-
+          Relays are the gated relays that carry data for a paired device, each
+          ending in /p2p/<relay peer ID>.
+        items:
+          type: string
+        type: array
+      server:
+        description: Server is the peer ID of this server.
+        type: string
+    type: object
   p2p.ServerInfo:
     properties:
       name:
@@ -5683,6 +5724,14 @@ definitions:
         description: Error says why the host does not run although the mode asks for
           it.
         type: string
+      hint_relays:
+        description: |-
+          HintRelays are the reservations on public relays: the relays that are
+          not in the relay settings. An invite names up to two of them as relay
+          hints, so a device can reach this server for a hole punch.
+        items:
+          type: string
+        type: array
       mode:
         description: 'Mode is the mode in effect: off, connect or share.'
         type: string
@@ -6918,6 +6967,10 @@ definitions:
         type: string
       time_zone:
         type: string
+      watch:
+        allOf:
+        - $ref: '#/definitions/schema.ChatsWatchRule'
+        description: Watch is the reminder rule of a watch; absent on any other trigger.
     type: object
   schema.ChatsAdminTriggerList:
     properties:
@@ -9335,6 +9388,12 @@ definitions:
           needs. It is set when a single chat is opened, created or changed.
       id:
         type: string
+      incognito:
+        description: |-
+          Incognito is the privacy level of an incognito chat (memory-off or
+          zero-retention), empty for any other chat. An incognito chat lives in
+          the memory of the server only and is never listed.
+        type: string
       kind:
         description: chat or subagent
         type: string
@@ -9432,6 +9491,12 @@ definitions:
           a yes while a turn runs; answer it with POST /api/chats/{id}/host-exec/consent.
       id:
         type: string
+      incognito:
+        description: |-
+          Incognito is the privacy level of an incognito chat (memory-off or
+          zero-retention), empty for any other chat. An incognito chat lives in
+          the memory of the server only and is never listed.
+        type: string
       jobs:
         description: |-
           Jobs are the background jobs of the chat and of its sub-agents, running
@@ -9517,6 +9582,12 @@ definitions:
           ImageModel is the model that describes the images of a chat whose own
           model cannot look at them. It is empty when no model can.
         type: string
+      incognito:
+        allOf:
+        - $ref: '#/definitions/schema.ChatsIncognito'
+        description: |-
+          Incognito is the server's incognito setting, so the page knows whether
+          to offer incognito chats and up to which level.
       persistent:
         description: |-
           Persistent is false when conversations live in memory and are lost when
@@ -10379,6 +10450,13 @@ definitions:
       model:
         description: Model replaces the model of the file. It is needed when the file
           names none.
+        type: string
+    type: object
+  schema.ChatsIncognito:
+    properties:
+      max_level:
+        type: string
+      policy:
         type: string
     type: object
   schema.ChatsInvocation:
@@ -11636,6 +11714,88 @@ definitions:
       endpoint:
         type: string
     type: object
+  schema.ChatsReminder:
+    properties:
+      adjusted:
+        type: string
+      all_day:
+        type: boolean
+      at:
+        description: |-
+          At is a time the reminder was set to, SnoozedTo a time the owner
+          snoozed it to.
+        type: string
+      due:
+        description: |-
+          Due is when the owner hears; Start is when the run starts (Due minus
+          the lead). Both are absent when the item has begun.
+        type: string
+      id:
+        type: string
+      item_time:
+        description: ItemTime is the time of the item, absent for an item with no
+          time.
+        type: string
+      lead_minutes:
+        type: integer
+      link:
+        description: Link opens the item in its add-on.
+        type: string
+      offset_minutes:
+        type: integer
+      skipped:
+        description: |-
+          Skipped says the owner skipped the coming time. Adjusted is quiet or
+          all_day when the rule moved the time.
+        type: boolean
+      snoozable:
+        type: boolean
+      snoozed_to:
+        type: string
+      start:
+        type: string
+      task:
+        type: string
+      title:
+        type: string
+    type: object
+  schema.ChatsReminderChange:
+    properties:
+      after:
+        $ref: '#/definitions/schema.ChatsReminder'
+      before:
+        $ref: '#/definitions/schema.ChatsReminder'
+      title:
+        type: string
+      watch_id:
+        type: string
+      watch_name:
+        type: string
+      watch_zone:
+        type: string
+    type: object
+  schema.ChatsReminderList:
+    properties:
+      reminders:
+        items:
+          $ref: '#/definitions/schema.ChatsReminder'
+        type: array
+    type: object
+  schema.ChatsReminderPatch:
+    properties:
+      at:
+        type: string
+      offset_minutes:
+        type: integer
+      skip:
+        type: boolean
+      snooze_minutes:
+        type: integer
+      snoozed_to:
+        type: string
+      task:
+        type: string
+    type: object
   schema.ChatsSandboxProfile:
     properties:
       allowed:
@@ -12129,6 +12289,62 @@ definitions:
         description: Project is the project's ID, for the project layer.
         type: string
     type: object
+  schema.ChatsSourceReminder:
+    properties:
+      adjusted:
+        type: string
+      all_day:
+        type: boolean
+      at:
+        description: |-
+          At is a time the reminder was set to, SnoozedTo a time the owner
+          snoozed it to.
+        type: string
+      due:
+        description: |-
+          Due is when the owner hears; Start is when the run starts (Due minus
+          the lead). Both are absent when the item has begun.
+        type: string
+      id:
+        type: string
+      item_id:
+        type: string
+      item_time:
+        description: ItemTime is the time of the item, absent for an item with no
+          time.
+        type: string
+      lead_minutes:
+        type: integer
+      link:
+        description: Link opens the item in its add-on.
+        type: string
+      offset_minutes:
+        type: integer
+      skipped:
+        description: |-
+          Skipped says the owner skipped the coming time. Adjusted is quiet or
+          all_day when the rule moved the time.
+        type: boolean
+      snoozable:
+        type: boolean
+      snoozed_to:
+        type: string
+      start:
+        type: string
+      task:
+        type: string
+      title:
+        type: string
+      watch_id:
+        type: string
+    type: object
+  schema.ChatsSourceReminders:
+    properties:
+      reminders:
+        items:
+          $ref: '#/definitions/schema.ChatsSourceReminder'
+        type: array
+    type: object
   schema.ChatsSubAgent:
     properties:
       created:
@@ -12555,6 +12771,10 @@ definitions:
         type: string
       time_zone:
         type: string
+      watch:
+        allOf:
+        - $ref: '#/definitions/schema.ChatsWatchRule'
+        description: Watch is the reminder rule of a watch; absent on any other trigger.
     type: object
   schema.ChatsTriggerChange:
     properties:
@@ -12576,6 +12796,12 @@ definitions:
         $ref: '#/definitions/schema.ChatsTriggerRun'
       op:
         type: string
+      reminder:
+        allOf:
+        - $ref: '#/definitions/schema.ChatsReminderChange'
+        description: |-
+          Reminder is set on a change of a reminder of a watch, which a chat
+          proposed; before is then the watch.
       stale:
         type: boolean
       state:
@@ -12723,6 +12949,10 @@ definitions:
         type: string
       time_zone:
         type: string
+      watch:
+        allOf:
+        - $ref: '#/definitions/schema.ChatsWatchRule'
+        description: Watch is the reminder rule of a watch; absent on any other trigger.
     type: object
   schema.ChatsTriggerDelivery:
     properties:
@@ -12992,6 +13222,12 @@ definitions:
         type: string
       time_zone:
         type: string
+      watch:
+        allOf:
+        - $ref: '#/definitions/schema.ChatsWatchRule'
+        description: |-
+          Watch makes an event trigger of an add-on a watch. Left out on an
+          update, a watch keeps its rule.
     type: object
   schema.ChatsUndoRequest:
     properties:
@@ -13109,6 +13345,64 @@ definitions:
           script", the id and label of the job, or the id of the background
           sub-agent: the text of a command is never in this object.
         type: string
+    type: object
+  schema.ChatsWatchEventType:
+    properties:
+      label:
+        description: Label is the name of the event in the language of the request.
+        type: string
+      lifecycle:
+        type: string
+      type:
+        type: string
+    type: object
+  schema.ChatsWatchRule:
+    properties:
+      all_day:
+        description: 'AllDay is morning (the default: 08:00 on the day) or none.'
+        type: string
+      no_default:
+        type: boolean
+      offset_minutes:
+        description: |-
+          OffsetMinutes is the default reminder time relative to the item's time:
+          -15 is 15 minutes before. NoDefault sets no reminder unless the task
+          defaults call for one.
+        type: integer
+      quiet_from:
+        description: QuietFrom and QuietTo are quiet hours (HH:MM, in the watch's
+          time zone).
+        type: string
+      quiet_to:
+        type: string
+      tasks:
+        description: Tasks are the task defaults in the owner's words.
+        type: string
+      types:
+        description: |-
+          Types are the event types the watch takes; empty is every type of the
+          source.
+        items:
+          type: string
+        type: array
+    type: object
+  schema.ChatsWatchSource:
+    properties:
+      events:
+        items:
+          $ref: '#/definitions/schema.ChatsWatchEventType'
+        type: array
+      id:
+        type: string
+      title:
+        type: string
+    type: object
+  schema.ChatsWatchSources:
+    properties:
+      sources:
+        items:
+          $ref: '#/definitions/schema.ChatsWatchSource'
+        type: array
     type: object
   schema.ChatsWebProviderTest:
     properties:
@@ -14982,6 +15276,13 @@ definitions:
       strict:
         description: Always include in response
         type: boolean
+      tools:
+        description: |-
+          Tools holds the member tools of a type "namespace" entry (Codex sends
+          each MCP server's tools this way).
+        items:
+          $ref: '#/definitions/schema.ORFunctionTool'
+        type: array
       type:
         type: string
     type: object
@@ -15012,6 +15313,9 @@ definitions:
         description: Present for all output items
         type: string
       name:
+        type: string
+      namespace:
+        description: set when Name belongs to a namespace tool
         type: string
       output:
         description: Function call output fields
@@ -27762,6 +28066,96 @@ paths:
       summary: Send an event to an event trigger.
       tags:
       - chats
+  /api/chats/triggers/{id}/reminders:
+    get:
+      description: Soonest first. A reminder whose item has begun has no due time
+        and comes last. 400 when the trigger is not a watch.
+      parameters:
+      - description: the watch's id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: The reminders
+          schema:
+            $ref: '#/definitions/schema.ChatsReminderList'
+        "404":
+          description: No such watch
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: List the reminders of a watch.
+      tags:
+      - chats
+  /api/chats/triggers/{id}/reminders/{rid}:
+    delete:
+      parameters:
+      - description: the watch's id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: the reminder's id
+        in: path
+        name: rid
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Cancelled
+        "404":
+          description: No such watch or reminder
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Cancel a reminder of a watch.
+      tags:
+      - chats
+    patch:
+      description: Each field that is set applies. snooze_minutes moves the reminder
+        to now plus that much (at most a day); snoozed_to sets a time or, empty, takes
+        the snooze back; skip true skips the coming time and false takes the skip
+        back; at (2026-11-26 14:45 in the watch's time zone, or RFC 3339) or offset_minutes
+        re-time it; task changes what the run does. The page undoes a change by sending
+        the old values back.
+      parameters:
+      - description: the watch's id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: the reminder's id
+        in: path
+        name: rid
+        required: true
+        type: string
+      - description: the add-on whose page asks; a reminder of a watch on another
+          add-on is not found
+        in: query
+        name: source
+        type: string
+      - description: the change
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/schema.ChatsReminderPatch'
+      responses:
+        "200":
+          description: The reminder after the change
+          schema:
+            $ref: '#/definitions/schema.ChatsReminder'
+        "400":
+          description: The change is not valid
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: No such watch or reminder
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Snooze, skip, re-time or change the task of a reminder.
+      tags:
+      - chats
   /api/chats/triggers/{id}/run:
     post:
       description: Starts a run at once, whether the trigger is on or not. The run
@@ -28106,6 +28500,43 @@ paths:
           schema:
             $ref: '#/definitions/schema.ChatsTriggerProposal'
       summary: Undo an accepted trigger proposal.
+      tags:
+      - chats
+  /api/chats/triggers/reminders:
+    get:
+      description: The page of an add-on marks its items that have a reminder (the
+        bell of the calendar). source is the add-on ID; it is required.
+      parameters:
+      - description: the add-on ID
+        in: query
+        name: source
+        required: true
+        type: string
+      responses:
+        "200":
+          description: The reminders
+          schema:
+            $ref: '#/definitions/schema.ChatsSourceReminders'
+      summary: List the reminders for the items of an add-on.
+      tags:
+      - chats
+  /api/chats/triggers/sources:
+    get:
+      description: An add-on that reports changes (a calendar, say) declares its event
+        types. A watch takes one of these sources and keeps reminders for its items.
+        The list is empty when no installed add-on reports changes. lang (or Accept-Language)
+        chooses the language of the labels.
+      parameters:
+      - description: language of the labels
+        in: query
+        name: lang
+        type: string
+      responses:
+        "200":
+          description: The sources
+          schema:
+            $ref: '#/definitions/schema.ChatsWatchSources'
+      summary: List the add-ons a watch can watch.
       tags:
       - chats
   /api/chats/wellknown/{name}:
@@ -29506,9 +29937,9 @@ paths:
       description: Cancels the load attempt named by `job_id` and stops its remote
         work. 200 means the attempt is gone or the worker confirmed the stop. 202
         means the cancel is recorded and the stop is pending; the model is released
-        after `retry_after` seconds regardless. 409 means a different attempt is current
-        and carries its `current_job_id`. Repeating the call is safe and does not
-        extend the hold.
+        after `retry_after` seconds regardless. 409 means a different attempt replaced
+        it on its node and carries its `current_job_id`. Repeating the call is safe
+        and does not extend the hold.
       parameters:
       - description: Model ID
         in: path
@@ -29557,7 +29988,7 @@ paths:
       - models
   /api/models/{id}/load-status:
     get:
-      description: 'Returns the live state of a distributed cold load: job id, phase,
+      description: 'Returns the live state of a distributed cold load (when the model loads on several nodes, the load that is furthest along): job id, phase,
         node, byte progress, ETA, lease freshness, and for a failed attempt the cause,
         whether the stop is pending and when the model is released. 404 means no load
         exists for the model. A database error is 503, never an empty answer. This
@@ -31197,6 +31628,37 @@ paths:
           schema:
             $ref: '#/definitions/schema.ErrorResponse'
       summary: Sync a P2P relay
+      tags:
+      - p2p
+  /api/p2p/routes:
+    get:
+      description: 'Served only on the P2P protocol /localai/http/1, and only to a
+        paired device; the normal HTTP listener answers 404 and a peer that is not
+        paired gets 403. The answer has the lists of an invite link minted now with
+        relays auto, without the code and the pass: the direct addresses, every gated
+        relay of the server and up to two public relay hints. The local network addresses
+        are left out when the invite of the device set omit_lan_addrs. A device calls
+        it while connected and stores the lists in place of the ones of its invite.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/p2p.Routes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Current routes to this server (over P2P only)
       tags:
       - p2p
   /api/p2p/split-workers:

@@ -71,6 +71,58 @@ For AMD GPUs, use `HIP_VISIBLE_DEVICES` instead:
 docker run --device /dev/dri --device /dev/kfd -e HIP_VISIBLE_DEVICES=0,1 ...
 ```
 
+#### llama.cpp tensor split (lower latency on several NVIDIA GPUs) {#llama-cpp-tensor-split}
+
+llama.cpp has two useful ways to split one model across GPUs. Set the mode with the `split_mode` option:
+
+| Mode | What it does | Use it when |
+|---|---|---|
+| `layer` (default) | Each GPU holds a block of whole layers. A token goes through the GPUs one after the other. | The model does not fit on one GPU and you want fast prompt processing or many parallel requests. Works on any interconnect. |
+| `tensor` | Each layer is split across all GPUs, with its KV cache. The GPUs work on every token together and exchange results after each layer. | You want the fastest token generation for one or few requests. Experimental upstream. Needs a fast GPU interconnect. |
+
+Use this configuration as a starting point for `tensor`:
+
+```yaml
+name: my-model-tensor-split
+backend: llama-cpp
+parameters:
+  model: my-model.gguf
+# Tensor split needs flash attention. "auto" also turns it on in this mode;
+# "on" makes a failure explicit.
+flash_attention: "on"
+# Unquantized KV cache: the safe choice for tensor split.
+cache_type_k: f16
+cache_type_v: f16
+# Auto-fit does not work with tensor split, so set the context size yourself.
+context_size: 16384
+# Optional: share of each GPU, in device order. Without it, tensor split
+# divides the tensors evenly.
+# tensor_split: "1,1"
+options:
+  - split_mode:tensor
+  - fit_params:false
+```
+
+What to know before you use it:
+
+- **Fit the model yourself.** llama.cpp's auto-fit is not implemented for tensor split. With `fit_params` left on, llama.cpp logs that it cannot fit and loads with the values you gave. If the load runs out of GPU memory, lower `context_size` first, then `parallel`, and only then `gpu_layers` (layers on the CPU are much slower).
+- **Not every architecture supports it.** The load fails with `LLAMA_SPLIT_MODE_TENSOR not implemented for architecture '...'` for many MoE, hybrid and state-space families (for example DeepSeek2, Nemotron-H, Granite-Hybrid, Jamba, Mamba, Minimax-M2) and for some others (OLMo2, Gemma-3n, T5). Use `split_mode:layer` for those. Upstream keeps the full list in [llama.cpp's multi-GPU guide](https://github.com/ggml-org/llama.cpp/blob/master/docs/multi-gpu.md).
+- **KV cache type.** The example uses `f16`. `bf16` and `f32` also work. The llama.cpp version that LocalAI ships also accepts quantized KV cache (`q8_0`, ...) with tensor split; check the output quality if you use it.
+- **`tensor_split`** gives the share of each GPU, in the order llama.cpp lists the devices (`"3,1"` puts 75% on the first GPU). Use it when the GPUs have different memory sizes.
+- **Validate the output.** Upstream marks tensor split as experimental. Compare a few answers with `split_mode:layer` before you rely on it.
+
+**NCCL.** In tensor mode the GPUs add up partial results after every layer. On NVIDIA GPUs llama.cpp does this with NCCL (NVIDIA Collective Communications Library) when the backend has it, and with its own slower code when it does not. The CUDA 12 and CUDA 13 `llama-cpp` backends for x86_64, and the CUDA 13 backend for arm64, ship NCCL in the backend's `lib/` directory, so there is nothing to install. The Jetson (CUDA 12 arm64) backend does not ship it, because NVIDIA does not provide NCCL for Jetson. NCCL is only used when a model runs with `split_mode:tensor` on two or more GPUs. With one GPU, or with `layer` split, nothing changes.
+
+If NCCL cannot start (for example when CUDA virtual devices are in use), llama.cpp logs a warning and uses its own code. These environment variables of llama.cpp change the behavior. Set them on the LocalAI process or container, and the backend inherits them:
+
+| Variable | Effect |
+|---|---|
+| `GGML_CUDA_ALLREDUCE=internal` | Do not use NCCL; use llama.cpp's own code (it supports exactly two GPUs and falls back further otherwise). Useful to compare speed with and without NCCL. |
+| `GGML_CUDA_ALLREDUCE=none` | Use the simplest generic fallback. For troubleshooting only. |
+| `GGML_CUDA_P2P=1` | Let the GPUs copy data directly to each other. Usually faster, but it needs driver support and can crash or corrupt output on some motherboards (for example with IOMMU on). Remove it if you see problems. |
+
+NCCL is distributed under the BSD-3-Clause license. Its notice is in `licenses/NCCL-LICENSE.txt` in the backend directory.
+
 #### diffusers
 
 For multi-GPU support with diffusers, configure the model with `tensor_parallel_size` set to the number of GPUs you want to use.
@@ -117,7 +169,7 @@ The image list is on [quay](https://quay.io/repository/go-skynet/local-ai?tab=ta
 In addition to the commands to run LocalAI normally, you need to specify `--gpus all` to docker, for example:
 
 ```bash
-docker run --rm -ti --gpus all -p 8080:8080 -e DEBUG=true -e MODELS_PATH=/models -e THREADS=1 -v $PWD/models:/models quay.io/go-skynet/local-ai:latest-gpu-nvidia-cuda-12
+docker run --rm -ti --gpus all -p 8080:8080 -e DEBUG=true -e MODELS_PATH=/models -e THREADS=1 -v localai-models:/models quay.io/go-skynet/local-ai:latest-gpu-nvidia-cuda-12
 ```
 
 If the GPU inferencing is working, you should be able to see something like:
@@ -210,7 +262,7 @@ iommu=pt amdgpu.gttsize=126976 ttm.pages_limit=32505856
 > rather than just restarting it. `docker compose restart` preserves the old container environment
 > and will not pick up updated env vars from the image.
 
-For llama.cpp models, enable flash attention (`--flash-attention`) and disable mmap (`--no-mmap`) for best performance on APU systems.
+For llama.cpp models, enable flash attention (`--flash-attention`) for best performance on APU systems. Leave `mmap` unset in the model configuration: llama.cpp then loads without mmap on devices that do not support it, such as APUs. Set `mmap: false` to force this on any device.
 
 ### Limitations
 
@@ -223,7 +275,7 @@ The Python backends (diffusers, transformers, vllm, coqui, ...) are built on ROC
 
 **Note:** Starting with ROCm 6.4, AMD removed rocBLAS kernel support for older architectures (gfx803, gfx900, gfx906). Since llama.cpp and other backends depend on rocBLAS for matrix operations, these GPUs (e.g. Radeon VII) are no longer supported in pre-built images.
 
-If your device is not one of the above targets, you must specify the corresponding `GPU_TARGETS` and specify `REBUILD=true`. However, rebuilding will not help for architectures that lack rocBLAS kernel support in your ROCm version.
+The images and backends do not include other targets, and the container cannot rebuild them at startup. If your device is not one of the above targets, build the backend from source with `AMDGPU_TARGETS` set to your gfx target. See [Build backends]({{%relref "/contributing/build-from-source#build-backends" %}}). This does not help for architectures that lack rocBLAS kernel support in your ROCm version.
 
 ### Verified
 
@@ -256,11 +308,7 @@ The following are examples of the ROCm specific configuration elements required.
     # For full functionality select a non-'core' image, version locking the image is recommended for debug purposes.
     image: quay.io/go-skynet/local-ai:master-gpu-hipblas
     environment:
-      - DEBUG=true
-      # If your gpu is not already included in the current list of default targets the following build details are required.
-      - REBUILD=true
-      - BUILD_TYPE=hipblas
-      - GPU_TARGETS=gfx1100 # Example for RX 7900 XTX
+      - LOCALAI_LOG_LEVEL=debug
     devices:
       # AMD GPU only require the following devices be passed through to the container for offloading to occur.
       - /dev/dri
@@ -271,10 +319,7 @@ The same can also be executed as a `run` for your container runtime
 
 ```
 docker run \
- -e DEBUG=true \
- -e REBUILD=true \
- -e BUILD_TYPE=hipblas \
- -e GPU_TARGETS=gfx1100 \
+ -e LOCALAI_LOG_LEVEL=debug \
  --device /dev/dri \
  --device /dev/kfd \
  quay.io/go-skynet/local-ai:master-gpu-hipblas
@@ -342,7 +387,7 @@ The carried driver comes from Intel's own package repository, so it knows the ca
 ```bash
 docker run --rm -ti --device /dev/dri -p 8080:8080 \
   -e ZE_ENABLE_ALT_DRIVERS=/usr/lib/x86_64-linux-gnu/libze_intel_gpu.so.1 \
-  -v $PWD/models:/models quay.io/go-skynet/local-ai:{{< version >}}-gpu-intel
+  -v localai-models:/models quay.io/go-skynet/local-ai:{{< version >}}-gpu-intel
 ```
 
 Set the path to wherever your distribution keeps that file. Whatever you set is used as is, and the carried driver is left alone.
@@ -360,7 +405,7 @@ The image list is on [quay](https://quay.io/repository/go-skynet/local-ai?tab=ta
 To run LocalAI with Docker and sycl starting `phi-2`, you can use the following command as an example:
 
 ```bash
-docker run -e DEBUG=true --privileged -ti -v $PWD/models:/models -p 8080:8080  -v /dev/dri:/dev/dri --rm quay.io/go-skynet/local-ai:master-gpu-intel phi-2
+docker run -e LOCALAI_LOG_LEVEL=debug -ti -v localai-models:/models -p 8080:8080 --device /dev/dri --rm quay.io/go-skynet/local-ai:master-gpu-intel phi-2
 ```
 
 ### Notes
@@ -368,7 +413,7 @@ docker run -e DEBUG=true --privileged -ti -v $PWD/models:/models -p 8080:8080  -
 In addition to the commands to run LocalAI normally, you need to specify `--device /dev/dri` to docker, for example:
 
 ```bash
-docker run --rm -ti --device /dev/dri -p 8080:8080 -e DEBUG=true -e MODELS_PATH=/models -e THREADS=1 -v $PWD/models:/models quay.io/go-skynet/local-ai:{{< version >}}-gpu-intel
+docker run --rm -ti --device /dev/dri -p 8080:8080 -e LOCALAI_LOG_LEVEL=debug -e THREADS=1 -v localai-models:/models quay.io/go-skynet/local-ai:{{< version >}}-gpu-intel
 ```
 
 Note also that sycl does have a known issue to hang with `mmap: true`. You have to disable it in the model configuration if explicitly enabled.
@@ -390,7 +435,7 @@ To use Vulkan, use the images with the `vulkan` tag, for example `{{< version >}
 To run LocalAI with Docker and Vulkan, you can use the following command as an example:
 
 ```bash
-docker run -p 8080:8080 -e DEBUG=true -v $PWD/models:/models localai/localai:latest-gpu-vulkan
+docker run -p 8080:8080 -e DEBUG=true -v localai-models:/models localai/localai:latest-gpu-vulkan
 ```
 
 ### Notes
@@ -402,7 +447,7 @@ These flags are the same as the sections above, depending on the hardware, for [
 If you have mixed hardware, you can pass flags for multiple GPUs, for example:
 
 ```bash
-docker run -p 8080:8080 -e DEBUG=true -v $PWD/models:/models \
+docker run -p 8080:8080 -e DEBUG=true -v localai-models:/models \
 --gpus=all \ # nvidia passthrough
 --device /dev/dri --device /dev/kfd \ # AMD/Intel passthrough
 localai/localai:latest-gpu-vulkan
@@ -418,12 +463,12 @@ For detailed setup instructions, platform compatibility, and build commands, see
 
 ```bash
 # Jetson AGX Orin (CUDA 12)
-docker run -e DEBUG=true -p 8080:8080 -v $PWD/models:/models \
+docker run -e DEBUG=true -p 8080:8080 -v localai-models:/models \
   --runtime nvidia --gpus all \
   quay.io/go-skynet/local-ai:latest-nvidia-l4t-arm64
 
 # DGX Spark (CUDA 13)
-docker run -e DEBUG=true -p 8080:8080 -v $PWD/models:/models \
+docker run -e DEBUG=true -p 8080:8080 -v localai-models:/models \
   --runtime nvidia --gpus all \
   quay.io/go-skynet/local-ai:latest-nvidia-l4t-arm64-cuda-13
 ```
@@ -495,13 +540,7 @@ sycl-ls
 
 ### ROCm: unsupported GPU target
 
-If your AMD GPU is not in the default target list, set `REBUILD=true` and `GPU_TARGETS` to your device's gfx target:
-
-```bash
-docker run -e REBUILD=true -e BUILD_TYPE=hipblas -e GPU_TARGETS=gfx1030 \
-  --device /dev/dri --device /dev/kfd \
-  quay.io/go-skynet/local-ai:master-gpu-hipblas
-```
+The prebuilt `hipblas` images and backends support only the targets listed in [Limitations](#limitations). The container cannot rebuild them for another target: LocalAI has no `REBUILD` or `GPU_TARGETS` setting. To use another target, build the backend from source with `AMDGPU_TARGETS` set to your gfx target. See [Build backends]({{%relref "/contributing/build-from-source#build-backends" %}}).
 
 ### Intel SYCL: model hangs
 

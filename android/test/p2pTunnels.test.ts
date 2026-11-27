@@ -209,6 +209,100 @@ describe('P2P in the client core', () => {
     expect(called(p, 'requestNotifications')).toEqual([])
   })
 
+  it('maps the needs_relay code to needs-relay, without the library text', async () => {
+    const p = withP2P()
+    const { core } = await start(p)
+    p.p2p.pairAnswers = [{ ok: false, code: 'needs_relay', detail: 'cannot connect directly' }, { ok: false, code: 'gone', detail: 'used' }]
+    expect(await core.servers.addServerByInvite({ link: invite(PEER) })).toEqual({ ok: false, reason: 'needs-relay', detail: '' })
+    expect(await core.servers.addServerByInvite({ link: invite(PEER) })).toEqual({ ok: false, reason: 'pair-failed', detail: 'used' })
+    expect(core.servers.serversView().rows).toEqual([])
+  })
+
+  it('saves the hints of the invite and passes them to the forwarder', async () => {
+    const p = withP2P()
+    const { core } = await start(p)
+    const hint = '/ip4/192.0.2.7/udp/4001/quic-v1/p2p/12D3KooWQ6jWKvb3LfQwPzbNxQmPqYGSmrW3Fq2PTSaAVoiBAJGo'
+    p.p2p.pairAnswers = [{ ok: true, json: pairJson(PEER) }]
+    const r = await core.servers.addServerByInvite({ link: `${invite(PEER)}&h=${encodeURIComponent(hint)}` })
+    expect(r.ok).toBe(true)
+    await flush()
+    const saved = remotes({ extra: JSON.parse(p.files.files.get(CONFIG_FILE) ?? '{}') } as never)
+    expect(saved.map((x) => x.p2p?.hints)).toEqual([[hint]])
+    const lists = p.p2p.forwardLists()
+    expect(lists[lists.length - 1]?.[0]?.hints).toEqual([hint])
+  })
+
+  it('works with a library of the previous API revision', async () => {
+    const p = fakePlatform({ p2pVersion: 'p2pmobile/2' })
+    const { core } = await start(p)
+    p.p2p.pairAnswers = [{ ok: true, json: pairJson(PEER) }]
+    expect((await core.servers.addServerByInvite({ link: invite(PEER) })).ok).toBe(true)
+  })
+
+  it('saves the routes a forwarder reports into the saved server, and keeps its state', async () => {
+    const p = withP2P()
+    const { core } = await start(p)
+    p.p2p.pairAnswers = [{ ok: true, json: pairJson(PEER) }]
+    const r = await core.servers.addServerByInvite({ link: `${invite(PEER)}&a=${encodeURIComponent('/ip4/203.0.113.1/tcp/4001')}` })
+    if (!r.ok) throw new Error('pairing failed')
+    await flush()
+    p.p2p.emit('forwardState', { id: r.id, line: '{"state":"up","path":"direct"}' })
+    const hint = '/ip4/192.0.2.7/tcp/4001/p2p/12D3KooWQ6jWKvb3LfQwPzbNxQmPqYGSmrW3Fq2PTSaAVoiBAJGo'
+    const relay = '/ip4/198.51.100.1/tcp/4001/p2p/12D3KooWQ6jWKvb3LfQwPzbNxQmPqYGSmrW3Fq2PTSaAVoiBAJGp'
+    p.p2p.emit('forwardState', {
+      id: r.id,
+      line: JSON.stringify({ state: 'routes', addrs: ['/ip4/203.0.113.9/tcp/4001', 'junk'], relays: [relay], hints: [hint] }),
+    })
+    await flush()
+    const saved = remotes({ extra: JSON.parse(p.files.files.get(CONFIG_FILE) ?? '{}') } as never)
+    expect(saved[0]?.p2p).toMatchObject({ peer: PEER, addrs: ['/ip4/203.0.113.9/tcp/4001'], relays: [relay], hints: [hint], host: '127.0.0.2' })
+    expect(core.servers.serversView().rows[0]?.p2p).toEqual({ state: 'up', path: 'direct' })
+  })
+
+  it('never replaces the saved routes with an empty answer', async () => {
+    const p = withP2P()
+    const { core } = await start(p)
+    p.p2p.pairAnswers = [{ ok: true, json: pairJson(PEER) }]
+    const r = await core.servers.addServerByInvite({ link: `${invite(PEER)}&a=${encodeURIComponent('/ip4/203.0.113.1/tcp/4001')}` })
+    if (!r.ok) throw new Error('pairing failed')
+    await flush()
+    p.p2p.emit('forwardState', { id: r.id, line: '{"state":"routes","addrs":[],"relays":[],"hints":[]}' })
+    await flush()
+    const saved = remotes({ extra: JSON.parse(p.files.files.get(CONFIG_FILE) ?? '{}') } as never)
+    expect(saved[0]?.p2p?.addrs).toEqual(['/ip4/203.0.113.1/tcp/4001'])
+  })
+
+  it('dials the routes of an invite of a saved server and saves only what the server then gives', async () => {
+    const p = withP2P()
+    const { core } = await start(p)
+    p.p2p.pairAnswers = [{ ok: true, json: pairJson(PEER) }]
+    const savedAddr = '/ip4/203.0.113.1/tcp/4001'
+    const first = await core.servers.addServerByInvite({ link: `${invite(PEER)}&a=${encodeURIComponent(savedAddr)}` })
+    if (!first.ok) throw new Error('pairing failed')
+    await flush()
+    const hint = '/ip4/192.0.2.7/tcp/4001/p2p/12D3KooWQ6jWKvb3LfQwPzbNxQmPqYGSmrW3Fq2PTSaAVoiBAJGo'
+    const r = await core.servers.addServerByInvite({ link: `${invite(PEER)}&a=${encodeURIComponent('/ip4/203.0.113.9/tcp/4001')}&h=${encodeURIComponent(hint)}` })
+    expect(r).toMatchObject({ ok: true, id: first.id, phrase: '', routesUpdated: true })
+    expect(called(p, 'pair')).toHaveLength(1)
+    await flush()
+    const saved = () => remotes({ extra: JSON.parse(p.files.files.get(CONFIG_FILE) ?? '{}') } as never)
+    expect(saved()).toHaveLength(1)
+    // Anyone can write a link with the peer ID of a saved server: its routes are only dialled.
+    expect(saved()[0]?.p2p).toMatchObject({ addrs: [savedAddr], host: '127.0.0.2' })
+    expect(saved()[0]?.p2p?.hints).toBeUndefined()
+    const lists = p.p2p.forwardLists()
+    expect(lists[lists.length - 1]?.[0]).toMatchObject({ addrs: ['/ip4/203.0.113.9/tcp/4001', savedAddr], hints: [hint] })
+
+    // Once connected, the server gives its routes over the authenticated connection: those are saved.
+    p.p2p.emit('forwardState', { id: first.id, line: JSON.stringify({ state: 'routes', addrs: ['/ip4/203.0.113.9/tcp/4001'], relays: [], hints: [hint] }) })
+    await flush()
+    expect(saved()[0]?.p2p).toMatchObject({ addrs: ['/ip4/203.0.113.9/tcp/4001'], hints: [hint], host: '127.0.0.2' })
+  })
+
+  it('keeps the needs_relay code of a down line', () => {
+    expect(mapForwardLine('{"state":"down","error":"no direct path","code":"needs_relay"}')).toEqual({ state: 'down', error: 'no direct path', code: 'needs_relay' })
+  })
+
   it('asks for the notification permission when a P2P server is added', async () => {
     const p = withP2P()
     const { core } = await start(p)
@@ -231,7 +325,7 @@ describe('P2P in the client core', () => {
     const { core } = await start(p)
     const names = p.p2p.calls.map((c) => c.name)
     expect(names.indexOf('statuses')).toBeLessThan(names.indexOf('setForwards'))
-    expect(p.p2p.forwardLists()[0]).toEqual([{ id: 'srv_00000001', name: 'Studio', peer: PEER, host: '127.0.0.2', port: 41001, addrs: [], relays: [] }])
+    expect(p.p2p.forwardLists()[0]).toEqual([{ id: 'srv_00000001', name: 'Studio', peer: PEER, host: '127.0.0.2', port: 41001, addrs: [], relays: [], hints: [] }])
     expect(core.servers.serversView().rows[0].p2p).toEqual({ state: 'up', path: 'direct' })
   })
 

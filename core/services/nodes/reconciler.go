@@ -70,6 +70,7 @@ type grpcModelProber struct{ clients BackendClientFactory }
 
 func (g grpcModelProber) Probe(ctx context.Context, nodeID, address string) ProbeOutcome {
 	client := g.clients.NewClient(nodeID, address, false)
+	defer grpc.CloseBackend(client)
 	probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 	ok, err := client.HealthCheck(probeCtx)
@@ -174,6 +175,11 @@ type ReplicaReconciler struct {
 	scaleUpFailures map[string]scaleUpFailure
 	// now is the clock used for backoff windows. Tests replace it.
 	now func() time.Time
+	// schedulable is the set of healthy backend nodes seen on the previous
+	// tick. A node that joins it (registered, approved, recovered, resumed)
+	// can hold a replica that failed to load before, so every backoff ends.
+	// nil until the first tick.
+	schedulable map[string]struct{}
 }
 
 // scaleUpFailure is the backoff state of one model.
@@ -206,9 +212,20 @@ func scaleUpBackoffDelay(failures int) time.Duration {
 // ModelScheduler abstracts the scheduling logic needed by the reconciler.
 // SmartRouter implements this interface.
 type ModelScheduler interface {
-	// ScheduleAndLoadModel picks a node (optionally from candidateNodeIDs),
-	// installs the backend, and loads the model. Returns the node used.
-	ScheduleAndLoadModel(ctx context.Context, modelName string, candidateNodeIDs []string) (*BackendNode, error)
+	// PrepareReplica picks a node for a new replica of the model (optionally
+	// from candidateNodeIDs) and claims the load of the model there. It does
+	// not load: PreparedReplica.Load does. While a prepared load is pending,
+	// the next PrepareReplica for the model does not pick its node.
+	PrepareReplica(ctx context.Context, modelName string, candidateNodeIDs []string) (PreparedReplica, error)
+}
+
+// PreparedReplica is a new replica whose node is chosen and claimed.
+type PreparedReplica interface {
+	// Node is the node chosen for the replica.
+	Node() *BackendNode
+	// Load installs the backend and loads the model on the node. It returns
+	// the node used.
+	Load(ctx context.Context) (*BackendNode, error)
 }
 
 // ReplicaReconcilerOptions holds configuration for creating a ReplicaReconciler.
@@ -880,6 +897,15 @@ func (rc *ReplicaReconciler) reconcile(ctx context.Context) {
 		xlog.Warn("Reconciler: failed to refresh scheduling targets", "error", err)
 	}
 
+	// A node that joined since the last tick ends every scale-up backoff.
+	// Reading the node table here, rather than hooking the registry writes,
+	// sees a node that registered or recovered through any frontend.
+	if healthy, err := rc.registry.FindNodesBySelector(ctx, nil); err != nil {
+		xlog.Debug("Reconciler: failed to list schedulable nodes", "error", err)
+	} else {
+		rc.observeSchedulableNodes(extractNodeIDs(healthy))
+	}
+
 	configs, err := rc.registry.ListAutoScalingConfigs(ctx)
 	if err != nil {
 		xlog.Warn("Reconciler: failed to list auto-scaling configs", "error", err)
@@ -891,6 +917,34 @@ func (rc *ReplicaReconciler) reconcile(ctx context.Context) {
 			return // context cancelled
 		}
 		rc.reconcileModel(ctx, cfg)
+	}
+}
+
+// observeSchedulableNodes records the healthy backend nodes of this tick. When a
+// node is in the set that was not in it on the previous tick, it clears the
+// scale-up backoff of every model: the failure that started a backoff may have
+// been "no node could take it", and a new node changes that answer. The first
+// call only records the set.
+func (rc *ReplicaReconciler) observeSchedulableNodes(ids []string) {
+	seen := make(map[string]struct{}, len(ids))
+	joined := ""
+	for _, id := range ids {
+		seen[id] = struct{}{}
+		if _, before := rc.schedulable[id]; !before && rc.schedulable != nil && joined == "" {
+			joined = id
+		}
+	}
+	rc.schedulable = seen
+	if joined == "" {
+		return
+	}
+	rc.scaleUpMu.Lock()
+	cleared := len(rc.scaleUpFailures)
+	clear(rc.scaleUpFailures)
+	rc.scaleUpMu.Unlock()
+	if cleared > 0 {
+		xlog.Info("Reconciler: a node became schedulable; retrying models that were backing off",
+			"node", joined, "models", cleared)
 	}
 }
 
@@ -1009,7 +1063,20 @@ func (rc *ReplicaReconciler) reconcileModel(ctx context.Context, cfg ModelSchedu
 			return
 		}
 
-		needed := cfg.MinReplicas - int(current)
+		// A load of the model that runs on a matching node now will count
+		// once it finishes. Starting another one for it would overshoot the
+		// floor, and the node it runs on is not free for a second load anyway.
+		inProgress, lerr := rc.registry.CountLiveLoadJobs(ctx, target, candidateNodeIDs)
+		if lerr != nil {
+			xlog.Warn("Reconciler: failed to count loads in progress", "model", target, "error", lerr)
+			return
+		}
+		needed := cfg.MinReplicas - int(current) - inProgress
+		if needed <= 0 {
+			xlog.Debug("Reconciler: loads in progress cover the minimum", "model", target,
+				"current", current, "loading", inProgress, "min", cfg.MinReplicas)
+			return
+		}
 		if capacity == 0 {
 			// No capacity right now. Bump hysteresis; trip cooldown if it
 			// crosses the threshold. ClearAllUnsatisfiable resets this on
@@ -1024,7 +1091,7 @@ func (rc *ReplicaReconciler) reconcileModel(ctx context.Context, cfg ModelSchedu
 			needed = capacity
 		}
 		xlog.Info("Reconciler: scaling up to meet minimum", "model", target,
-			"current", current, "min", cfg.MinReplicas, "adding", needed)
+			"current", current, "loading", inProgress, "min", cfg.MinReplicas, "adding", needed)
 		if rc.scaleUp(ctx, cfg, needed) {
 			// A real (or partial) scale-up clears the hysteresis so a future
 			// dip starts fresh. If scaleUp added nothing (scheduler errored or
@@ -1176,33 +1243,78 @@ func (rc *ReplicaReconciler) scaleUp(ctx context.Context, cfg ModelSchedulingCon
 		return false
 	}
 
-	scheduled := 0
-	for i := 0; i < count; i++ {
-		node, err := rc.scheduler.ScheduleAndLoadModel(ctx, model, candidateNodeIDs)
-		if err != nil {
-			state.count++
-			delay := scaleUpBackoffDelay(state.count)
-			state.until = now.Add(delay)
-			rc.scaleUpMu.Lock()
-			rc.scaleUpFailures[model] = state
-			rc.scaleUpMu.Unlock()
-			// A model nobody has served yet is not a fault of any node: it
-			// repeats until the first request, so it stays at debug level.
-			level := xlog.Warn
-			if errors.Is(err, ErrNoLoadInfo) {
-				level = xlog.Debug
-			}
-			level("Reconciler: failed to scale up replica", "model", model,
-				"consecutive_failures", state.count, "retry_in", delay, "error", err)
-			break // stop trying on first failure
-		}
-		scheduled++
-		xlog.Info("Reconciler: scaled up replica", "model", model, "node", node.Name)
+	// The nodes are chosen one after the other, and the loads then run in
+	// parallel. Each choice claims the job of the model on its node, so the
+	// next choice skips that node; choosing all of them from one snapshot
+	// picked the same node for every load, and all but one met
+	// ErrLoadInProgress. A slow load on one node does not delay the replicas
+	// the floor needs on the others.
+	type outcome struct {
+		node *BackendNode
+		err  error
 	}
-	if scheduled > 0 {
+	var results []outcome
+	var prepared []PreparedReplica
+	for range count {
+		p, err := rc.scheduler.PrepareReplica(ctx, model, candidateNodeIDs)
+		if err != nil {
+			// The next choice would meet the same answer in this tick.
+			results = append(results, outcome{nil, err})
+			break
+		}
+		prepared = append(prepared, p)
+	}
+	loads := make([]outcome, len(prepared))
+	var wg sync.WaitGroup
+	for i, p := range prepared {
+		wg.Go(func() {
+			node, err := p.Load(ctx)
+			loads[i] = outcome{node, err}
+		})
+	}
+	wg.Wait()
+	results = append(results, loads...)
+
+	scheduled := 0
+	var failure error
+	for _, res := range results {
+		switch {
+		case res.err == nil:
+			scheduled++
+			name := ""
+			if res.node != nil {
+				name = res.node.Name
+			}
+			xlog.Info("Reconciler: scaled up replica", "model", model, "node", name)
+		case errors.Is(res.err, ErrLoadInProgress):
+			// Another owner is loading the model there. Nothing failed: look
+			// again on the next tick.
+			xlog.Info("Reconciler: model is being loaded by another owner; retrying on the next tick",
+				"model", model, "detail", res.err)
+		case failure == nil:
+			failure = res.err
+		}
+	}
+	switch {
+	case scheduled > 0:
 		rc.scaleUpMu.Lock()
 		delete(rc.scaleUpFailures, model)
 		rc.scaleUpMu.Unlock()
+	case failure != nil:
+		state.count++
+		delay := scaleUpBackoffDelay(state.count)
+		state.until = now.Add(delay)
+		rc.scaleUpMu.Lock()
+		rc.scaleUpFailures[model] = state
+		rc.scaleUpMu.Unlock()
+		// A model nobody has served yet is not a fault of any node: it
+		// repeats until the first request, so it stays at debug level.
+		level := xlog.Warn
+		if errors.Is(failure, ErrNoLoadInfo) {
+			level = xlog.Debug
+		}
+		level("Reconciler: failed to scale up replica", "model", model,
+			"consecutive_failures", state.count, "retry_in", delay, "error", failure)
 	}
 	return scheduled > 0
 }
@@ -1284,15 +1396,26 @@ func (rc *ReplicaReconciler) allReplicasBusy(ctx context.Context, modelName stri
 	return idleCount == 0
 }
 
-// parseSelector decodes a JSON node selector string into a map.
+// parseSelector decodes a JSON node selector string into a map. A selector
+// that cannot be decoded is logged and read as no selector; placement uses
+// decodeSelector instead, so that such a selector fails closed there.
 func parseSelector(selectorJSON string) map[string]string {
 	if selectorJSON == "" {
 		return nil
 	}
-	var selector map[string]string
-	if err := json.Unmarshal([]byte(selectorJSON), &selector); err != nil {
+	selector, err := decodeSelector(selectorJSON)
+	if err != nil {
 		xlog.Warn("Failed to parse node selector", "selector", selectorJSON, "error", err)
 		return nil
 	}
 	return selector
+}
+
+// decodeSelector decodes a JSON node selector string into a map.
+func decodeSelector(selectorJSON string) (map[string]string, error) {
+	var selector map[string]string
+	if err := json.Unmarshal([]byte(selectorJSON), &selector); err != nil {
+		return nil, err
+	}
+	return selector, nil
 }

@@ -30,11 +30,16 @@ type Warning string
 const (
 	// WarnOpenRelay: the link names an open relay.
 	WarnOpenRelay Warning = "open_relay"
-	// WarnNoRelay: the link names no relay.
+	// WarnNoRelay: the link names no relay and no relay hint.
 	WarnNoRelay Warning = "no_relay"
+	// WarnPunchOnly: the link names no relay that carries data, only relay
+	// hints. A device reaches the server only when a hole punch succeeds.
+	// It replaces WarnNoRelay.
+	WarnPunchOnly Warning = "punch_only"
 	// WarnRelayUnreachable: a relay is named but no pass could be registered.
 	WarnRelayUnreachable Warning = "relay_unreachable"
-	// WarnNoPublicAddr: the link has no relay and no public direct address.
+	// WarnNoPublicAddr: the link has no carrier relay and no public direct
+	// address.
 	// It may still carry local network addresses.
 	WarnNoPublicAddr Warning = "no_public_addr"
 )
@@ -67,6 +72,12 @@ type Config struct {
 	LANAddrs func() []ma.Multiaddr
 	// Relays lists the relays an invite may name. May be nil.
 	Relays RelaySource
+	// Hints returns the public relays on which the server holds a
+	// reservation, each with one transport address. A link names at most
+	// maxLinkHints of them, unless the request sets OmitRelayHints; relays
+	// that Relays lists are left out, because they go in the link as
+	// carriers. May be nil: links carry no hints.
+	Hints func() []peer.AddrInfo
 	// Registrar registers relay passes. May be nil: no invite gets a pass.
 	Registrar PassRegistrar
 	// Issuer issues the keys of remote invites. May be nil; remote invites
@@ -122,6 +133,11 @@ type MintRequest struct {
 	// link, but they let a device on the same network redeem it with no
 	// relay and no multicast discovery.
 	OmitLANAddrs bool
+	// OmitRelayHints keeps the relay hints out of the link. A hint tells the
+	// holder of the link which public relay the server uses, not its
+	// address; leaving them out gives a shorter link and QR code. RelayNone
+	// keeps them, because a hint carries no data.
+	OmitRelayHints bool
 }
 
 // PassInfo says what happened to the relay pass of a mint.
@@ -179,6 +195,7 @@ func (s *Service) Mint(ctx context.Context, req MintRequest) (*Minted, error) {
 	inv := Invite{
 		ID: uuid.NewString(), OwnerID: req.OwnerID, Kind: req.Kind, Label: req.Label,
 		Scope: req.Scope, ExpiresAt: now.Add(ttl).Truncate(time.Second), CreatedBy: req.CreatedBy, CreatedAt: now,
+		OmitLANAddrs: req.OmitLANAddrs,
 	}
 	for _, r := range relays {
 		inv.RelayIDs = append(inv.RelayIDs, r.ID)
@@ -201,26 +218,12 @@ func (s *Service) Mint(ctx context.Context, req MintRequest) (*Minted, error) {
 		V: linkVersion, Kind: inv.Kind, Peer: s.cfg.ServerPeer, Code: code,
 		Expires: inv.ExpiresAt, Label: inv.Label, Pass: pass,
 	}
-	if s.cfg.Addrs != nil {
-		link.Addrs = slices.Clone(s.cfg.Addrs())
-		if len(link.Addrs) > maxPublicAddrs {
-			link.Addrs = link.Addrs[:maxPublicAddrs]
-		}
-	}
-	public := len(link.Addrs)
-	if s.cfg.LANAddrs != nil && !req.OmitLANAddrs {
-		link.Addrs = appendAddrs(link.Addrs, s.cfg.LANAddrs(), maxLinkAddrs)
-	}
+	var public int
+	link.Addrs, public = s.directAddrs(req.OmitLANAddrs)
 	var warns []Warning
-	for i, r := range relays {
-		ai, err := peer.AddrInfoFromP2pAddr(r.Addr)
-		if err != nil {
-			continue
-		}
-		link.Relays = append(link.Relays, *ai)
-		if r.Open {
-			link.Open = append(link.Open, i)
-		}
+	link.Relays, link.Open = relayInfos(relays)
+	if !req.OmitRelayHints {
+		link.Hints = s.relayHints(ctx, link.Relays)
 	}
 	info := PassInfo{Registered: pass != "", Reason: reason}
 	if pass != "" {
@@ -230,7 +233,11 @@ func (s *Service) Mint(ctx context.Context, req MintRequest) (*Minted, error) {
 		warns = append(warns, WarnOpenRelay)
 	}
 	if len(link.Relays) == 0 {
-		warns = append(warns, WarnNoRelay)
+		if len(link.Hints) > 0 {
+			warns = append(warns, WarnPunchOnly)
+		} else {
+			warns = append(warns, WarnNoRelay)
+		}
 		if public == 0 {
 			warns = append(warns, WarnNoPublicAddr)
 		}
@@ -238,6 +245,77 @@ func (s *Service) Mint(ctx context.Context, req MintRequest) (*Minted, error) {
 		warns = append(warns, WarnRelayUnreachable)
 	}
 	return &Minted{Invite: inv, Link: link, Pass: info, Warnings: warns}, nil
+}
+
+// directAddrs returns the direct addresses a link carries: at most
+// maxPublicAddrs public ones, then the local network ones unless omitLAN is
+// set, up to maxLinkAddrs in all. public is how many are public.
+func (s *Service) directAddrs(omitLAN bool) (addrs []ma.Multiaddr, public int) {
+	if s.cfg.Addrs != nil {
+		addrs = slices.Clone(s.cfg.Addrs())
+		if len(addrs) > maxPublicAddrs {
+			addrs = addrs[:maxPublicAddrs]
+		}
+	}
+	public = len(addrs)
+	if s.cfg.LANAddrs != nil && !omitLAN {
+		addrs = appendAddrs(addrs, s.cfg.LANAddrs(), maxLinkAddrs)
+	}
+	return addrs, public
+}
+
+// relayInfos converts relays to the relays of a link and the indexes of the
+// open ones among them. A relay whose address does not parse is left out.
+func relayInfos(relays []Relay) (infos []peer.AddrInfo, open []int) {
+	for _, r := range relays {
+		ai, err := peer.AddrInfoFromP2pAddr(r.Addr)
+		if err != nil {
+			continue
+		}
+		if r.Open {
+			open = append(open, len(infos))
+		}
+		infos = append(infos, *ai)
+	}
+	return infos, open
+}
+
+// relayHints returns the hints a link carries: at most maxLinkHints relays
+// from Config.Hints, each with its first address. It leaves out the server,
+// the carriers of the link, every relay the relay source knows (a gated
+// relay admits a device only with a pass, so it is a carrier or nothing),
+// repeats, and addresses too long for the link.
+func (s *Service) relayHints(ctx context.Context, carriers []peer.AddrInfo) []peer.AddrInfo {
+	if s.cfg.Hints == nil {
+		return nil
+	}
+	skip := map[peer.ID]bool{s.cfg.ServerPeer: true}
+	for _, c := range carriers {
+		skip[c.ID] = true
+	}
+	if s.cfg.Relays != nil {
+		for _, r := range s.cfg.Relays.Relays(ctx) {
+			if ai, err := peer.AddrInfoFromP2pAddr(r.Addr); err == nil {
+				skip[ai.ID] = true
+			}
+		}
+	}
+	var out []peer.AddrInfo
+	for _, h := range s.cfg.Hints() {
+		if len(out) >= maxLinkHints {
+			break
+		}
+		if h.ID == "" || skip[h.ID] || len(h.Addrs) == 0 {
+			continue
+		}
+		one := peer.AddrInfo{ID: h.ID, Addrs: []ma.Multiaddr{h.Addrs[0]}}
+		if str, ok := relayString(one); !ok || len(str) > maxAddrLen {
+			continue
+		}
+		skip[h.ID] = true
+		out = append(out, one)
+	}
+	return out
 }
 
 // appendAddrs adds the addresses of more to dst, skipping duplicates and

@@ -442,14 +442,26 @@ RUN mkdir -p /models /backends /data
 # The unprivileged user that entrypoint.sh drops to. The image still starts as
 # root so that the entrypoint can hand a volume created by an older image over
 # to this user; the Sandbox add-on refuses to run as root.
+# Its home is in the data volume: LocalAI, Python and the backends keep caches
+# there, and a recreated container keeps them. A container started with
+# --user gets the same HOME, and entrypoint.sh moves it when it is not
+# writable.
 RUN groupadd --gid 10001 localai && \
-    useradd --uid 10001 --gid 10001 --home-dir /home/localai --create-home --shell /usr/sbin/nologin localai && \
-    chown localai:localai /models /backends /data
+    useradd --uid 10001 --gid 10001 --home-dir /data/home --no-create-home --shell /usr/sbin/nologin localai && \
+    mkdir -p /data/home && \
+    chown localai:localai /models /backends /data /data/home
+ENV HOME=/data/home
 
 # The default staging directory sits next to the binary, which is the root
 # directory here, and the unprivileged user cannot write there. Stage the
 # in-flight downloads in the data volume instead of the RAM-backed /tmp.
 ENV LOCALAI_DOWNLOAD_STAGING_PATH=/data/downloading
+
+# Generated images, audio and video, and the files of the files API, default
+# to the temp folder, which a container loses on restart and which is not
+# writable with a read-only root. Keep them in the data volume.
+ENV LOCALAI_GENERATED_CONTENT_PATH=/data/generated
+ENV LOCALAI_UPLOAD_PATH=/data/upload
 
 # Define the health check command.
 #

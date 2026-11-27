@@ -9,14 +9,21 @@
 // sign-in cookie, per server.
 import type { PluginListenerHandle } from '@capacitor/core'
 import type { LauncherConfig } from '@launcher/core/configTypes'
-import { parseForwardState, parsePairJson, type PairOutcome } from '@launcher/core/p2pInvite'
-import type { P2PTunnels } from '@launcher/core/remoteServers'
+import type { P2PTarget } from '@launcher/core/p2pInvite'
+import { parseForwardState, parsePairJson, parseRoutesLine, type P2PRoutes, type PairOutcome } from '@launcher/core/p2pInvite'
+import { withTrialRoutes, type P2PTunnels } from '@launcher/core/remoteServers'
 import { isP2PHost, remotes } from '@launcher/core/serversConfig'
 import type { TunnelStatusView } from '@launcher/shared/types'
 import type { P2PForwardInput, P2PPlugin } from '../plugins/definitions'
 
 /** What `P2P.version()` answers when the native library loaded. */
-export const P2P_LIBRARY_VERSION = 'p2pmobile/1'
+export const P2P_LIBRARY_VERSION = 'p2pmobile/3'
+
+/**
+ * The library versions this app works with. p2pmobile/3 adds the routes
+ * state line; with p2pmobile/2 the saved routes only change by an invite.
+ */
+const KNOWN_LIBRARY_VERSIONS = new Set([P2P_LIBRARY_VERSION, 'p2pmobile/2'])
 
 /** The host of a server over P2P saved without one (the desktop's). */
 const DEFAULT_HOST = '127.0.0.1'
@@ -70,6 +77,8 @@ export interface AndroidTunnelsOptions {
   onChange(): void
   /** The "keep P2P in the background" setting changed natively (the notification's Disconnect). */
   onKeepChange?(on: boolean): void
+  /** The forwarder of a saved server sent the routes the server gives now: the caller saves them. */
+  onRoutes?(id: string, routes: P2PRoutes): void
   log?(message: string, level?: 'info' | 'warn'): void
   /** How long `init` waits for the plugin to say whether the library loaded. */
   initTimeoutMs?: number
@@ -121,6 +130,9 @@ export function androidP2PTunnels(o: AndroidTunnelsOptions): AndroidTunnels {
   /** The ids started and not stopped since. */
   const active = new Set<string>()
   const states = new Map<string, TunnelStatusView>()
+  // Routes a start asked for that are not saved: those of an invite of a
+  // saved server, dialled until the server gives its own (see the core).
+  const trials = new Map<string, P2PTarget>()
   /** Hosts handed out by allocate whose server is not saved yet. */
   const reserved = new Set<string>()
   const waiters = new Set<() => void>()
@@ -144,6 +156,12 @@ export function androidP2PTunnels(o: AndroidTunnelsOptions): AndroidTunnels {
   }
 
   const onLine = (id: string, line: string, notify: boolean) => {
+    // A routes line is no state: the forwarder still listens as before.
+    const routes = parseRoutesLine(line)
+    if (routes) {
+      if (notify && active.has(id)) o.onRoutes?.(id, routes)
+      return
+    }
     const s = mapForwardLine(line)
     if (!s) return
     setState(id, s)
@@ -160,7 +178,9 @@ export function androidP2PTunnels(o: AndroidTunnelsOptions): AndroidTunnels {
         setState(r.id, { state: 'failed', error: 'listen address must be loopback' })
         continue
       }
-      out.push({ id: r.id, name: r.name, peer: r.p2p.peer, host, port: r.p2p.port, addrs: [...r.p2p.addrs], relays: [...r.p2p.relays] })
+      const trial = trials.get(r.id)
+      const t = trial ? withTrialRoutes(r.p2p, trial) : r.p2p
+      out.push({ id: r.id, name: r.name, peer: r.p2p.peer, host, port: r.p2p.port, addrs: [...t.addrs], relays: [...t.relays], hints: [...(t.hints ?? [])] })
     }
     return out
   }
@@ -220,7 +240,15 @@ export function androidP2PTunnels(o: AndroidTunnelsOptions): AndroidTunnels {
       } catch (e) {
         return { ok: false, reason: 'pair-failed', detail: message(e) }
       }
-      if (!res.ok) return { ok: false, reason: 'pair-failed', detail: res.detail }
+      if (!res.ok) {
+        // The app has its own words for a server that needs a relay; the
+        // library's text goes to the log only.
+        if (res.code === 'needs_relay') {
+          log(`servers: pairing needs a relay: ${res.detail}`, 'warn')
+          return { ok: false, reason: 'needs-relay', detail: '' }
+        }
+        return { ok: false, reason: 'pair-failed', detail: res.detail }
+      }
       const result = parsePairJson(res.json)
       if (!result) return { ok: false, reason: 'pair-failed', detail: 'unexpected answer' }
       // A server over P2P is being added: the service notification (and its
@@ -233,14 +261,18 @@ export function androidP2PTunnels(o: AndroidTunnelsOptions): AndroidTunnels {
     allocate,
     allocatePort: async () => (await allocate()).port,
 
-    start(id) {
+    start(id, _name, target) {
       active.add(id)
+      const saved = remotes(o.store()).find((r) => r.id === id)?.p2p
+      if (target && saved && !sameRouteLists(target, saved)) trials.set(id, target)
+      else trials.delete(id)
       const cur = states.get(id)
       if (!cur || cur.state === 'stopped' || cur.state === 'failed') states.set(id, { state: 'starting' })
       sync()
     },
 
     stop(id) {
+      trials.delete(id)
       if (!active.delete(id)) return
       states.delete(id)
       sync()
@@ -279,7 +311,7 @@ export function androidP2PTunnels(o: AndroidTunnelsOptions): AndroidTunnels {
     async init() {
       try {
         const v = await withTimeout(plugin.version(), o.initTimeoutMs ?? INIT_TIMEOUT_MS)
-        available = v.version === P2P_LIBRARY_VERSION
+        available = KNOWN_LIBRARY_VERSIONS.has(v.version)
         if (!available) log(`servers: unknown P2P library ${v.version}`, 'warn')
       } catch (e) {
         available = false
@@ -320,4 +352,9 @@ export function androidP2PTunnels(o: AndroidTunnelsOptions): AndroidTunnels {
       }
     },
   }
+}
+
+function sameRouteLists(a: P2PTarget, b: P2PTarget): boolean {
+  const same = (x: string[] = [], y: string[] = []) => x.length === y.length && x.every((v, i) => v === y[i])
+  return same(a.addrs, b.addrs) && same(a.relays, b.relays) && same(a.hints, b.hints)
 }

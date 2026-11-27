@@ -574,6 +574,13 @@ export const S = {
     phrase: 'Confirmation phrase',
     phraseNote: 'The server shows four words too. Check that they are the same. If they differ, remove this server and tell the server owner.',
     done: 'Done',
+    /** An invite of a server that is already saved: no pairing, only its routes. */
+    knownTitle: (name: string) => `You already have this server: ${name}`,
+    knownNote: 'This device is already paired with it. Update routes tries the addresses and relays of this invite, so the app finds the server again. Once the server answers, the app saves the routes that the server gives. The invite is not used.',
+    updateRoutes: 'Update routes',
+    updatingRoutes: 'Starting the connection…',
+    routesTitle: 'Trying the routes of the invite',
+    routesNote: 'The invite was not used. Ask the server owner to cancel it: on the server, open Cluster, then Sharing, and cancel the pending invite.',
     p2pBadge: 'P2P',
     tunnel: {
       starting: 'Starting the P2P connection',
@@ -584,6 +591,9 @@ export const S = {
       failed: 'P2P connection failed',
     } as Record<string, string>,
     portInUse: 'Another app on this device uses the local address of this server. Close that app or restart the device; the app tries again by itself.',
+    /** A forwarder down with the code `needs_relay`. */
+    needsRelay:
+      "Cannot connect directly to this server. Your network or the server's network blocks a direct connection. The server needs a relay. Ask its admin to add one in Settings > P2P > Relays, or to run one with 'local-ai p2p relay'.",
     path: {
       direct: 'direct',
       hole_punched: 'hole punched',
@@ -596,6 +606,8 @@ export const S = {
       'open-relay': 'The link names an open relay. Allow it below to connect anyway.',
       'no-binary': 'Pairing needs LocalAI on this computer. Install it first, then paste the link again.',
       'pair-failed': 'The pairing failed.',
+      'needs-relay':
+        "Cannot connect directly to this server. Your network or the server's network blocks a direct connection. This is common on mobile data and on some routers. The server needs a relay. Ask its admin to add one in Settings > P2P > Relays, or to run one with 'local-ai p2p relay'. Then scan a new invite.",
       duplicate: 'This server is already saved.',
       limit: 'You can save up to 20 servers.',
       name: 'Enter a name of 1 to 60 characters.',

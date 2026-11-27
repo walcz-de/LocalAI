@@ -32,6 +32,9 @@ type Service interface {
 	// Redeem is served over P2P only; from is the caller's peer ID as the
 	// connection authenticated it.
 	Redeem(ctx context.Context, from string, req RedeemRequest) (RedeemResult, error)
+	// Routes is served over P2P only, to a paired device; from is the
+	// caller's peer ID as the connection authenticated it.
+	Routes(ctx context.Context, from string) (Routes, error)
 }
 
 // Status is the state of the P2P layer.
@@ -54,6 +57,10 @@ type Status struct {
 	// Reservations are the peer IDs of the relays that hold a reservation for
 	// this server.
 	Reservations []string `json:"reservations"`
+	// HintRelays are the reservations on public relays: the relays that are
+	// not in the relay settings. An invite names up to two of them as relay
+	// hints, so a device can reach this server for a hole punch.
+	HintRelays []string `json:"hint_relays"`
 	// RelayService says whether this server relays for its paired devices.
 	RelayService RelayServiceInfo `json:"relay_service"`
 	// PendingInvites is the number of invites that can still be redeemed.
@@ -99,6 +106,11 @@ type MintRequest struct {
 	// link. By default the link carries them, so a device on the same network
 	// can redeem it with no relay and no multicast discovery.
 	OmitLANAddrs bool `json:"omit_lan_addrs,omitempty"`
+	// OmitRelayHints keeps the public relays this server holds reservations
+	// on out of the link. By default the link names up to two of them, so a
+	// device can reach this server for a hole punch; they never carry data.
+	// Relays "none" keeps them unless this is set.
+	OmitRelayHints bool `json:"omit_relay_hints,omitempty"`
 }
 
 // RelayChoice is "auto", "none" or a list of relay IDs.
@@ -150,9 +162,14 @@ type MintResult struct {
 	ExpiresAt time.Time `json:"expires_at"`
 	// QR says whether the interface may show the link as a QR code (device
 	// and remote invites only).
-	QR       bool      `json:"qr"`
-	Relay    RelayPass `json:"relay"`
-	Warnings []string  `json:"warnings"`
+	QR    bool      `json:"qr"`
+	Relay RelayPass `json:"relay"`
+	// Hints is the number of public relays the link names as relay hints:
+	// relays that let a device reach this server for a hole punch only.
+	Hints int `json:"hints"`
+	// Warnings are open_relay, no_relay, punch_only, relay_unreachable and
+	// no_public_addr.
+	Warnings []string `json:"warnings"`
 }
 
 // RelayPass says which relay holds the pass of an invite, or why none does.
@@ -347,6 +364,23 @@ type ClientKey struct {
 	Secret string `json:"secret"`
 }
 
+// Routes is the answer of GET /api/p2p/routes: how a paired device reaches
+// this server now. It has the lists of an invite link, without the code and
+// the pass. A device stores them in place of the ones of its invite, so it
+// still finds the server after a relay reservation moves.
+type Routes struct {
+	// Server is the peer ID of this server.
+	Server string `json:"server"`
+	// Addrs are the direct addresses: public ones, then local network ones.
+	Addrs []string `json:"addrs"`
+	// Relays are the gated relays that carry data for a paired device, each
+	// ending in /p2p/<relay peer ID>.
+	Relays []string `json:"relays"`
+	// Hints are up to two public relays for hole punch coordination only,
+	// each ending in /p2p/<relay peer ID>. They never carry data.
+	Hints []string `json:"hints"`
+}
+
 // RevokeResult is the answer of DELETE /api/p2p/devices/{id}.
 type RevokeResult struct {
 	Revoked bool `json:"revoked"`
@@ -358,6 +392,9 @@ var (
 	ErrNotFound = errors.New("not found")
 	// ErrInvalid: 400. Wrap it with the reason.
 	ErrInvalid = errors.New("invalid request")
+	// ErrForbidden: 403. The caller is not allowed, for example a peer that
+	// is not paired.
+	ErrForbidden = errors.New("forbidden")
 	// ErrConflict: 409. Wrap it with the reason.
 	ErrConflict = errors.New("conflict")
 	// ErrInviteInvalid: 410, the one answer for a wrong, used, canceled or

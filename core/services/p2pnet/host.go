@@ -81,6 +81,13 @@ type Config struct {
 	RelayRetry time.Duration
 	// MDNS finds peers on the local network.
 	MDNS bool
+	// NoReservations keeps AutoRelay off: the host holds no relay
+	// reservation, so no peer can reach it through a relay. It is for hosts
+	// that only dial out. A hole punch does not need one on the dialling
+	// side: the peer that holds the reservation starts it, and this host
+	// needs only its listen addresses and the addresses that its peers
+	// observe.
+	NoReservations bool
 	// PortMapping asks the router for a port mapping (UPnP, NAT-PMP).
 	PortMapping bool
 	// Gate admits peers and streams. Nil means an empty Allowlist: no
@@ -88,6 +95,10 @@ type Config struct {
 	Gate Gate
 	// UserAgent is sent in the identify protocol. Empty means "localai".
 	UserAgent string
+	// PrivateHints lets Dial use hint relays at private and loopback
+	// addresses. By default Dial uses only the public IP addresses of a
+	// hint (see WithHints). Only tests and closed labs set it.
+	PrivateHints bool
 }
 
 // Host is a libp2p host with LocalAI's admission rules. It is safe for
@@ -99,12 +110,14 @@ type Host struct {
 	disco *mdnsRunner
 	addrs *addrWatcher
 	punch *punchTracer
+	hints *hintRelays
 	reach atomic.Int32
 	sub   event.Subscription
 	// redial is nil when the gate cannot name the paired peers.
 	redial *redialer
 
-	static []peer.AddrInfo
+	static       []peer.AddrInfo
+	privateHints bool
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -143,12 +156,14 @@ func New(ctx context.Context, cfg Config) (*Host, error) {
 
 	hctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	n := &Host{
-		gate:      gate,
-		punch:     newPunchTracer(),
-		static:    cfg.StaticRelays,
-		ctx:       hctx,
-		cancel:    cancel,
-		listeners: map[protocol.ID]*listener{},
+		gate:         gate,
+		punch:        newPunchTracer(),
+		hints:        newHintRelays(),
+		static:       cfg.StaticRelays,
+		privateHints: cfg.PrivateHints,
+		ctx:          hctx,
+		cancel:       cancel,
+		listeners:    map[protocol.ID]*listener{},
 	}
 	cm, err := connmgr.NewConnManager(connLowWater, connHighWater, connmgr.WithGracePeriod(connGracePeriod))
 	if err != nil {
@@ -159,7 +174,7 @@ func New(ctx context.Context, cfg Config) (*Host, error) {
 		libp2p.Identity(key),
 		libp2p.UserAgent(ua),
 		libp2p.ConnectionManager(cm),
-		libp2p.ConnectionGater(connGater{gate: gate}),
+		libp2p.ConnectionGater(connGater{gate: gate, hints: n.hints}),
 		// The relay transport dials and accepts relayed connections.
 		// AutoRelay needs it set before the libp2p defaults are applied.
 		libp2p.EnableRelay(),
@@ -175,7 +190,7 @@ func New(ctx context.Context, cfg Config) (*Host, error) {
 	if cfg.PortMapping {
 		opts = append(opts, libp2p.NATPortMap())
 	}
-	if len(cfg.StaticRelays) > 0 || cfg.PublicDHT {
+	if !cfg.NoReservations && (len(cfg.StaticRelays) > 0 || cfg.PublicDHT) {
 		opts = append(opts, libp2p.EnableAutoRelayWithPeerSource(n.relayCandidates, autoRelayOptions(cfg)...))
 	}
 	if cfg.PublicDHT {
@@ -221,7 +236,7 @@ func (n *Host) start(cfg Config, boot []peer.AddrInfo) error {
 			n.punch.forget(c.RemotePeer())
 		}
 	}})
-	if len(cfg.StaticRelays) > 0 {
+	if len(cfg.StaticRelays) > 0 && !cfg.NoReservations {
 		if err := kickAutoRelay(n.h); err != nil {
 			return err
 		}
@@ -242,9 +257,8 @@ func (n *Host) start(cfg Config, boot []peer.AddrInfo) error {
 	n.connectAll(cfg.StaticRelays)
 	if cfg.MDNS {
 		// mDNS only finds peers on the local network, so a host that cannot
-		// start it still works. A host with no listen address, such as one in
-		// mode connect, has no address to announce, and discovery waits for
-		// one.
+		// start it still works. A host with no listen address has no address
+		// to announce, and discovery waits for one.
 		n.startMDNS(w)
 	}
 	return n.watchAddrs(w)

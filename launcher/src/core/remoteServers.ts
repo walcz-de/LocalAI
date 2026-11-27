@@ -26,7 +26,7 @@ import type {
 } from '../shared/types'
 import type { ConfigStore } from './configStore'
 import type { LauncherConfig } from './configTypes'
-import { linkRoutes, readInvite, type P2PTarget, type PairOutcome } from './p2pInvite'
+import { linkRoutes, readInvite, type P2PRoutes, type P2PTarget, type PairOutcome } from './p2pInvite'
 import { RemoteMonitor, REMOTE_RETRY_MS } from './remoteMonitor'
 import {
   addP2PRemote,
@@ -39,6 +39,7 @@ import {
   remotes,
   updateRemote,
   withDefaultTarget,
+  withP2PRoutes,
   type RemoteServer,
 } from './serversConfig'
 import { isInsecureRemote, type TestResult } from './testClassify'
@@ -122,6 +123,8 @@ export class RemoteServers {
   private openTests = new Set<AbortController>()
   /** The ids whose forwarder was started and not stopped since. */
   private tunnelIds = new Set<string>()
+  /** The routes each started forwarder dials, which may be routes of an invite that are not saved. */
+  private tunnelTargets = new Map<string, P2PTarget>()
   /** Why the last start of a forwarder threw, until it starts or stops. */
   private tunnelErrors = new Map<string, string>()
 
@@ -173,6 +176,7 @@ export class RemoteServers {
           status: k?.status ?? (current ? 'connected' : 'not-tested'),
           checkedAt: k?.at,
           p2p: r.p2p ? this.tunnelStatus(r.id) : undefined,
+          ...(r.p2p ? { peer: r.p2p.peer } : {}),
         }
       }),
     ]
@@ -344,6 +348,7 @@ export class RemoteServers {
     // Record the id first: a start that throws may still have left a
     // forwarder behind, and stopAll must stop it.
     this.tunnelIds.add(r.id)
+    this.tunnelTargets.set(r.id, r.p2p)
     try {
       this.d.p2p.start(r.id, r.name, r.p2p)
     } catch (e) {
@@ -358,6 +363,7 @@ export class RemoteServers {
 
   private stopTunnel(id: string): void {
     this.tunnelErrors.delete(id)
+    this.tunnelTargets.delete(id)
     if (!this.tunnelIds.delete(id)) return
     this.d.p2p.stop(id)
   }
@@ -371,7 +377,8 @@ export class RemoteServers {
     const inv = readInvite(input.link, this.d.now())
     if (!inv.ok) return { ok: false, reason: inv.reason }
     if (inv.info.openRelay && !input.allowOpenRelay) return { ok: false, reason: 'open-relay' }
-    if (remotes(this.d.store.get()).some((r) => r.p2p?.peer === inv.info.peer)) return { ok: false, reason: 'duplicate' }
+    const known = remotes(this.d.store.get()).find((r) => r.p2p?.peer === inv.info.peer)
+    if (known) return this.updateRoutesByInvite(known, input.link)
     if (!this.d.p2p.available()) return { ok: false, reason: 'no-binary' }
     this.d.log('servers: pairing with a server over P2P')
     const paired = await this.d.p2p.pair({
@@ -410,6 +417,49 @@ export class RemoteServers {
     }
     this.emit()
     return { ok: true, view: this.serversView(), id: added.id, phrase, opened: false }
+  }
+
+  /**
+   * An invite of a server that is already saved: this device is paired, so
+   * the code is not redeemed. Anyone can write a link with the peer ID of a
+   * saved server, so its routes are not saved: the forwarder starts again
+   * and dials the routes of the link first, then the saved ones (the way
+   * back when every saved route is out of date). Once it is connected to
+   * that peer, it asks the server for its routes over the authenticated
+   * connection, and those replace the saved ones (see updateP2PRoutes). The
+   * invite stays pending on the server, so the person asks its owner to
+   * cancel it.
+   */
+  private async updateRoutesByInvite(known: RemoteServer, link: string): Promise<AddServerByInviteResult> {
+    if (!known.p2p) return { ok: false, reason: 'duplicate' }
+    const target = withTrialRoutes(known.p2p, linkRoutes(link))
+    const running = this.tunnelTargets.get(known.id)
+    const changed = !running || !sameRoutes(running, target)
+    this.d.log(`servers: ${changed ? 'trying the routes of an invite' : 'the routes of an invite are tried already'} for a server over P2P; the invite was not used`)
+    if (changed) {
+      this.stopTunnel(known.id)
+      this.startTunnel({ ...known, p2p: target })
+    }
+    this.emit()
+    return { ok: true, view: this.serversView(), id: known.id, phrase: '', opened: false, routesUpdated: true }
+  }
+
+  /**
+   * The forwarder of a saved server reported the routes the server gives
+   * now. They replace the saved ones, so the next start dials what the
+   * server has today (a relay reservation moves now and then). The running
+   * forwarder is left alone: it works. Resolves true when something changed.
+   */
+  async updateP2PRoutes(id: string, routes: P2PRoutes): Promise<boolean> {
+    let changed = false
+    await this.d.store.update((c) => {
+      const r = withP2PRoutes(c, id, routes)
+      if (!r.ok || !r.changed) return c
+      changed = true
+      return r.config
+    })
+    if (changed) this.d.log('servers: routes of a server over P2P updated')
+    return changed
   }
 
   async removeServer(id: string): Promise<ServerChangeResult> {
@@ -537,4 +587,27 @@ export class RemoteServers {
     for (const id of [...this.tunnelIds]) this.stopTunnel(id)
     for (const ac of this.openTests) ac.abort()
   }
+}
+
+/**
+ * The routes a forwarder dials after an invite of a saved server: those of
+ * the link first, then the saved ones, each once. They are only dialled,
+ * never saved, so they need not fit the caps of a saved server.
+ */
+export function withTrialRoutes(saved: P2PTarget, link: { addrs?: string[]; relays?: string[]; hints?: string[] }): P2PTarget {
+  // The same check as a saved route: a multiaddr, never something a forwarder could read as a flag.
+  const ok = (x: string) => x.length > 0 && x.length <= 300 && x.startsWith('/')
+  const merge = (a: string[] = [], b: string[] = []) => [...new Set([...a.filter(ok), ...b])]
+  const hints = merge(link.hints, saved.hints)
+  return {
+    ...saved,
+    addrs: merge(link.addrs, saved.addrs),
+    relays: merge(link.relays, saved.relays),
+    ...(hints.length > 0 ? { hints } : {}),
+  }
+}
+
+function sameRoutes(a: P2PTarget, b: P2PTarget): boolean {
+  const same = (x: string[] = [], y: string[] = []) => x.length === y.length && x.every((v, i) => v === y[i])
+  return same(a.addrs, b.addrs) && same(a.relays, b.relays) && same(a.hints, b.hints)
 }

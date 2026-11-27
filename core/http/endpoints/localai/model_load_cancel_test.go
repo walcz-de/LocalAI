@@ -93,8 +93,15 @@ var _ = Describe("ModelLoadCancelEndpoint", func() {
 		return rec
 	}
 	cancelBody := func(jobID string) string { return `{"job_id":"` + jobID + `"}` }
+	placedOn := func(model, nodeID, nodeName string) *nodes.ModelLoadJob {
+		job, claimed, err := registry.ClaimLoadJobOn(ctx, model, nodeID, "frontend-a")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(claimed).To(BeTrue())
+		Expect(registry.UpdateLoadJob(ctx, job.Ref(), nodes.LoadJobUpdate{State: nodes.LoadJobStateLoading, NodeID: nodeID, NodeName: nodeName})).To(Succeed())
+		return job
+	}
 	placed := func(model string) *nodes.ModelLoadJob {
-		job, claimed, err := registry.ClaimLoadJob(ctx, model, "frontend-a")
+		job, claimed, err := registry.ClaimLoadJobOn(ctx, model, node.ID, "frontend-a")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(claimed).To(BeTrue())
 		Expect(registry.UpdateLoadJob(ctx, job.Ref(), nodes.LoadJobUpdate{State: nodes.LoadJobStateLoading, NodeID: node.ID, NodeName: node.Name})).To(Succeed())
@@ -109,7 +116,7 @@ var _ = Describe("ModelLoadCancelEndpoint", func() {
 		}
 	})
 
-	It("answers the whole matrix: stopped, stopping, gone, unknown, conflict", func() {
+	It("answers the matrix: stopped, gone, unknown", func() {
 		e := serve(func(id string) bool { return id != "unknown" })
 		job := placed("m")
 
@@ -126,11 +133,15 @@ var _ = Describe("ModelLoadCancelEndpoint", func() {
 		Expect(current.CancelRequested).To(BeTrue())
 		Expect(current.State).To(Equal(nodes.LoadJobStateFailed))
 
-		// A different generation is current: 409 with its id.
+		// An attempt that is gone: 200 gone, even while another attempt of
+		// the model runs. That one may load on another node; it did not
+		// replace the attempt named. (409 is for an attempt that another
+		// one replaced on its node during the cancel; the nodes package
+		// covers that race.)
 		rec = post(e, "m", cancelBody("not-the-current-one"))
-		Expect(rec.Code).To(Equal(http.StatusConflict))
+		Expect(rec.Code).To(Equal(http.StatusOK))
 		Expect(json.Unmarshal(rec.Body.Bytes(), &body)).To(Succeed())
-		Expect(body.CurrentJobID).To(Equal(job.Generation))
+		Expect(body.State).To(Equal("gone"))
 
 		// No load at all: 200 gone for a known model, 404 for an unknown one.
 		rec = post(e, "idle", cancelBody("x"))
@@ -175,7 +186,7 @@ var _ = Describe("ModelLoadCancelEndpoint", func() {
 	})
 
 	It("cancels a staging load that has no node yet, without sending a stop", func() {
-		job, _, err := registry.ClaimLoadJob(ctx, "staging", "frontend-a")
+		job, _, err := registry.ClaimLoadJobOn(ctx, "staging", "", "frontend-a")
 		Expect(err).ToNot(HaveOccurred())
 
 		rec := post(serve(known), "staging", cancelBody(job.Generation))
@@ -213,8 +224,7 @@ var _ = Describe("ModelLoadCancelEndpoint", func() {
 		It("cancels the in-flight load and still unloads the loaded replica", func() {
 			job := placed("both")
 			Expect(registry.SetNodeModel(ctx, node.ID, "both", 1, "loaded", "10.0.0.1:9001", 0)).To(Succeed())
-			other := placed("elsewhere")
-			Expect(registry.UpdateLoadJob(ctx, other.Ref(), nodes.LoadJobUpdate{NodeID: "another-node", NodeName: "n2"})).To(Succeed())
+			placedOn("elsewhere", "another-node", "n2")
 
 			e := echo.New()
 			e.POST("/api/nodes/:id/models/unload", localai.UnloadModelOnNodeEndpoint(sender, registry))
@@ -276,7 +286,7 @@ var _ = Describe("ModelLoadStatusEndpoint activity", func() {
 			return rec.Code, status
 		}
 
-		job, _, err := registry.ClaimLoadJob(ctx, "m", "frontend-a")
+		job, _, err := registry.ClaimLoadJobOn(ctx, "m", "", "frontend-a")
 		Expect(err).ToNot(HaveOccurred())
 		code, status := get("m")
 		Expect(code).To(Equal(http.StatusOK))
@@ -308,6 +318,6 @@ var _ = Describe("ModelLoadStatusEndpoint activity", func() {
 // brokenStore fails every read, like a database that is down.
 type brokenStore struct{ nodes.LoadJobStore }
 
-func (brokenStore) GetLoadJob(context.Context, string) (*nodes.ModelLoadJob, error) {
+func (brokenStore) ListLoadJobs(context.Context, string) ([]nodes.ModelLoadJob, error) {
 	return nil, errors.New("database unreachable")
 }

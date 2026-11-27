@@ -236,6 +236,7 @@ See [Authentication & Authorization]({{%relref "/administration/authentication" 
 |-----------|---------|-------------|----------------------|
 | `--disable-chats` | `false` | Turn off the chats: the `/api/chats` API, saved agents, triggers, connectors and the agent tasks and jobs. Nothing of them starts | `$LOCALAI_DISABLE_CHATS` |
 | `--chats-auto-resume` | `false` | Resume a chat turn that a restart interrupted, with no click. It retries up to 3 times (after 15 seconds, 1 minute and 5 minutes), within 30 minutes of the interruption. Off by default: a person or the page resumes it. See [If a frontend dies]({{% relref "/administration/chats-deployment#clusters" %}}) | `$LOCALAI_CHATS_AUTO_RESUME` |
+| `--chats-model-load-wait` | `15m` | How long a chat turn waits, in total, for its model while the model is still loading (`503` with `model_loading`, or a `503` or `429` with `Retry-After`). After that the turn ends with a "still loading" reason, or with the server's own message when the answer was not a load in progress. `0` means the default. See [Requests for a model that is still loading]({{% relref "/administration/distributed-mode#requests-for-a-model-that-is-still-loading" %}}) | `$LOCALAI_CHATS_MODEL_LOAD_WAIT` |
 | `--incognito` | | Whether web UI sessions may start incognito chats: `allow` or `forbid`. Empty: `allow`. See [Incognito chats]({{% relref "/features/chats-and-agents/incognito" %}}) | `$LOCALAI_INCOGNITO` |
 | `--incognito-max-level` | | The highest incognito level the server honours: `memory-off` or `zero-retention`. Empty: `zero-retention` | `$LOCALAI_INCOGNITO_MAX_LEVEL` |
 | `--disable-triggers` | `false` | Turn off triggers. Chats stay on | `$LOCALAI_DISABLE_TRIGGERS` |
@@ -341,7 +342,7 @@ The token-based P2P mode, federation and the Explorer were removed. A server tha
 | `local-ai p2p relays add\|remove\|list\|check` | Manage the relays of a running server (`--target`, `--api-key`, `--json`) |
 | `local-ai p2p id` and `local-ai p2p status` | Show the peer ID, addresses, reachability and paths of a running server |
 | `local-ai p2p pair --invite <link>` | Redeem an invite on this machine |
-| `local-ai p2p forward --peer <id> --listen <addr>` | Forward a local port to a paired peer |
+| `local-ai p2p forward --peer <id> --listen <addr>` | Forward a local port to a paired peer. `--relay`, `--addr` and `--hint` (a public relay that only helps a hole punch) are repeatable. With `--json` it prints one status line per state change, and a `routes` line with the current routes of the server while connected |
 
 ## Library sources
 

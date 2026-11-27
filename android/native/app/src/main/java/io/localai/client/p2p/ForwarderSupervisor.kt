@@ -14,6 +14,8 @@ data class Forward(
     val port: Int,
     val addrs: List<String>,
     val relays: List<String>,
+    /** Public relays of the invite that only help a hole punch: they never carry data. */
+    val hints: List<String> = emptyList(),
 )
 
 fun interface Cancellable {
@@ -220,7 +222,7 @@ class ForwarderSupervisor(
         }
         record(id, STARTING_LINE)
         val handle = try {
-            engine.startForward(identityPath, f.peer, "${f.host}:${f.port}", jsonArray(f.relays), jsonArray(f.addrs)) { line ->
+            engine.startForward(identityPath, f.peer, "${f.host}:${f.port}", jsonArray(f.relays), jsonArray(f.addrs), jsonArray(f.hints)) { line ->
                 onLine(id, gen, line)
             }
         } catch (e: Exception) {
@@ -258,6 +260,12 @@ class ForwarderSupervisor(
 
     private fun onLine(id: String, gen: Long, line: String) {
         val current = synchronized(lock) { slots[id]?.takeIf { it.generation == gen } } ?: return
+        if (stateOfLine(line) == "routes") {
+            // The routes of the server are no state: pass them on and keep
+            // the last state, which says whether the forwarder listens.
+            onState(id, line)
+            return
+        }
         if (stateOfLine(line) != "closed") {
             record(id, line, gen)
             return

@@ -15,7 +15,17 @@ Every llama-cpp image ships `llama-cpp-cpu-all`: ggml built with `GGML_BACKEND_D
 - The variants must come from the same llama.cpp commit as the GPU tree. The Makefile checks this through the `LLAMA_VERSION` file the stage writes.
 - Keep the stage on the oldest glibc of any builder image. The script refuses a variant that needs a newer glibc or libstdc++ than Ubuntu 22.04 has.
 - turboquant, bonsai and olala build a llama.cpp fork and use the same stage with their own pin (`CPU_VARIANTS_VERSION_VAR`, and `OLALA_CMAKE_ARGS` for olala's CPU flags) and their own patches. The variants of a fork come from that fork, never from upstream. ik-llama-cpp has its own ggml without the backend loader, so it keeps per-instruction-set binaries.
-- `llama-cpp-grpc` and `llama-cpp-rpc-server` are separate static builds and still compile their own CPU backend.
+- `llama-cpp-grpc` and `llama-cpp-rpc-server` come from the same tree as `llama-cpp-cpu-all` in the image builds (`CPU_ALL_RPC=ON`, set by the `.docker/*-compile.sh` scripts of llama-cpp, bonsai, turboquant and olala). That tree also builds `libggml-rpc.so` and `ggml-rpc-server`, and both binaries find the RPC backend through the backend registry. Do not go back to a separate static grpc tree: it compiles the GPU backend a second time for every CUDA or HIP arch, which was half of each GPU build and took the ROCm images to GitHub's 6h job limit. The Darwin and Windows builds still call the static `llama-cpp-grpc` target.
+- `backend.yml` and `backend_pr.yml` end with a `build-timings` job (`scripts/ci/backend-build-timings.sh`). It writes the slowest image jobs to the run summary and fails when a llama.cpp-family job ran longer than 4h.
+
+## NCCL (CUDA images)
+
+ggml's CUDA backend links NCCL when CMake finds it (`GGML_CUDA_NCCL` is on by default) and uses it for the cross-GPU reductions of `split_mode: tensor`. `.docker/install-nccl.sh` installs `libnccl2` and `libnccl-dev` in both builder stages of `backend/Dockerfile.llama-cpp`, for cublas on amd64 (CUDA 12 and 13) and on arm64 with CUDA 13. The Jetson (CUDA 12 arm64) image has none, since NVIDIA ships no NCCL for Jetson. Rules:
+
+- It is not in `install-base-deps.sh` on purpose: the forks that share that script would link NCCL too and each grow by about 190 to 290 MB compressed.
+- The version is the newest `libnccl2` built for the exact CUDA `major.minor` of the image (`+cudaX.Y`), so its driver requirement matches the bundled CUDA libraries. `NCCL_VERSION` overrides it.
+- `package.sh` runs `scripts/build/check-nccl-bundle.sh`: it fails the build when an ELF needs `libnccl.so.2` that `lib/` lacks, or when the builder has NCCL but `libggml-cuda.so` does not link it. It also copies the NCCL license notice to `licenses/`.
+- A missing `libnccl.so.2` at run time would make ggml skip `libggml-cuda.so` (GPU silently lost), which is why the library is bundled and checked rather than left to the host.
 
 ## Architecture
 

@@ -37,7 +37,7 @@ func (s p2pService) Status(ctx context.Context) (p2papi.Status, error) {
 	s.n.mu.Unlock()
 	st := p2papi.Status{
 		Mode: string(mode), Enabled: mode != config.P2PModeOff, Error: lastErr,
-		Addrs: []string{}, Reservations: []string{}, Reachability: "unknown",
+		Addrs: []string{}, Reservations: []string{}, HintRelays: []string{}, Reachability: "unknown",
 	}
 	if rt == nil {
 		return st, nil
@@ -56,6 +56,9 @@ func (s p2pService) Status(ctx context.Context) (p2papi.Status, error) {
 			reserved[r] = true
 			st.Reservations = append(st.Reservations, r)
 		}
+	}
+	for _, h := range rt.publicReservations(0) {
+		st.HintRelays = append(st.HintRelays, h.ID.String())
 	}
 	switch rt.host.Reachability() {
 	case p2pnet.ReachabilityPublic:
@@ -141,6 +144,7 @@ func (s p2pService) MintInvite(ctx context.Context, by string, req p2papi.MintRe
 		Scope:          p2ppair.Scope{Models: req.Models, AllModels: req.AllModels, Features: req.Features, Labels: req.Labels},
 		AllowOpenRelay: req.AllowOpenRelay,
 		OmitLANAddrs:   req.OmitLANAddrs,
+		OmitRelayHints: req.OmitRelayHints,
 	}
 	switch req.Relays.Mode {
 	case "", "auto":
@@ -159,6 +163,7 @@ func (s p2pService) MintInvite(ctx context.Context, by string, req p2papi.MintRe
 		ID: m.Invite.ID, Link: m.Link.String(), Kind: string(m.Invite.Kind), ExpiresAt: m.Invite.ExpiresAt,
 		QR:       m.Invite.Kind == p2ppair.KindDevice || m.Invite.Kind == p2ppair.KindRemote,
 		Relay:    p2papi.RelayPass{ID: m.Pass.RelayID, Label: m.Pass.Label, Pass: m.Pass.Registered, Open: m.Pass.Open, Reason: m.Pass.Reason},
+		Hints:    len(m.Link.Hints),
 		Warnings: []string{},
 	}
 	for _, w := range m.Warnings {
@@ -466,6 +471,46 @@ func (s p2pService) Redeem(ctx context.Context, from string, req p2papi.RedeemRe
 		out.ClientKey = &p2papi.ClientKey{ID: res.ClientKey.ID, Secret: res.ClientKey.Secret}
 	}
 	return out, nil
+}
+
+// Routes answers a paired device with the current routes to this server.
+// httpHandler already refused a peer that is not paired; the check here
+// keeps the route safe if it is ever served from somewhere else.
+func (s p2pService) Routes(ctx context.Context, from string) (p2papi.Routes, error) {
+	rt, err := s.share()
+	if err != nil {
+		return p2papi.Routes{}, err
+	}
+	p, err := p2pnet.DecodePeerID(from)
+	if err != nil {
+		return p2papi.Routes{}, fmt.Errorf("%w: unknown peer", p2papi.ErrInvalid)
+	}
+	if !rt.paired(p) {
+		return p2papi.Routes{}, fmt.Errorf("%w: this peer is not paired", p2papi.ErrForbidden)
+	}
+	r, err := rt.pair.Routes(ctx, p)
+	if err != nil {
+		return p2papi.Routes{}, err
+	}
+	out := p2papi.Routes{Server: rt.host.ID().String(), Addrs: []string{}, Relays: []string{}, Hints: []string{}}
+	for _, a := range r.Addrs {
+		out.Addrs = append(out.Addrs, a.String())
+	}
+	out.Relays = append(out.Relays, p2pAddrs(r.Relays)...)
+	out.Hints = append(out.Hints, p2pAddrs(r.Hints)...)
+	return out, nil
+}
+
+// p2pAddrs writes each address of each relay with its /p2p/ part, as a link
+// does.
+func p2pAddrs(infos []p2pnet.AddrInfo) []string {
+	var out []string
+	for _, ai := range infos {
+		for _, a := range ai.Addrs {
+			out = append(out, a.String()+"/p2p/"+ai.ID.String())
+		}
+	}
+	return out
 }
 
 // sourceOf is the network source of a peer for the per-source limit of wrong

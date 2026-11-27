@@ -39,7 +39,7 @@ setting `p2p_mode`, or with `--p2p-mode` (environment variable
 | Mode | In the interface | What the server does |
 |---|---|---|
 | `off` | Off | Nothing. This is the default. |
-| `connect` | Connect only | It connects out to remotes over P2P and accepts nobody. It has no listener, no invites and no devices. It needs no authentication. |
+| `connect` | Connect only | It connects out to remotes over P2P and accepts nobody. It listens on random ports only so that a hole punch can reach it, and it drops every machine that connects. It runs no local network discovery and holds no relay reservation. It has no invites and no devices. It needs no authentication. |
 | `share` | Connect and share | It also accepts paired devices: it listens, mints invites, and has the devices and relays pages. |
 
 Mode `share` needs [authentication]({{% relref "/administration/authentication" %}}).
@@ -103,14 +103,40 @@ The dialog shows what the link carries: the peer ID of your server, the relay
 it names, and whether a relay pass was registered on that relay. It also warns
 when the invite can pair only over a direct connection:
 
-- **No relay.** The server has no relay. A device behind a strict NAT cannot
-  connect. Add a relay, or run one.
+- **No relay.** The server has no relay and knows no public relay for hole
+  punching. A device behind a strict NAT cannot connect. Add a relay, or run
+  one.
+- **Hole punching only.** The server has no relay of its own, but the link names
+  public relays for hole punching. Devices can connect by hole punching. About
+  3 in 10 networks block it. Add a relay, or run one, so that every device can
+  connect.
 - **No relay pass.** The relay did not answer when the invite was made, so no
   pass is registered on it. Make the invite again when the relay is back.
 - **Open relay.** The link names a relay that anyone can use. It may limit the
   speed of each connection.
 
+When the server has no public address, the dialog also says so, and what that
+means for this invite: with public relays in the link, a device outside your
+network connects by hole punching; without them, only a device on the same
+network can pair until the server finds a public relay or you add one.
+
 The link is shown once. The list of pending invites does not show it again.
+
+**Public relays in the link.** A server behind a NAT holds reservations on
+public relays that it finds through the public DHT. The link names up to two
+of them (the dialog shows how many under **Hole punching**). A device uses such
+a relay only to reach the server and set up a hole punch. A public relay never
+carries your data and never gets the relay pass. Once a link names public
+relays for a server, the device sends data to that server only directly or
+through the relays that its own links name as relays. This holds also for the
+other public relays of the server that the device learns while connected. Your own relays from the
+settings are never named this way: they go in the link as relays, with the
+pass. The link names public relays also with `"relays": "none"`. Pass
+`"omit_relay_hints": true` to `POST /api/p2p/invites` to leave them out, for
+example for a shorter QR code. With `p2p_public_dht` off the server finds no
+public relay, and the link names none. A public relay learns nothing more than
+that your server uses it; it does not see the address of your server in the
+link.
 
 **Addresses in the link.** The link carries up to four direct addresses of the
 server: public ones first, then the private addresses of its local networks
@@ -225,33 +251,33 @@ runtime settings: the names below are the keys of `/api/settings` and of
 | Setting | Default | Meaning |
 |---|---|---|
 | `p2p_mode` | `off` | `off`, `connect` or `share`. See [Turn on P2P](#turn-on-p2p). |
-| `p2p_public_dht` | on | Finds public relays for hole punching through the public DHT. The DHT uses about 0.5 to 0.9 MB per minute. |
+| `p2p_public_dht` | on | Finds public relays for hole punching through the public DHT. Invite links name up to two of them, so that a device can reach a server behind a NAT. Off, links name none. The DHT uses about 0.5 to 0.9 MB per minute. |
 | `p2p_bootstrap_peers` | empty | Your own list of bootstrap peers, addresses that end in `/p2p/<peer ID>`. Empty uses the public bootstrap peers while the public DHT is on. |
 | `p2p_relays` | empty | Your own relays: a list of `{id, addr, label}`, where `addr` ends in `/p2p/<relay peer ID>`. Manage them on the **Relays** page. |
 | `p2p_relay_paired` | on | "Via your server": this server relays for its paired devices. Mode `share` only. |
 | `p2p_relay_mode` | `auto` | When this server relays for its devices: `auto` while it is reachable from the internet, `on` always, `off` never. |
 | `p2p_relay_rate_limit` | 0 | Bandwidth limit of each relayed connection through this server, in bytes per second. 0 is no limit. |
-| `p2p_mdns` | on | Finds machines on the local network. |
+| `p2p_mdns` | on | Finds machines on the local network. Mode `connect` never runs it. |
 
 Command-line flags, read at start:
 
 | Flag | Environment variable | Meaning |
 |---|---|---|
 | `--p2p-mode` | `LOCALAI_P2P_MODE` | The mode at start. The setting `p2p_mode` wins when the flag keeps its default. |
-| `--p2p-listen` | `LOCALAI_P2P_LISTEN_MADDRS` | Addresses to listen on in mode `share`. The default is TCP and QUIC on every interface, on random ports. |
+| `--p2p-listen` | `LOCALAI_P2P_LISTEN_MADDRS` | Addresses to listen on in mode `share`. The default is TCP and QUIC on every interface, on random ports. Mode `connect`, `local-ai p2p pair` and the Android app always use the default. |
 | `--p2p-bootstrap` | `LOCALAI_P2P_BOOTSTRAP_PEERS_MADDRS` | Bootstrap peers at start (setting `p2p_bootstrap_peers`). |
 | `--p2p-identity` | `LOCALAI_P2P_IDENTITY` | The identity key file. The default is `p2p/identity.key` under the data path. |
 
 ## HTTP API
 
-All routes but redeem are for administrators. The routes of invites, devices and
+All routes but redeem and routes are for administrators. The routes of invites, devices and
 relays need mode `share`. In another mode they answer 409 with a message that
 names the mode.
 
 | Route | What it does |
 |---|---|
-| `GET /api/p2p/status` | Mode, peer ID, addresses, reachability, relay reservations, whether the server relays for its devices, and the number of pending invites and devices. Works in every mode. |
-| `POST /api/p2p/invites` | Creates an invite: `{kind, label, ttl_seconds, models, all_models, relays, allow_open_relay, omit_lan_addrs}`. `kind` is `device`, `remote`, `worker` or `split`. `models` limits the key of a remote. `all_models: true` grants every model a client key may use, explicitly; it is refused (`400`) together with a non-empty `models`. With neither, the key may use every model a client key may use. A model that does not exist or has tools attached gets `400`. A remote invite made without a user account (the API key of `LOCALAI_API_KEY`) gets `409` with error type `needs_account`. `relays` is `"auto"`, `"none"` or a list of relay IDs. `omit_lan_addrs: true` keeps the private addresses of this server out of the link (see above). The answer has the link (shown once), whether a relay pass was registered, and warnings such as `no_relay` or `relay_unreachable`. |
+| `GET /api/p2p/status` | Mode, peer ID, addresses, reachability, relay reservations (`reservations`; `hint_relays` lists the ones on public relays, which invites name for hole punching), whether the server relays for its devices, and the number of pending invites and devices. Works in every mode. |
+| `POST /api/p2p/invites` | Creates an invite: `{kind, label, ttl_seconds, models, all_models, relays, allow_open_relay, omit_lan_addrs, omit_relay_hints}`. `kind` is `device`, `remote`, `worker` or `split`. `models` limits the key of a remote. `all_models: true` grants every model a client key may use, explicitly; it is refused (`400`) together with a non-empty `models`. With neither, the key may use every model a client key may use. A model that does not exist or has tools attached gets `400`. A remote invite made without a user account (the API key of `LOCALAI_API_KEY`) gets `409` with error type `needs_account`. `relays` is `"auto"`, `"none"` or a list of relay IDs. `omit_lan_addrs: true` keeps the private addresses of this server out of the link (see above). `omit_relay_hints: true` keeps the public relays for hole punching out of the link (see above). The answer has the link (shown once), whether a relay pass was registered, `hints` (how many public relays the link names), and the warnings: `no_relay`, `punch_only`, `relay_unreachable`, `open_relay` and `no_public_addr`. |
 | `GET /api/p2p/invites` | The invites and their state: `pending`, `used`, `expired` or `canceled`, and `relay_pass`, the relay that holds the pass. A used invite also has `device_peer_id` and `phrase`, the confirmation phrase the device was shown. A remote invite has `all_models` or `models`, what it grants. |
 | `DELETE /api/p2p/invites/{id}` | Cancels a pending invite and its relay pass. |
 | `GET /api/p2p/devices` | The devices, with the path of each one: `direct`, `hole_punched` or `relayed`, and the relay limits. A remote has `all_models` or `models`, what its key may use. |
@@ -265,6 +291,7 @@ names the mode.
 | `GET`, `PUT /api/p2p/relays/{id}/limits` | Reads the limits of a relay (`circuit_bytes`, `circuit_seconds`, `rate_bps`; 0 is no limit) and whether this server may change them, or changes them: a field left out stays. A new data or time limit restarts the circuit service of the relay (`restarted` is `true`). `409` when this server is not an admin of the relay or the relay is open. |
 | `POST /api/p2p/identity/regenerate` | Makes a new identity. The body must be `{"confirm": true}`. Every device must pair again. |
 | `POST /api/p2p/redeem` | Redeems an invite: `{v: 1, code, name, platform}`. Served **only over P2P**; the normal HTTP listener answers 404. |
+| `GET /api/p2p/routes` | The current routes to this server, for a paired device: `{server, addrs, relays, hints}`. Served **only over P2P** and only to a paired device; the normal HTTP listener answers 404. |
 
 The redeem route takes the peer ID of the caller from the P2P connection. A
 wrong, used, canceled or expired code all get the same answer, 410, so the route
@@ -273,6 +300,23 @@ or 60 from all peers in a minute, it answers 429.
 
 While an invite is pending, a machine that is not paired may connect, but it may
 call only the redeem route. Every other request gets 403.
+
+The routes route has the lists of an invite link minted now with `"relays":
+"auto"`, without the code and the pass: the direct addresses (public ones, then
+local network ones), every gated relay of this server, also when the invite of
+the device named fewer or none, and up to two public relays for hole punching
+(`hints`). The local network addresses are left out when the invite of the
+device was created with `"omit_lan_addrs": true`. A paired device asks
+for them while it is connected, so it still finds this server after a relay
+reservation moves or an address changes. The Android app and the desktop
+launcher (through `local-ai p2p forward`) ask when a connection opens and every
+10 minutes after, and keep the new lists for this server. A peer that is not
+paired gets 403.
+
+A device that was away too long can have routes that are all out of date. Send
+it a new invite: the app sees that it already has this server, dials the routes
+of the invite and does not redeem the code. It saves new routes only when this
+server gives them over that connection. Then cancel that invite.
 
 The LocalAI Assistant has the tools `get_p2p_status`, `list_p2p_devices`,
 `list_p2p_invites`, `list_p2p_relays`, `get_p2p_relay_limits`,

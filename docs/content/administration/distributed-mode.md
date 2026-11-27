@@ -30,9 +30,11 @@ The SmartRouter uses **idle-first** scheduling with **preemptive eviction**:
 1. If the model is already loaded on a node, use it (per-model gRPC address).
 2. Drop any node without room to **store** the model on its models filesystem (see [Disk headroom](#disk-headroom)).
 3. If no node has the model, prefer nodes with enough free VRAM.
-4. Fall back to idle nodes (zero models), then least-loaded nodes.
-5. If no node has capacity, **evict the least-recently-used model with zero in-flight requests** to free a node.
+4. When the model has a size estimate and no node has that much free VRAM, **evict idle models on the one node where that makes room** (fewest evictions first). The models that eviction protects (in-flight requests, `min_replicas` floors, pinned models and failover targets) are never evicted for it. Nodes that report no GPU memory at all (CPU-only workers) stay eligible, since their fit cannot be judged from VRAM. When nothing can make room, the request fails with `503`, a `Retry-After` header and `no node has enough free memory for model ...`. The model is never placed on a GPU node that is known to lack the room. The registry does not know the memory of each replica, so the plan charges each loaded replica an equal share of the node's used VRAM; the worker's next heartbeat reports the real figure.
+5. A model with no size estimate falls back to idle nodes (zero models), then least-loaded nodes, then, if no node has capacity, **evicts the least-recently-used model with zero in-flight requests** to free a node.
 6. If all models are busy, wait (with a timeout) for a model to become idle, then evict.
+
+The scheduler only plans an eviction while it chooses the node. The eviction runs after the frontend has claimed the load of the model on that node, and only if the model is still not loaded and the node still needs the room. A frontend that loses the claim to another frontend, or finds the model ready on another node, evicts nothing.
 7. When two nodes fit equally well, the **carrier weight** breaks the tie (see [Carrier weights](#carrier-weights)). A node that a frontend reaches only over a data-limited public relay is a last resort.
 8. Send the `backend.install` request, with the backend name and the model ID, to the worker. The worker starts a new gRPC process on a dynamic port.
 9. The SmartRouter calls gRPC `LoadModel` on the model-specific port and records the result in the database.
@@ -136,6 +138,7 @@ The frontend is a standard LocalAI instance with distributed mode enabled. These
 | `--backend-install-timeout` | `LOCALAI_NATS_BACKEND_INSTALL_TIMEOUT` | `15m` | How long the frontend waits for a worker to acknowledge a backend install before considering the request stalled. It applies to every route. Raise it when workers pull large backend images over slow links. If a worker takes longer than this, the operation shows as "still installing in background" in the admin UI and clears once the worker finishes. |
 | `--backend-upgrade-timeout` | `LOCALAI_NATS_BACKEND_UPGRADE_TIMEOUT` | `15m` | Same as the install timeout, applied to backend upgrades (force-reinstall). |
 | `--model-load-timeout` | `LOCALAI_NATS_MODEL_LOAD_TIMEOUT` | *(derived from checkpoint size)* | Pins the deadline for the `LoadModel` gRPC call the frontend issues to a worker. Leave it unset: by default the deadline is **derived from the checkpoint's on-disk size** (see below), which is what the worker actually spends its load time reading. Set it only to pin a specific budget: the value is then used verbatim, including when it is *shorter* than the derived one, so an operator who wants fast failure gets it. |
+| *(env only)* | `LOCALAI_MODEL_LOAD_STALL` | `5m` | How long a running cold load may make no progress (no new phase, file or bytes) before a request starts a load of the same model on another node that matches the model's rule, instead of waiting for it. Set to `0` to always wait for the running load. See [Requests for a model that is still loading](#requests-for-a-model-that-is-still-loading). |
 | *(env only)* | `LOCALAI_MODEL_LOAD_WAIT` | `60s` | How long an inference request waits for a model that is still cold-loading onto a worker before it is answered with `503`, a `Retry-After` header and live staging progress. The request is served the moment the model becomes ready, so a model already most of the way staged needs no client retry. Set to `0` to wait as long as the load takes: only safe when no ingress or load balancer with an idle timeout sits in front. See [Requests for a model that is still loading](#requests-for-a-model-that-is-still-loading). |
 | `--node-heartbeat-checkpoint` | `LOCALAI_NODE_HEARTBEAT_CHECKPOINT` | `60s` | Minimum gap between **durable** heartbeat writes for a worker node. A beat that only carries a fresher timestamp is kept in memory until this interval elapses instead of being written to PostgreSQL; every reported field is compared against the value last written rather than merely tested for presence, so a node's first beat, a changed total VRAM / total disk / GPU vendor, and a free VRAM / RAM / disk reading that has moved more than 256 MiB from the written value all still write immediately, and a node that is not active is never suppressed. Set it below the worker's `--heartbeat-interval` to restore a write per beat. See [Heartbeat writes and stale-node detection](#heartbeat-writes-and-stale-node-detection). |
 | `--stale-node-threshold` | `LOCALAI_STALE_NODE_THRESHOLD` | `5m` | How long a node may go without a **durable** heartbeat before the health monitor marks it `offline`. Because `--node-heartbeat-checkpoint` holds back a beat that only carries a fresher timestamp, this has to stay comfortably wider than that interval: raising the checkpoint without raising this marks healthy, beating nodes offline. Neither the per-model gRPC health check nor request-time failure reads `last_heartbeat`, so neither is affected by this knob. See [Heartbeat writes and stale-node detection](#heartbeat-writes-and-stale-node-detection). |
@@ -197,9 +200,11 @@ An absolute cap of 24h ends the hold even if progress keeps arriving, so a degen
 
 A cold load in distributed mode is a long-running background job: install the backend, stage multi-GB model files to the worker, then load the checkpoint. Staging a 35.7 GB GGUF onto a fresh worker takes roughly twenty minutes on a fast LAN, far longer than any HTTP request can be held open.
 
-So the load does **not** run on the request. The first request for an unloaded model claims a durable **model load job** (that claim takes milliseconds and is the only part that holds the per-model advisory lock) and the job then runs in the background on the frontend replica that claimed it. Every other request for the same model, on any replica, attaches to that job as a waiter:
+So the load does **not** run on the request. The first request for an unloaded model chooses a node, then claims a durable **model load job** for the model on that node (that claim takes milliseconds and is the only part that holds the job's advisory lock), and the job then runs in the background on the frontend replica that claimed it. Every other request for the same model, on any replica, attaches to that job as a waiter:
 
 - It is **served the moment the model is ready**, with no client-side retry. A model already 90% staged usually needs no second request.
+- Load jobs are kept **per model and node**. A slow load on one node never blocks a load of the same model on another node: the replica reconciler skips the nodes that already run or hold a load of the model, chooses a different node for each load it needs, one after the other, and then runs the loads in parallel, up to what `min_replicas` needs, and counts the loads in progress toward the floor. A request waits on the load that is furthest along on a node that matches the model's rule. It starts a load on another matching node only when there is no such load, or when that load made no progress (no new phase, file or bytes) for `LOCALAI_MODEL_LOAD_STALL` (default `5m`). A checkpoint load reports no progress while the backend reads its weights, so a load that stays in `loading` longer than that counts as stalled. When no other node can take the model, the request keeps waiting on the stalled load.
+- It is also served by **any ready replica** of the model on a node that matches the model's rule, checked on every poll (every 2 seconds). When another node finishes first (for example a replica the reconciler loaded), the request is served from it and stops waiting; the job it waited on keeps running.
 - It never starts a duplicate load and never blocks on the database lock. (Before this split, concurrent requests blocked on `pg_advisory_lock` for the whole load and were killed by the PostgreSQL role's `statement_timeout` (`SQLSTATE 57014`) so from the operator's seat the model simply never loaded.)
 - If the load fails, the waiter gets the *real* cause (`worker out of disk`), not an anonymous timeout.
 - If the client disconnects, the load keeps going. It belongs to the job record, not to the request.
@@ -232,9 +237,11 @@ When the wait budget (`LOCALAI_MODEL_LOAD_WAIT`, default `60s`) runs out, the re
 }
 ```
 
-The `error` envelope keeps OpenAI clients working unchanged; `loading` is additive, so a client that understands it renders progress instead of an error. `eta_seconds` is derived from the job's own observed transfer rate and is **omitted rather than guessed** until enough bytes have moved for that rate to mean anything, a confidently wrong ETA on a twenty-minute wait is worse than none. `state` is one of `pending` (choosing a node), `installing`, `staging` (transferring files) or `loading` (the worker is reading the checkpoint).
+The `error` envelope keeps OpenAI clients working unchanged; `loading` is additive, so a client that understands it renders progress instead of an error. `eta_seconds` is derived from the job's own observed transfer rate and is **omitted rather than guessed** until enough bytes have moved for that rate to mean anything, a confidently wrong ETA on a twenty-minute wait is worse than none. `state` is one of `pending` (choosing a node), `installing`, `staging` (transferring files) or `loading` (the worker is reading the checkpoint). When the model loads on several nodes at once, the body, `load-status` and the operations list of the UI report the load that is furthest along: a running load before a failed one, then the later phase, then the higher progress.
 
 The chat UI renders this state inline and retries automatically once the model reports ready. Poll `GET /api/models/{id}/load-status` for the same `loading` object at any time.
+
+An agent chat turn (the chats and agents of the web UI, triggers, jobs and connectors) waits for the load as well. Each `503` with `model_loading`, and each `503` or `429` with a `Retry-After` header, makes the turn wait for the `Retry-After` time (at least 1 second, at most 60 seconds, 5 seconds when the header is absent) and send the request again. These answers do not count as model failures. A spent quota (`429` with `quota_exceeded`) and a model held after a failed load (`503` with `model_loading` and a `loading.state` of `failed`) still end the turn at once, with the cause of the failure. The turn waits at most `LOCALAI_CHATS_MODEL_LOAD_WAIT` in total (default `15m`). After that it ends with the reason "the model is still loading" when the last answer was a load in progress, and you can try again later. When the last answer was another `503` or `429` (no node with room for the model, a model upgrade, a model at capacity), the turn ends with the message of that answer instead. Other `5xx` answers still count as failures, and four in a row end the turn.
 
 {{% callout style="note" %}}
 A frontend replica that dies mid-load does not wedge the model: the job row carries a lease, and a job whose lease ran out is failed and then released. The lease is renewed on a timer, not on byte progress, because a checkpoint load legitimately transfers zero bytes for many minutes.
@@ -259,7 +266,7 @@ When a load fails after remote work may have started (a timeout, a cancel, a los
 | Stop window | 150 s | How long a failed load holds the model if the worker never confirms |
 | Report window | 15 s | How long a failure with confirmed-ended work is kept |
 
-A model held by a failed job answers `503` with `Retry-After` set to the seconds until the hold ends, and the real cause in the body.
+A failed job holds its node, not the whole model. A request for a model whose only matching nodes are held answers `503` with `Retry-After` set to the seconds until the hold ends, and the real cause in the body; a matching node without a hold can take a new load at once.
 
 #### Cancelling a load
 
@@ -271,11 +278,11 @@ A model held by a failed job answers `503` with `Retry-After` set to the seconds
 
 | Status | Meaning |
 |--------|---------|
-| `200` | `state: stopped` (the worker confirmed) or `state: gone` (no such load any more) |
+| `200` | `state: stopped` (the worker confirmed) or `state: gone` (no such load any more, even when another load of the model runs, for example on another node) |
 | `202` | `state: stopping`. The cancel is recorded and the stop is pending. The model is released after `retry_after` seconds regardless. |
 | `400` | The body is not `{"job_id": "..."}` |
 | `404` | Unknown model, or the server is not distributed |
-| `409` | A different attempt is current. The body carries its `current_job_id`. |
+| `409` | A different attempt replaced the one named on its node while the cancel ran. The body carries its `current_job_id`. |
 
 The call is idempotent. A repeat retries the stop and never extends the hold. A load that has not been placed on a node yet can be cancelled too. Unloading a model on a node, draining a node, and removing a node all cancel the loads placed there through the same stop path, and an unload still unloads the loaded replicas. The replica rows of a cancelled attempt are removed as soon as the worker confirms the stop. The `cancel_model_load` tool of the assistant calls the same service.
 
@@ -283,7 +290,7 @@ The call is idempotent. A repeat retries the stop and never extends the hold. A 
 
 #### Rolling upgrades
 
-Upgrade the frontends first. A worker that predates operations ignores the new request fields and does not report `reports_operations`. The frontend then treats the node as legacy: it cannot confirm a stop, so a failed load holds the model for the 45 minute load deadline, as it did before leases existed, and never longer. For such a node the stop, including a cancel, is sent by exact process address, never by model name. If the address is not known, no stop is claimed, and the model is held for the 45 minutes. A new worker that gets an install from an older frontend tracks it as an anonymous operation: it kills it at its deadline only, never for missing renewals.
+Upgrade the frontends first. The first frontend of this version that starts moves the key of the `model_load_jobs` table from the model alone to the model and the node, keeping the rows. An older frontend that still runs during the upgrade claims a model without naming a node, so it does not see the loads of a newer frontend on a node, and the two may load the model on the same node once; finish the frontend upgrade before relying on per-node loads. A worker that predates operations ignores the new request fields and does not report `reports_operations`. The frontend then treats the node as legacy: it cannot confirm a stop, so a failed load holds the model for the 45 minute load deadline, as it did before leases existed, and never longer. For such a node the stop, including a cancel, is sent by exact process address, never by model name. If the address is not known, no stop is claimed, and the model is held for the 45 minutes. A new worker that gets an install from an older frontend tracks it as an anonymous operation: it kills it at its deadline only, never for missing renewals.
 
 **Backend upgrades need workers that serve `backend.upgrade`.** A frontend never falls back to a forced `backend.install` for a worker that does not serve the upgrade subject. Such a worker fails the upgrade with an error that says the worker is too old. The node stays healthy, and a queued upgrade for it waits, without counting a failed attempt, and is tried again every 15 minutes. This is a hard break for old workers: upgrade the workers with the frontend.
 
@@ -1214,14 +1221,19 @@ The routes of an agent worker follow the same flags as a backend worker (`--rout
 
 The agent worker does not run chat turns. To run the turns of triggers, connectors and [agent jobs]({{% relref "/features/chats-and-agents/agent-jobs" %}}) away from the frontends, use [chat workers](#chat-workers). The options `LOCALAI_AGENT_SUBJECT`, `LOCALAI_AGENT_QUEUE`, `LOCALAI_MCP_CI_JOB_TIMEOUT`, `LOCALAI_API_URL` and `LOCALAI_API_TOKEN` are still accepted by `local-ai agent-worker` and ignored. `LOCALAI_MCP_CI_JOB_TIMEOUT` is live on the server command (`local-ai run`, also used by frontends and chat workers) and is ignored only on `local-ai agent-worker`. `LOCALAI_AGENT_JOB_RETENTION_DAYS` is read by `local-ai run`.
 
-In the docker-compose setup, the agent worker mounts the Docker socket so it can run MCP stdio servers (e.g., `docker run` commands):
+In `docker-compose.distributed.yaml`, the agent worker mounts the Docker socket so it can run MCP stdio servers (e.g., `docker run` commands). It keeps its own credential in `/data`, so mount a volume there too:
 
 ```yaml
 agent-worker-1:
   command: agent-worker
   volumes:
     - /var/run/docker.sock:/var/run/docker.sock
+    - agent_worker_1_data:/data
 ```
+
+The container does not run LocalAI as root. Its entrypoint adds the group that owns `/var/run/docker.sock` to the user of LocalAI, so the agent worker can use the socket. Access to the Docker socket is equal to root access on the host. When root owns the socket with group `root`, as on Docker Desktop, the user cannot join that group: set `LOCALAI_RUN_AS_ROOT=true` there. See [Container user and permissions]({{% relref "/start/install/containers#container-user-and-permissions" %}}).
+
+Backend workers also install backends. Mount a volume on `/backends` of each worker, so that a recreated container does not download them again.
 
 ## Chat Workers
 
@@ -1470,6 +1482,20 @@ curl -X POST http://frontend:8080/api/nodes/scheduling \
 
 Without a node selector, models can schedule on any healthy node (default behavior).
 
+Placement is strict. A load, from a request or from the replica reconciler, only
+goes to a node that matches the rule that governs the model:
+
+- When no matching node is healthy, the request fails with `503` and a
+  `Retry-After` header. It never falls back to a node the selector excludes;
+  use [failover chains]({{% relref "/models/model-failover" %}}) to serve the model elsewhere.
+- When the rule cannot be read (for example during a database timeout), the
+  request fails with the same retryable `503`. It is not treated as "no rule".
+- A selector that is not valid JSON blocks placement instead of matching every
+  node.
+
+Every cold-load placement logs one `Placed cold load` line with the node, the
+key of the governing rule and its selector.
+
 In the WebUI, the node selector field completes what you type against the labels
 your cluster actually reports: start typing a key and the matching label keys
 appear inline, then the value field offers only the values that key takes. A key
@@ -1504,6 +1530,7 @@ The **Replica Reconciler** runs as a background process on the frontend:
 - **Scale down**: Removes idle replicas after 5 minutes of inactivity
 - **Maintain minimum**: Ensures `min_replicas` are always loaded (recovers from node failures)
 - **Eviction protection**: Models with auto-scaling enabled are never evicted below `min_replicas`
+- **Backoff**: A scale-up that fails is retried after 30 seconds, doubling up to 10 minutes. A load that another owner is running (for example one that a request started) is not a failure: the reconciler retries on its next pass. A node that becomes schedulable (it registers, is approved, recovers or is resumed after a drain) ends every backoff, so the next pass tries again at once. The backoff and the set of nodes it compares against are kept in memory by each frontend (documented per-instance state): the reconciler pass runs on one frontend at a time, and a frontend that takes over starts with no backoff, which is safe.
 - **Restart-safe**: Per-model load metadata (backend type + `ModelOptions`) is persisted in the `model_load_infos` PostgreSQL table on the first successful dispatch, so a frontend restart or rolling upgrade does not require a fresh inference request to repopulate state before the reconciler can scale up replacement replicas.
 
 All fields are optional and composable:
@@ -1596,8 +1623,8 @@ way (see [Model configs across frontends](#model-configs-across-frontends)).
 The rule's stored target therefore follows the alias only through frontends
 whose copy of the alias config matches the
 [configuration revision](#model-configuration-revisions) the cluster accepted.
-A frontend that is behind uses the stored target for the replica reconciler and
-does not write it, so two frontends cannot overwrite the rule's target against
+A frontend that is behind uses the stored target, for the replica reconciler and
+for the router's own placement, and does not write it, so two frontends cannot overwrite the rule's target against
 each other, and a frontend that is behind cannot reload the model the alias
 used to point at.
 

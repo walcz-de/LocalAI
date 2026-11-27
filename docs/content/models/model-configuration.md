@@ -276,8 +276,8 @@ These settings apply to most LLM backends (llama.cpp, vLLM, etc.):
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `mmap` | bool | `true` | Use memory mapping for model loading (faster, less RAM) |
-| `mmlock` | bool | `false` | Lock model in memory (prevents swapping). With `llama-cpp`, `mmlock` together with `mmap` (the default) maps the file and locks it (`mmap+mlock`); with `mmap: false` the model is read into locked memory instead. |
+| `mmap` | bool | unset | Use memory mapping for model loading (faster, less RAM). When unset, `llama-cpp` lets llama.cpp choose: it maps the file unless a device has no mmap support, as on integrated GPUs (APUs), where mmap loads can hang ([ggml-org/llama.cpp#19482](https://github.com/ggml-org/llama.cpp/issues/19482)). Other backends treat unset as `true`. Set `true` or `false` to force a choice. Intel SYCL backends always load without mmap |
+| `mmlock` | bool | `false` | Lock model in memory (prevents swapping). With `llama-cpp`, `mmlock` together with `mmap` (`true` or unset) maps the file and locks it (`mmap+mlock`); with `mmap: false` the model is read into locked memory instead. |
 | `low_vram` | bool | `false` | Use minimal VRAM mode |
 | `no_kv_offloading` | bool | `false` | Disable KV cache offloading |
 
@@ -285,7 +285,7 @@ These settings apply to most LLM backends (llama.cpp, vLLM, etc.):
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `tensor_split` | string | Comma-separated GPU memory allocation (e.g., `"0.8,0.2"` for 80%/20%) |
+| `tensor_split` | string | Comma-separated GPU memory allocation (e.g., `"0.8,0.2"` for 80%/20%). With the llama.cpp option `split_mode:tensor` it sets the share of each tensor that goes to each GPU; see [tensor split]({{%relref "/models/gpu-acceleration#llama-cpp-tensor-split" %}}) |
 | `main_gpu` | string | Main GPU identifier for multi-GPU setups |
 | `cuda` | bool | Explicitly enable/disable CUDA |
 
@@ -472,7 +472,7 @@ The option needs a llama.cpp build that has `--lazy-mode`.
 | `n_draft` | int32 | Maximum number of draft tokens per speculative step (default: 16) |
 | `quantization` | string | Quantization format |
 | `load_format` | string | Model load format |
-| `numa` | bool | Enable NUMA (Non-Uniform Memory Access) |
+| `numa` | bool | Enable NUMA (Non-Uniform Memory Access) support. On the llama.cpp-family backends (`llama-cpp`, `ik-llama-cpp`, `turboquant`) `true` sets the `distribute` strategy, which spreads threads evenly over the NUMA nodes, as llama.cpp's `--numa` flag does. For best results drop the page cache before the first load. |
 | `rms_norm_eps` | float32 | RMS normalization epsilon |
 | `ngqa` | int32 | Natural question generation parameter |
 | `rope_scaling` | string | RoPE scaling configuration |

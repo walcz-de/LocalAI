@@ -47,6 +47,11 @@ export interface P2PTarget {
   addrs: string[]
   relays: string[]
   /**
+   * Public relays of the link (key `h`) that only help the two peers find
+   * each other for a hole punch: they never carry data. Missing means none.
+   */
+  hints?: string[]
+  /**
    * The loopback address the forwarder listens on, `127.x.y.z`. Missing
    * means 127.0.0.1 (the desktop). The Android app gives each server its own
    * host, so two servers never share an origin, and so never a sign-in cookie.
@@ -62,7 +67,12 @@ export interface PairResult {
   peer: string
 }
 
-export type PairFail = 'pair-failed' | 'no-binary'
+/**
+ * Why a pairing failed. `needs-relay`: the device reached the server only
+ * through a public relay of the link and no hole punch opened a direct path;
+ * the code was not sent, so the invite stays pending.
+ */
+export type PairFail = 'pair-failed' | 'no-binary' | 'needs-relay'
 
 /** What a pairing gives: the result, or why it failed in the words of the pairing tool. */
 export type PairOutcome = { ok: true; result: PairResult } | { ok: false; reason: PairFail; detail: string }
@@ -88,10 +98,53 @@ export function parsePairJson(text: string): PairResult | undefined {
   }
 }
 
-/** Reads the relays and addresses of a link, as the pair command saved them. */
-export function linkRoutes(link: string): { addrs: string[]; relays: string[] } {
+/** The routes to a server over P2P: what a saved server keeps besides its peer ID and port. */
+export interface P2PRoutes {
+  addrs: string[]
+  relays: string[]
+  hints: string[]
+}
+
+/** How many of each route a saved server keeps. */
+const ROUTE_LIMITS = { addrs: 2, relays: 3, hints: 2 } as const
+
+/**
+ * Reads the relays, relay hints and addresses of a link, as the pair command
+ * saved them. Hints (key `h`, at most 2) stay apart from relays: a hint is
+ * never a carrier relay and never an open one.
+ */
+export function linkRoutes(link: string): P2PRoutes {
   const q = new URLSearchParams(link.trim().slice(INVITE_PREFIX.length))
-  return { addrs: q.getAll('a').slice(0, 2), relays: q.getAll('r').slice(0, 3) }
+  return { addrs: q.getAll('a').slice(0, ROUTE_LIMITS.addrs), relays: q.getAll('r').slice(0, ROUTE_LIMITS.relays), hints: q.getAll('h').slice(0, ROUTE_LIMITS.hints) }
+}
+
+function routeList(v: unknown, max: number): string[] | undefined {
+  if (!Array.isArray(v)) return undefined
+  return v.filter((x): x is string => typeof x === 'string' && x.startsWith('/') && x.length <= 300).slice(0, max)
+}
+
+/**
+ * Reads a `routes` state line of a forwarder:
+ * `{"state":"routes","addrs":[...],"relays":[...],"hints":[...]}`, the
+ * current routes the server gave while connected. Undefined for any other
+ * line, a line with a list missing, or a line with no route at all: an empty
+ * answer never replaces routes that work. Entries that are not multiaddrs are
+ * dropped, and each list is cut to what a saved server keeps.
+ */
+export function parseRoutesLine(line: string): P2PRoutes | undefined {
+  let j: { state?: unknown; addrs?: unknown; relays?: unknown; hints?: unknown }
+  try {
+    j = JSON.parse(line) as typeof j
+  } catch {
+    return undefined
+  }
+  if (typeof j !== 'object' || j === null || j.state !== 'routes') return undefined
+  const addrs = routeList(j.addrs, ROUTE_LIMITS.addrs)
+  const relays = routeList(j.relays, ROUTE_LIMITS.relays)
+  const hints = routeList(j.hints, ROUTE_LIMITS.hints)
+  if (!addrs || !relays || !hints) return undefined
+  if (addrs.length + relays.length + hints.length === 0) return undefined
+  return { addrs, relays, hints }
 }
 
 export type TunnelState = 'starting' | 'ready' | 'up' | 'down' | 'stopped' | 'failed'
@@ -101,6 +154,8 @@ export interface TunnelStatus {
   /** direct, hole_punched or relayed, after the first forwarded connection. */
   path?: string
   error?: string
+  /** A stable error code of a `down` line: `needs_relay`. */
+  code?: string
 }
 
 /** Delay before the n-th restart (n from 0): 1 s doubling up to 60 s. */
@@ -115,8 +170,8 @@ export function backoffMs(n: number): number {
  */
 export function parseForwardState(
   line: string,
-): { state: 'ready' } | { state: 'up'; path?: string } | { state: 'down'; error?: string } | undefined {
-  let j: { state?: unknown; path?: unknown; error?: unknown }
+): { state: 'ready' } | { state: 'up'; path?: string } | { state: 'down'; error?: string; code?: string } | undefined {
+  let j: { state?: unknown; path?: unknown; error?: unknown; code?: unknown }
   try {
     j = JSON.parse(line) as typeof j
   } catch {
@@ -130,7 +185,11 @@ export function parseForwardState(
     case 'up':
       return typeof j.path === 'string' && j.path !== '' && j.path !== 'none' ? { state: 'up', path: j.path } : { state: 'up' }
     case 'down':
-      return typeof j.error === 'string' && j.error !== '' ? { state: 'down', error: j.error } : { state: 'down' }
+      return {
+        state: 'down',
+        ...(typeof j.error === 'string' && j.error !== '' ? { error: j.error } : {}),
+        ...(typeof j.code === 'string' && j.code !== '' ? { code: j.code } : {}),
+      }
   }
   return undefined
 }
