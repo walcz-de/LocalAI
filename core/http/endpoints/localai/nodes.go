@@ -149,6 +149,14 @@ type RegisterNodeRequest struct {
 	// VRAMBudget is the worker's operator-set VRAM cap ("80%" or "12GB"). The
 	// registry resolves and enforces it against the raw reported VRAM.
 	VRAMBudget string `json:"vram_budget,omitempty"`
+	// MaxActiveBackends, MemoryReclaimerThreshold and ModelSwap are the
+	// memory settings the worker's env set. They win over the cluster
+	// settings for this node; an admin override wins over them.
+	MaxActiveBackends        *int     `json:"max_active_backends,omitempty"`
+	MemoryReclaimerThreshold *float64 `json:"memory_reclaimer_threshold,omitempty"`
+	ModelSwap                *bool    `json:"model_swap,omitempty"`
+	// UnifiedMemory says the worker's GPU shares the system memory.
+	UnifiedMemory bool `json:"unified_memory,omitempty"`
 	// Version is the LocalAI build version reported by the worker at
 	// registration. Empty for workers registered before this field existed.
 	Version string `json:"version,omitempty"`
@@ -464,10 +472,12 @@ func RegisterNodeEndpoint(registry *nodes.NodeRegistry, expectedToken string, au
 			MaxReplicasPerModel:  maxReplicasPerModel,
 			SplitServer:          req.SplitServer && nodeType != nodes.NodeTypeAgent,
 			VRAMBudget:           req.VRAMBudget,
+			UnifiedMemory:        req.UnifiedMemory,
 			Version:              req.Version,
 			Commit:               req.Commit,
 			PeerID:               peer,
 		}
+		node.SetWorkerLimits(workerLimits(req))
 
 		// A worker over P2P waits for an admin the first time it registers,
 		// whatever the setting of automatic approval says: the admin checks
@@ -873,6 +883,26 @@ func DeactivateNodeEndpoint(registry *nodes.NodeRegistry) echo.HandlerFunc {
 	}
 }
 
+// workerLimits reads the memory settings a worker reports at registration.
+// A value out of range is dropped with a warning, so a bad worker env does
+// not stop the worker from joining.
+func workerLimits(req RegisterNodeRequest) nodes.NodeLimits {
+	l := nodes.NodeLimits{
+		MaxActiveBackends:        req.MaxActiveBackends,
+		MemoryReclaimerThreshold: req.MemoryReclaimerThreshold,
+		ModelSwap:                req.ModelSwap,
+	}
+	if req.VRAMBudget != "" {
+		b := req.VRAMBudget
+		l.VRAMBudget = &b
+	}
+	if err := l.Validate(); err != nil {
+		xlog.Warn("Ignoring the memory settings a worker reported", "node", req.Name, "error", err)
+		return nodes.NodeLimits{}
+	}
+	return l
+}
+
 // HeartbeatEndpoint updates the heartbeat for a node.
 //
 // A worker reports in it the routes its operator gave it, the ones it holds,
@@ -884,14 +914,20 @@ func HeartbeatEndpoint(registry *nodes.NodeRegistry, _ ...RegisterOption) echo.H
 		id := c.Param("id")
 
 		// Parse optional VRAM update from body
-		var update nodes.HeartbeatUpdate
+		var update struct {
+			nodes.HeartbeatUpdate
+			// WantLimits asks for the node's effective memory limits in the
+			// reply. Only a worker that acts on them asks, so a beat of
+			// another worker costs no extra read.
+			WantLimits bool `json:"want_limits,omitempty"`
+		}
 		_ = c.Bind(&update) // best-effort — empty body is fine
 
 		var updatePtr *nodes.HeartbeatUpdate
 		if update.AvailableVRAM != nil || update.TotalVRAM != nil || update.AvailableRAM != nil ||
 			update.AvailableDisk != nil || update.TotalDisk != nil || update.GPUVendor != "" ||
 			update.CPUUsagePercent != nil || update.CPULoad1 != nil {
-			updatePtr = &update
+			updatePtr = &update.HeartbeatUpdate
 		}
 
 		ctx := c.Request().Context()
@@ -909,7 +945,13 @@ func HeartbeatEndpoint(registry *nodes.NodeRegistry, _ ...RegisterOption) echo.H
 				xlog.Warn("Failed to store the route report of a node", "id", id, "error", err)
 			}
 		}
-		return c.JSON(http.StatusOK, map[string]any{"message": "heartbeat received"})
+		reply := map[string]any{"message": "heartbeat received"}
+		if update.WantLimits {
+			if node, err := registry.Get(ctx, id); err == nil {
+				reply["limits"] = registry.NodePolicy(node).Limits()
+			}
+		}
+		return c.JSON(http.StatusOK, reply)
 	}
 }
 
@@ -944,27 +986,125 @@ func ListAllNodeModelsEndpoint(registry *nodes.NodeRegistry) echo.HandlerFunc {
 	}
 }
 
-// DrainNodeEndpoint sets a node to draining status (no new requests).
+// DrainNodeResponse is the state of a drain: the node takes no new replicas,
+// and its replicas leave once replaced, idle, or past the deadline.
+type DrainNodeResponse struct {
+	Message string `json:"message"`
+	// Status is the status of the node after the request: draining.
+	Status string `json:"status"`
+	// Immediate is true when the replicas were removed at once: the drain was
+	// forced, or the node was not reachable.
+	Immediate bool `json:"immediate"`
+	// DrainDeadline is when the replicas still on the node are removed even
+	// if no replacement loaded. Absent for an immediate drain.
+	DrainDeadline *time.Time `json:"drain_deadline,omitempty"`
+	// LeavingReplicas is the number of loaded replicas still on the node.
+	LeavingReplicas int `json:"leaving_replicas"`
+}
+
+// SelfDrainRequest is the optional body of a drain that a worker sends for
+// its own node when it shuts down.
+type SelfDrainRequest struct {
+	// Shutdown says that the worker shuts down.
+	Shutdown bool `json:"shutdown,omitempty"`
+	// LoadsEnded says that the worker stopped every load operation it ran
+	// and their processes exited. The frontend then releases the load jobs
+	// of the node at once instead of holding them for the stop window.
+	LoadsEnded bool `json:"loads_ended,omitempty"`
+}
+
+// DrainNodeEndpoint drains a node: nothing new is placed on it, and its loaded
+// replicas keep serving while the reconciler places replacements on other
+// nodes. A replica leaves when its replacement loaded, when it is idle and not
+// needed, or at the drain deadline. force=true removes the replicas at once.
+// A node that is unhealthy or offline is drained at once: there is nothing to
+// wait for.
+// @Summary Drain a node
+// @Tags Nodes
+// @Param id path string true "Node ID"
+// @Param force query bool false "Remove the node's replicas at once instead of waiting for replacements"
+// @Param timeout query string false "Drain deadline as a Go duration (default: the --drain-timeout setting, 10m)"
+// @Success 200 {object} DrainNodeResponse
+// @Failure 400 {object} map[string]any
+// @Failure 404 {object} map[string]any
+// @Failure 409 {object} map[string]any
+// @Router /api/nodes/{id}/drain [post]
 func DrainNodeEndpoint(registry *nodes.NodeRegistry, unloader nodes.NodeCommandSender) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		ctx := c.Request().Context()
-		id := c.Param("id")
-		cancelNodeLoads(ctx, registry, unloader, id)
-		if err := registry.MarkDraining(ctx, id); err != nil {
-			if errors.Is(err, nodes.ErrNodeNotFound) {
-				return c.JSON(http.StatusNotFound, nodeError(http.StatusNotFound, "node not found"))
-			}
-			if errors.Is(err, nodes.ErrNodeStatusConflict) {
-				return c.JSON(http.StatusConflict, nodeError(http.StatusConflict, "node must be healthy to drain"))
-			}
-			xlog.Error("Failed to drain node", "id", id, "error", err)
-			return c.JSON(http.StatusInternalServerError, nodeError(http.StatusInternalServerError, "failed to drain node"))
-		}
-		return c.JSON(http.StatusOK, map[string]string{"message": "node set to draining"})
+		return drainNode(c, registry, unloader, SelfDrainRequest{})
 	}
 }
 
-// ResumeNodeEndpoint sets a draining node back to healthy status.
+// SelfDrainNodeEndpoint is the drain a worker sends for its own node. It takes
+// an optional SelfDrainRequest body: a worker that shuts down reports that its
+// loads ended, so their jobs release in seconds.
+func SelfDrainNodeEndpoint(registry *nodes.NodeRegistry) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		var body SelfDrainRequest
+		if c.Request().ContentLength != 0 {
+			if err := c.Bind(&body); err != nil {
+				return c.JSON(http.StatusBadRequest, nodeError(http.StatusBadRequest, "invalid request body"))
+			}
+		}
+		return drainNode(c, registry, nil, body)
+	}
+}
+
+func drainNode(c echo.Context, registry *nodes.NodeRegistry, unloader nodes.NodeCommandSender, self SelfDrainRequest) error {
+	ctx := c.Request().Context()
+	id := c.Param("id")
+	timeout, err := nodes.ParseDrainTimeout(c.QueryParam("timeout"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, nodeError(http.StatusBadRequest, err.Error()))
+	}
+	opts := nodes.DrainOptions{Force: c.QueryParam("force") == "true", Timeout: timeout}
+	// Loads that run on the node are cancelled: a load must not land on a
+	// node that leaves. A replica that serves is not touched here.
+	cancelNodeLoads(ctx, registry, unloader, id)
+	if self.LoadsEnded {
+		// The worker stopped every load and saw the processes exit, which is
+		// the acknowledgement the stop window waits for.
+		if n, err := registry.ConfirmNodeLoadOps(ctx, id); err != nil {
+			xlog.Warn("Failed to release the loads of a worker that shuts down", "node", id, "error", err)
+		} else if n > 0 {
+			xlog.Info("Released the loads of a worker that shuts down", "node", id, "loads", n)
+		}
+	}
+	res, err := registry.DrainNode(ctx, id, opts)
+	if err != nil {
+		if errors.Is(err, nodes.ErrNodeNotFound) {
+			return c.JSON(http.StatusNotFound, nodeError(http.StatusNotFound, "node not found"))
+		}
+		if errors.Is(err, nodes.ErrNodeStatusConflict) {
+			return c.JSON(http.StatusConflict, nodeError(http.StatusConflict, "a pending node cannot drain"))
+		}
+		xlog.Error("Failed to drain node", "id", id, "error", err)
+		return c.JSON(http.StatusInternalServerError, nodeError(http.StatusInternalServerError, "failed to drain node"))
+	}
+	if self.Shutdown {
+		xlog.Info("Worker is shutting down; its node drains", "node", id, "immediate", res.Immediate)
+	}
+	out := DrainNodeResponse{
+		Message:       "node set to draining",
+		Status:        nodes.StatusDraining,
+		Immediate:     res.Immediate,
+		DrainDeadline: res.Deadline,
+	}
+	if node, err := registry.GetWithExtras(ctx, id); err == nil {
+		out.LeavingReplicas = node.LeavingReplicas
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// ResumeNodeEndpoint sets a draining node back to healthy status and cancels
+// its drain: replicas still on it stay and count again.
+// @Summary Resume a draining node
+// @Tags Nodes
+// @Param id path string true "Node ID"
+// @Success 200 {object} map[string]string
+// @Failure 404 {object} map[string]any
+// @Failure 409 {object} map[string]any
+// @Router /api/nodes/{id}/resume [post]
 func ResumeNodeEndpoint(registry *nodes.NodeRegistry) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		ctx := c.Request().Context()
@@ -1570,6 +1710,85 @@ func ResetVRAMBudgetEndpoint(registry *nodes.NodeRegistry) echo.HandlerFunc {
 			return c.JSON(http.StatusInternalServerError, nodeError(http.StatusInternalServerError, "failed to reset vram budget"))
 		}
 		return c.JSON(http.StatusOK, map[string]bool{"reset": true})
+	}
+}
+
+// GetNodeLimitsEndpoint returns the memory limits a node runs with: each
+// value in force and where it comes from (override, worker, cluster or
+// default).
+//
+// @Summary Read a node's effective memory limits
+// @Tags Nodes
+// @Param id path string true "Node ID"
+// @Success 200 {object} nodes.EffectiveLimits
+// @Failure 404 {object} map[string]any "node not found"
+// @Router /api/nodes/{id}/limits [get]
+func GetNodeLimitsEndpoint(registry *nodes.NodeRegistry) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		node, err := registry.Get(c.Request().Context(), c.Param("id"))
+		if err != nil {
+			return c.JSON(http.StatusNotFound, nodeError(http.StatusNotFound, "node not found"))
+		}
+		return c.JSON(http.StatusOK, registry.NodePolicy(node).Limits())
+	}
+}
+
+// SetNodeLimitsEndpoint stores admin overrides of a node's memory limits.
+// Only the keys in the body change. The overrides survive worker restarts
+// and win over the worker's env and the cluster settings.
+//
+// @Summary Override a node's memory limits
+// @Description Sets max_active_backends (models kept loaded on the node, 0 = no limit), vram_budget ("80%" or "12GB"; empty clears that override), memory_reclaimer_threshold (0 to 1) and model_swap for one node. A key left out keeps its value. Returns the effective limits. Admin only.
+// @Tags Nodes
+// @Param id path string true "Node ID"
+// @Param request body nodes.NodeLimits true "overrides to set"
+// @Success 200 {object} nodes.EffectiveLimits
+// @Failure 400 {object} map[string]any "invalid value"
+// @Failure 404 {object} map[string]any "node not found"
+// @Router /api/nodes/{id}/limits [put]
+func SetNodeLimitsEndpoint(registry *nodes.NodeRegistry) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		ctx := c.Request().Context()
+		id := c.Param("id")
+		if _, err := registry.Get(ctx, id); err != nil {
+			return c.JSON(http.StatusNotFound, nodeError(http.StatusNotFound, "node not found"))
+		}
+		var req nodes.NodeLimits
+		if err := c.Bind(&req); err != nil {
+			return c.JSON(http.StatusBadRequest, nodeError(http.StatusBadRequest, "invalid request body"))
+		}
+		if err := req.Validate(); err != nil {
+			return c.JSON(http.StatusBadRequest, nodeError(http.StatusBadRequest, err.Error()))
+		}
+		if err := registry.SetNodeLimits(ctx, id, req); err != nil {
+			xlog.Error("Failed to set node limits", "node", id, "error", err)
+			return c.JSON(http.StatusInternalServerError, nodeError(http.StatusInternalServerError, "failed to set node limits"))
+		}
+		return GetNodeLimitsEndpoint(registry)(c)
+	}
+}
+
+// ResetNodeLimitsEndpoint clears every admin override of a node's memory
+// limits, so the worker's env and the cluster settings apply again.
+//
+// @Summary Clear a node's memory limit overrides
+// @Tags Nodes
+// @Param id path string true "Node ID"
+// @Success 200 {object} nodes.EffectiveLimits
+// @Failure 404 {object} map[string]any "node not found"
+// @Router /api/nodes/{id}/limits [delete]
+func ResetNodeLimitsEndpoint(registry *nodes.NodeRegistry) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		ctx := c.Request().Context()
+		id := c.Param("id")
+		if _, err := registry.Get(ctx, id); err != nil {
+			return c.JSON(http.StatusNotFound, nodeError(http.StatusNotFound, "node not found"))
+		}
+		if err := registry.ResetNodeLimits(ctx, id); err != nil {
+			xlog.Error("Failed to reset node limits", "node", id, "error", err)
+			return c.JSON(http.StatusInternalServerError, nodeError(http.StatusInternalServerError, "failed to reset node limits"))
+		}
+		return GetNodeLimitsEndpoint(registry)(c)
 	}
 }
 

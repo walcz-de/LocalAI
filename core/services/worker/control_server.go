@@ -30,6 +30,9 @@ const (
 	verbFilesTemp      controlVerb = workerctl.VerbFilesTemp
 	verbFilesListDir   controlVerb = workerctl.VerbFilesListDir
 	verbFilesRelease   controlVerb = workerctl.VerbFilesRelease
+
+	verbPromptCacheSync  controlVerb = workerctl.VerbPromptCacheSync
+	verbPromptCacheUsage controlVerb = workerctl.VerbPromptCacheUsage
 )
 
 // progressSink receives install progress while a long-running verb runs.
@@ -56,8 +59,13 @@ type progressControlHandler func(ctx context.Context, body []byte, progress prog
 // goroutines).
 // handleWithProgress delivers each request on its own goroutine, because a verb
 // that runs for minutes must not hold up the next request of the same verb.
+//
+// handleConcurrent is handle for a verb whose handler may wait (model.stop
+// waits for a process that another stop is ending): every carrier delivers
+// its requests concurrently, so one wait does not hold up the next request.
 type controlServer interface {
 	handle(verb controlVerb, h controlHandler) error
+	handleConcurrent(verb controlVerb, h controlHandler) error
 	handleWithProgress(verb controlVerb, h progressControlHandler) error
 }
 

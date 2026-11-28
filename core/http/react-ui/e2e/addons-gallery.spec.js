@@ -22,7 +22,9 @@ async function shoot(page, name) {
   await page.screenshot({ path: `${shots}/${name}.png`, fullPage: true })
 }
 
-const tab = (page, name) => page.getByRole('tab', { name })
+// The section tabs of the page. The Plugins panel has tabs of its own (one of
+// them is also called Installed), so the lookup stays in the page's tab list.
+const tab = (page, name) => page.getByRole('tablist', { name: 'Add-ons sections' }).getByRole('tab', { name })
 // The start, stop and tool controls of an add-on live in its detail pane, the state
 // chip in the header of the pane. Both the title and the body of the pane carry
 // data-app, so the pane is found by the add-on it shows, not by that attribute.
@@ -705,8 +707,8 @@ test.describe('Add-ons: access, keyboard, layout and language', () => {
     await expect(tab(page, 'Find add-ons')).toHaveAttribute('aria-selected', 'true')
     await expect(page).toHaveURL(/tab=browse/)
     await page.keyboard.press('End')
-    // Host access is the last tab for an administrator.
-    await expect(tab(page, 'Host access')).toHaveAttribute('aria-selected', 'true')
+    // Plugins is the last tab for an administrator.
+    await expect(tab(page, 'Plugins')).toHaveAttribute('aria-selected', 'true')
     await page.keyboard.press('Home')
     await expect(tab(page, 'Installed')).toHaveAttribute('aria-selected', 'true')
     // The selected tab is the only one in the tab order.

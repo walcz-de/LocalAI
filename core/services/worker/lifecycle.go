@@ -48,7 +48,8 @@ func (s *backendSupervisor) registerLifecycleVerbs(srv controlServer) error {
 			return srv.handle(verbModelUnload, unary(decodeJSON[workerctl.ModelUnloadRequest], refuseUnload, s.unloadModel))
 		},
 		func() error {
-			return srv.handle(verbModelStop, unary(decodeJSON[workerctl.ModelStopRequest], refuseModelStop, s.stopModelExactCtx))
+			// A stop may wait for a process that another stop is ending.
+			return srv.handleConcurrent(verbModelStop, unary(decodeJSON[workerctl.ModelStopRequest], refuseModelStop, s.stopModelExactCtx))
 		},
 		func() error {
 			return srv.handle(verbModelOp, unary(decodeJSON[workerctl.OperationRequest], refuseModelOp, s.serveOperations))
@@ -129,6 +130,9 @@ func (s *backendSupervisor) stopModelExactCtx(_ context.Context, req workerctl.M
 // directory.
 func (s *backendSupervisor) serveInstall(_ context.Context, req workerctl.BackendInstallRequest, progress progressSink) workerctl.BackendInstallReply {
 	xlog.Info("Received NATS backend.install event")
+	if s.shuttingDown.Load() {
+		return refuseShuttingDown()
+	}
 	release := s.lockBackend(req.Backend)
 	defer release()
 	// A model/replica process key does not include the backend name. Keep
@@ -150,9 +154,22 @@ func (s *backendSupervisor) serveInstall(_ context.Context, req workerctl.Backen
 	// The load is an operation the watchdog bounds, from the moment the request
 	// arrives: a controller that stops renewing it cannot leave a backend
 	// running for ever.
-	op := s.beginOperation(req)
+	// A shutdown that started while this request waited for its locks has
+	// already aborted the loads it knew of. beginLoad refuses, in the same
+	// step as it registers the load, so a shutdown never misses one.
+	op, ok := s.beginLoad(req)
+	if !ok {
+		return refuseShuttingDown()
+	}
+	defer s.endLoad()
 	addr, err := install(req, req.Force, downloadCb)
 	if err != nil {
+		if s.shuttingDown.Load() {
+			// The shutdown cancelled the download or refused the start of
+			// the process: say so, so the frontend skips this node.
+			xlog.Info("Install ended by the worker shutdown", "backend", req.Backend, "model", req.ModelID, "error", err)
+			return refuseShuttingDown()
+		}
 		xlog.Error("Failed to install backend via NATS", "error", err)
 		return workerctl.BackendInstallReply{Success: false, Error: err.Error()}
 	}
@@ -205,6 +222,9 @@ func (s *backendSupervisor) namesProcess(bp *backendProcess, addr string) bool {
 // fast-path on the same worker.
 func (s *backendSupervisor) serveUpgrade(_ context.Context, req workerctl.BackendUpgradeRequest, progress progressSink) workerctl.BackendUpgradeReply {
 	xlog.Info("Received NATS backend.upgrade event")
+	if s.shuttingDown.Load() {
+		return workerctl.BackendUpgradeReply{Success: false, Error: workerctl.ErrWorkerShuttingDownMsg}
+	}
 	release := s.lockBackend(req.Backend)
 	defer release()
 	downloadCb, flush := s.downloadProgress(req.OpID, req.Backend, progress)

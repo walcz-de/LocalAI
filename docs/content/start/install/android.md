@@ -80,6 +80,14 @@ These sign-in methods work:
 - API key.
 - GitHub or OIDC sign-in. The sign-in page of the identity provider opens in the app, and the app keeps the session. While you sign in, the app shows the pages of the identity provider that the server's sign-in redirects to, for at most 10 minutes. When you are back on the server, other addresses open in your browser again.
 
+### Sign in with the invite
+
+A P2P invite can also sign you in. When the server gives a sign-in invite, the server answers the pairing with a device credential. The app keeps the credential in its private storage, encrypted with a key of the Android Keystore, and never shows it to the web pages. The app then opens the server signed in as the person who made the invite: you do not type a password.
+
+When the server's sign-in page shows later, for example because the session ended, the app uses the credential again, one time. If the server refuses it, for example because the device was revoked, the app shows the sign-in page and does not try again until you open the server again. Sign in by hand then, or ask for a new invite.
+
+If you sign out in the server's page, the app stops the automatic sign-in for that server. The sign-in page shows, and the app does not use the credential, also after you close and open the app again. Sign in by hand, or open the server again from the server list: the app then signs you in with the credential again. A new pairing with the server also turns the automatic sign-in on again. When you remove a server, the app deletes its credential. A server that does not give a credential works as before: you sign in on its page.
+
 If an identity provider page opens in your browser instead, the provider moved to another address without a redirect. The sign-in does not complete in the app then: use a password or an API key on that server. Passkeys and security keys of the identity provider do not work in the app; choose another sign-in method of the provider.
 
 ## Certificates and private CAs

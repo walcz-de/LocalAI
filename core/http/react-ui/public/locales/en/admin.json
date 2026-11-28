@@ -8,6 +8,7 @@
     "subtitle": "Configure LocalAI runtime settings",
     "saved": "Settings saved successfully",
     "saveFailed": "Save failed: {{message}}",
+    "memoryConflict": "The memory settings were changed elsewhere since this page loaded them. The page now shows the values in force. Apply your change again.",
     "loadFailed": "Failed to load settings: {{message}}",
     "autoUpgradeAddons": "Update add-ons automatically",
     "sections": {
@@ -101,7 +102,8 @@
       "retry": "Retry same operation",
       "policy": "Owner policy · revision {{revision}}",
       "apply": "Apply update setting"
-    }
+    },
+    "memoryCluster": "Applies to every worker node. Set a different value for one node on the Nodes page."
   },
   "traces": {
     "title": "Traces",
@@ -208,7 +210,13 @@
     "sheet": {
       "account": "Account",
       "activity": "Activity",
-      "apiKeys": "API keys"
+      "apiKeys": "API keys",
+      "defaultOn": "On by default for users",
+      "defaultOnHint": "Saved at once. Applies to every user whose access does not set this feature.",
+      "followsDefault": "This user follows the default.",
+      "explicit": "Set for this user: a change of the default does not apply.",
+      "useDefault": "Use default",
+      "useDefaultFor": "Use the default for {{feature}}"
     },
     "empty": {
       "title": "No users yet",
@@ -237,7 +245,10 @@
       "deleted": "User deleted",
       "deleteFailed": "Failed to delete user: {{message}}",
       "passwordReset": "Password reset for {{name}}",
-      "resetFailed": "Failed to reset password: {{message}}"
+      "resetFailed": "Failed to reset password: {{message}}",
+      "defaultOn": "The feature is now on by default for users.",
+      "defaultOff": "The feature is now off by default for users.",
+      "defaultFailed": "Could not change the default: {{message}}"
     },
     "reset": {
       "title": "Reset password",

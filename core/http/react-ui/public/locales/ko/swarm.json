@@ -133,7 +133,9 @@
     "run": {}
   },
   "inspector": {
-    "peer": "피어 ID"
+    "peer": "피어 ID",
+    "leaving": "아직 남은 모델",
+    "drainDeadline": "드레인 기한"
   },
   "splitServer": {
     "label": "분할 서버",
@@ -191,5 +193,43 @@
   },
   "failover": {
     "lostConnection": "연결:"
+  },
+  "limits": {
+    "title": "제한",
+    "sub": "이 노드의 메모리 설정입니다. 여기서 설정한 값은 워커의 환경 변수와 클러스터 설정(설정, 메모리의 모델)보다 우선합니다.",
+    "maxActive": "로드 상태로 유지할 모델 수",
+    "vramBudget": "GPU 메모리 예산",
+    "vramBudgetPlaceholder": "예: 80% 또는 12GB",
+    "threshold": "메모리 임계값",
+    "thresholdOff": "꺼짐 (켜면 {{pct}}%)",
+    "swap": "메모리가 가득 차면 모델 교체",
+    "noLimit": "제한 없음",
+    "none": "없음",
+    "on": "켜짐",
+    "off": "꺼짐",
+    "edit": "편집",
+    "save": "저장",
+    "cancel": "취소",
+    "reset": "모두 초기화",
+    "saved": "{{name}}에 제한을 저장했습니다",
+    "resetDone": "{{name}}의 재정의를 지웠습니다",
+    "failed": "제한을 변경할 수 없습니다: {{error}}",
+    "loadFailed": "이 노드의 제한을 읽을 수 없습니다",
+    "source": {
+      "override": "여기서 설정",
+      "worker": "워커 환경",
+      "cluster": "클러스터",
+      "default": "기본값"
+    }
+  },
+  "detail": {
+    "vramBudgetOf": "예산, {{detected}} 감지됨",
+    "drainingLeaving": "아직 남은 모델: {{count}}개. {{time}}에 남아 있는 것은 제거됩니다.",
+    "drainingEmpty": "남은 것이 없습니다. 이제 워커를 중지해도 됩니다."
+  },
+  "leave": {
+    "reloadDrain": "이 노드가 계속 제공하는 동안 조건에 맞는 다른 정상 노드에 로드된 뒤 이 노드를 떠납니다. 규칙이 없고 유휴 상태이면(고정되지 않았고 최근에 사용되지 않음) 대신 제거됩니다. 여기서는 여유 메모리를 비교하지 않습니다.",
+    "reloadNoneDrain": "옮겨 갈 다른 정상 노드가 없어 드레인 기한까지 여기서 계속 제공한 뒤 중지됩니다. 규칙이 없고 유휴 상태이면(고정되지 않았고 최근에 사용되지 않음) 대신 제거됩니다.",
+    "blockedDrain": "드레인 기한까지 여기서 계속 제공한 뒤 중지됩니다: 규칙이 {{selector}}만 허용하며 그 레이블을 가진 다른 정상 노드가 없습니다."
   }
 }

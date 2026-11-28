@@ -5,6 +5,7 @@ import android.Manifest
 import android.content.Context
 import android.os.Build
 import android.os.SystemClock
+import android.util.Log
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.PermissionState
@@ -95,11 +96,77 @@ class P2PPlugin : Plugin() {
                 PairAnswer(ok = false, code = PAIR_FAILED, detail = e.message ?: "pairing failed")
             }
             val out = if (answer.ok) {
-                JSObject().put("ok", true).put("json", answer.json)
+                JSObject().put("ok", true).put("json", keepCredential(answer.json))
             } else {
                 JSObject().put("ok", false).put("code", answer.code).put("detail", answer.detail)
             }
             call.resolve(out)
+        }
+    }
+
+    /**
+     * Takes the device credential out of a pairing result and stores it for
+     * the server's peer ID. The web layer gets the rest. A credential that
+     * cannot be stored is dropped: the person signs in by hand, as with a
+     * server that gives none.
+     */
+    private fun keepCredential(resultJson: String): String {
+        val split = try {
+            splitCredential(resultJson)
+        } catch (_: org.json.JSONException) {
+            // Never reached (parsePairAnswer made this JSON), and the message
+            // would quote the answer: answer an empty result instead.
+            return "{}"
+        }
+        val credential = split.credential ?: return split.json
+        val store = P2PRuntime.credentials
+        if (store == null || split.peer.isEmpty()) return split.json
+        try {
+            store.save(split.peer, credential)
+        } catch (e: Exception) {
+            // The type only: the message of a Keystore error is not needed, and nothing of the credential is logged.
+            Log.w(TAG, "cannot store the device credential: ${e.javaClass.simpleName}")
+        }
+        return split.json
+    }
+
+    /** The person removed a server: its device credential goes too. */
+    @PluginMethod
+    fun forgetCredential(call: PluginCall) {
+        val peer = call.getString("peer").orEmpty()
+        background(call) {
+            P2PRuntime.credentials?.delete(peer)
+            call.resolve()
+        }
+    }
+
+    /**
+     * The person opened a server from the server list: a sign-out in its
+     * WebUI no longer stops the automatic sign-in. The client core waits for
+     * this before it opens the server. `wasSignedOut` tells it whether the
+     * flag was set.
+     */
+    @PluginMethod
+    fun allowAutoSignIn(call: PluginCall) {
+        val peer = call.getString("peer").orEmpty()
+        background(call) {
+            val was = P2PRuntime.credentials?.allowAutoSignIn(peer) == true
+            call.resolve(JSObject().put("wasSignedOut", was))
+        }
+    }
+
+    /** Deletes the device credentials of servers that are no longer saved (`peers`: the saved ones). */
+    @PluginMethod
+    fun retainCredentials(call: PluginCall) {
+        val arr = call.getArray("peers")
+        if (arr == null) {
+            call.reject("peers is required", "invalid")
+            return
+        }
+        val peers = strings(arr)
+        background(call) {
+            P2PRuntime.credentials?.retain(peers)
+            call.resolve()
         }
     }
 
@@ -207,6 +274,7 @@ class P2PPlugin : Plugin() {
 
     companion object {
         const val NOTIFICATIONS = "notifications"
+        private const val TAG = "P2P"
         private const val RESTART_WAIT_MS = 3_000L
         private const val PREFS = "p2p_plugin"
         private const val KEY_ASKED = "notifications_asked"

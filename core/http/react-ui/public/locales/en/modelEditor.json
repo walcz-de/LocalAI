@@ -41,7 +41,6 @@
     },
     "engineSettings": {
         "title": "Runtime tuning",
-        "lead": "How {{engine}} loads and runs this model. Each field is a {{binary}} flag. An empty field keeps the default.",
         "leadNoCommand": "How {{engine}} loads and runs this model. An empty field keeps the default.",
         "loading": "Loading the {{engine}} settings",
         "default": "Default",
@@ -89,8 +88,17 @@
             "options_slot_prompt_similarity": "Slot prompt similarity",
             "options_kv_unified_per_slot": "Tokens per slot",
             "options_cache_ram": "Prompt cache memory (MiB)",
+            "options_prompt_cache_disk": "Disk prompt cache",
+            "options_prompt_cache_disk_ttl_hours": "Disk cache time to live (hours)",
+            "options_prompt_cache_disk_min_tokens": "Disk cache minimum tokens",
+            "options_prompt_cache_disk_quota_mib": "Disk cache quota per user (MiB)",
+            "options_prompt_cache_disk_max_size_mib": "Disk cache size cap (MiB)",
+            "options_prompt_cache_disk_shared": "Shared disk cache",
+            "options_prompt_cache_disk_low_free_mib": "Disk cache low free space (MiB)",
+            "options_prompt_cache_disk_critical_free_mib": "Disk cache critical free space (MiB)",
             "options_mmproj_use_gpu": "Vision projector on GPU",
             "options_backend_sampling_min_slots": "GPU sampling minimum slots",
+            "options_grammar_engine": "Grammar engine",
             "options_context_shift": "Context shift",
             "options_cont_batching": "Continuous batching",
             "options_kv_unified": "Unified KV cache",
@@ -148,11 +156,13 @@
             "options_spec_ngram_map_k4v_size_m": "ngram-map-k4v proposal size",
             "options_spec_ngram_map_k4v_min_hits": "ngram-map-k4v minimum hits",
             "options_spec_lookup_cache_static": "Static n-gram cache file",
-            "options_spec_lookup_cache_dynamic": "Dynamic n-gram cache file"
+            "options_spec_lookup_cache_dynamic": "Dynamic n-gram cache file",
+            "draft_model": "Draft model file",
+            "options_spec_max_streams": "Pause drafting above N streams"
         },
         "choices": {
             "load_mode": {
-                "default": "Default (memory-mapped)",
+                "default": "Default (auto)",
                 "none": "None (read into memory)",
                 "mmap": "mmap",
                 "mlock": "mlock",
@@ -167,7 +177,7 @@
         },
         "hints": {
             "load_mode": "How the model file is read. Writes mmap, mmlock and the direct_io option.",
-            "backend_sampling": "Where tokens are sampled. A backend without GPU sampling ignores the setting."
+            "backend_sampling": "Where the next token is picked: on the CPU or on the GPU."
         },
         "errors": {
             "notInteger": "Type a whole number.",
@@ -292,30 +302,76 @@
             "title": "Quick setup",
             "custom": "Custom",
             "customText": "Set the fields below yourself.",
-            "current": "Your settings",
             "estimating": "Estimating...",
-            "noEstimate": "No estimate",
-            "same": "About the same memory",
             "more": "≈ {{size}} more memory",
             "less": "≈ {{size}} less memory",
-            "now": "Now: KV cache ≈ {{kv}} and compute buffers ≈ {{compute}} at {{context}} tokens, beside the weights.",
             "estimate": "These figures are estimates.",
             "approximate": "Rough estimates: the model layout was not read from the file.",
-            "failed": "The memory estimate is not available."
+            "failed": "The memory estimate is not available.",
+            "batch": "Batch",
+            "concurrency": "Concurrency",
+            "bestFor": "Best for: {{use}}",
+            "share": "About {{tokens}} context tokens per stream",
+            "tight": "The f16 KV cache does not fit, so this uses an 8-bit one.",
+            "unsupported": "Not offered here",
+            "needs": "Needs {{size}} of memory",
+            "noFit": "Does not fit: ≈ {{size}} of {{limit}}",
+            "shared": "The slots share one KV cache, so more streams need about the same memory: each stream gets a smaller part of the context.",
+            "compare": "Compare setups",
+            "nowLabel": "Memory now",
+            "nowShort": "KV cache ≈ {{kv}}, compute buffers ≈ {{compute}}, at {{context}} tokens",
+            "estimateShort": "Estimate",
+            "approximateShort": "Rough estimate",
+            "moreShort": "+{{size}}",
+            "lessShort": "−{{size}}"
         },
         "profiles": {
             "balanced": {
                 "name": "Balanced",
-                "text": "The defaults: LocalAI picks the batch and the slots for your GPU, with an f16 KV cache."
+                "text": "The default batch sizes: LocalAI picks them for your GPU.",
+                "line": "Batch sizes that LocalAI picks for your GPU."
             },
             "longPrompts": {
                 "name": "Long prompts",
-                "text": "Batch and micro-batch of 2048. Long prompts are read much faster; the compute buffers use more memory."
+                "text": "A batch of 2048. Long prompts are read much faster; the compute buffers use more memory.",
+                "memory": {
+                    "discrete": "The micro-batch is 1024 on a discrete GPU: its compute buffer must fit one card."
+                },
+                "line": "Reads long prompts much faster. Uses more memory."
             },
-            "concurrent": {
-                "name": "More concurrent users",
-                "text": "8-bit KV cache, paged serving and 8 slots. About twice the tokens fit in the same memory, shared by more users, at a small cost in quality.",
-                "note": "A quantized KV cache can be slower on some attention paths until llama.cpp has a fast kernel for them. Paged serving needs a backend build that supports it; other builds ignore the option."
+            "concurrencyDefault": {
+                "name": "Default",
+                "text": "LocalAI picks the slots for your GPU and the backend uses its serving defaults.",
+                "bestFor": "One person, or a few.",
+                "line": "For one person or a few. LocalAI picks the slots."
+            },
+            "streams8": {
+                "name": "8 streams",
+                "text": "8 slots with paged serving: requests share the KV cache and wait instead of failing when it is full.",
+                "bestFor": "A team chatting with one model.",
+                "short": "8",
+                "line": "For a team chatting with one model."
+            },
+            "streams16": {
+                "name": "16 streams",
+                "text": "16 slots, GPU sampling when 16 requests run, no drafting.",
+                "bestFor": "Agents and tools that send requests in parallel.",
+                "memory": {
+                    "system": "No GPU: tokens are sampled on the CPU."
+                },
+                "short": "16",
+                "line": "For agents and tools that send requests in parallel."
+            },
+            "streams32": {
+                "name": "32+ streams",
+                "text": "32 slots with GPU sampling always on and no drafting: the most tokens per second in total, each stream slower.",
+                "bestFor": "Batch jobs and many users at once.",
+                "memory": {
+                    "discrete": "8-bit KV cache: about twice the tokens fit, at a small cost in quality and speed.",
+                    "system": "Not offered without a GPU: a CPU shared by 32 streams makes each one too slow."
+                },
+                "short": "32+",
+                "line": "For batch jobs and many users. Most tokens per second in total."
             }
         },
         "choiceHints": {
@@ -323,8 +379,150 @@
                 "off": "Sample tokens on the CPU. Nothing is written to the file.",
                 "auto": "Use GPU sampling when the model runs on a GPU with several parallel requests and the request does not need grammar or logprobs.",
                 "on": "Sample tokens on the GPU. Faster with many parallel requests. Turned off automatically for requests that use a grammar, a reasoning budget or logprobs."
+            },
+            "load_mode": {
+                "default": "llama.cpp picks: memory-mapped, except on integrated GPUs that would hold the model twice."
             }
         },
-        "groupCount": "{{count}} settings"
+        "groupCount": "{{count}} settings",
+        "drafting": {
+            "title": "Drafting (speculative decoding)",
+            "lead": "A fast drafter proposes the next tokens and the model checks them in one step. Answers come faster; the output stays the same.",
+            "mode": "Mode",
+            "more": "More drafting options",
+            "auto": "{{mode}} is on by default: this model has an MTP head, so LocalAI drafts with it unless you choose Off.",
+            "custom": {
+                "title": "Custom drafting setup",
+                "body": "This model uses spec_type {{kinds}}, which none of the modes covers. It stays as it is until you pick a mode."
+            },
+            "modes": {
+                "off": {
+                    "label": "Off",
+                    "doc": "No drafting. Every token comes from the model alone."
+                },
+                "ngram": {
+                    "label": "N-gram",
+                    "doc": "Proposes the tokens that followed the same words earlier in the conversation. No extra model and no extra memory.",
+                    "note": "Best for output that repeats its input, such as code edits or long quotes. On normal chat it gains little and can cost a few percent."
+                },
+                "model": {
+                    "label": "Draft model",
+                    "doc": "A small model with the same vocabulary proposes tokens, and the model checks them in one step.",
+                    "note": "The draft model is loaded beside the model and uses its own memory."
+                },
+                "mtp": {
+                    "label": "MTP",
+                    "doc": "The model's own multi-token prediction head proposes the next tokens. No second model to load."
+                }
+            },
+            "fields": {
+                "ngram": {
+                    "options_spec_ngram_mod_n_min": {
+                        "label": "Draft tokens, at least",
+                        "hint": "Fewest tokens a match must propose before it is used."
+                    },
+                    "options_spec_ngram_mod_n_max": {
+                        "label": "Draft tokens, at most",
+                        "hint": "Most tokens proposed after a match."
+                    },
+                    "options_spec_ngram_mod_n_match": {
+                        "label": "Match length",
+                        "hint": "Tokens that must match an earlier passage before it is copied."
+                    }
+                },
+                "model": {
+                    "options_spec_n_min": {
+                        "label": "Draft tokens, at least",
+                        "hint": "Fewest drafted tokens worth checking. 0 checks any draft."
+                    },
+                    "options_spec_n_max": {
+                        "label": "Draft tokens, at most",
+                        "hint": "Most tokens the draft model proposes per step. More helps only when it guesses well."
+                    },
+                    "options_spec_p_min": {
+                        "label": "Acceptance threshold",
+                        "hint": "The draft model stops a draft when it is less sure than this, from 0 to 1."
+                    }
+                },
+                "mtp": {
+                    "options_spec_n_max": {
+                        "label": "Draft tokens, at most",
+                        "hint": "Most tokens the MTP head proposes per step."
+                    },
+                    "options_spec_p_min": {
+                        "label": "Acceptance threshold",
+                        "hint": "The head stops a draft when it is less sure than this, from 0 to 1."
+                    }
+                }
+            },
+            "streams": {
+                "label": "Pause drafting above N streams",
+                "hint": "Drafting pauses while more requests than this generate at once, and resumes when the load drops. 0 never pauses."
+            },
+            "picker": {
+                "label": "Draft model",
+                "placeholder": "Pick an installed model",
+                "hint": "A small model of the same family, such as a 0.6B or 1B model.",
+                "filter": "Filter models",
+                "loading": "Loading installed models...",
+                "empty": "No other model that {{engine}} runs is installed. Install a small model of the same family first.",
+                "same": "Same family as this model",
+                "other": "Other installed models",
+                "file": "Set in the file",
+                "fileRow": "Not an installed model",
+                "noFile": "{{name}} has no model file to use as a draft.",
+                "failed": "The installed models could not be listed."
+            },
+            "fit": {
+                "title": "Compatibility",
+                "ok": "Compatible",
+                "okText": "Same vocabulary: {{tokens}} tokens.",
+                "mismatch": "Will not load",
+                "mismatchText": "The vocabularies differ ({{main}} and {{draft}} tokens). llama.cpp refuses this pair, so the model fails to load.",
+                "family": "Same family",
+                "familyText": "Both are {{family}} models. The vocabulary could not be read to confirm it.",
+                "unknown": "Not checked",
+                "unknownText": "The vocabularies could not be compared. The draft must use the same tokenizer as the model.",
+                "unmatched": "The file is not an installed model, so it cannot be checked."
+            },
+            "memory": {
+                "title": "Memory",
+                "total": "≈ {{size}} more",
+                "split": "({{weights}} weights and {{kv}} KV cache at {{context}} tokens).",
+                "none": "No estimate for this model.",
+                "unmatched": "No estimate: expect about the file's size plus a KV cache as large as the model's context."
+            }
+        },
+        "memory": {
+            "label": "Memory type",
+            "auto": "Detected: {{kind}}",
+            "autoUnknown": "Not detected",
+            "detected": "{{kind}} on this server ({{size}})",
+            "detectedDevice": "{{kind}} on this server: {{device}}, {{size}}",
+            "chosen": "{{kind}}, chosen by you",
+            "unknown": "Memory type not detected: using the {{kind}} rules",
+            "useValue": "Use {{value}}",
+            "kinds": {
+                "unified": {
+                    "label": "Unified memory",
+                    "doc": "The GPU shares the system memory (DGX Spark, Jetson, Apple silicon, AMD APUs). More slots fit; the prompt cache and checkpoints are kept small because they use the same memory."
+                },
+                "discrete": {
+                    "label": "Discrete GPU",
+                    "doc": "The GPU has its own memory. Slots are capped by the VRAM estimate, 32 streams use an 8-bit KV cache, and the prompt cache stays in system memory."
+                },
+                "system": {
+                    "label": "No GPU",
+                    "doc": "The model runs on the CPU in system memory. The caches are kept small, and 32 streams are not offered."
+                }
+            },
+            "advice": {
+                "unifiedLoadMode": "On unified memory, a memory-mapped model is held twice while it loads. Default loads it once."
+            }
+        },
+        "flags": {
+            "show": "Show {{engine}} flags"
+        },
+        "more": "More"
     }
 }

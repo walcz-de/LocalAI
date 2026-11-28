@@ -8,6 +8,7 @@
     "subtitle": "Configurer les paramètres d'exécution de LocalAI",
     "saved": "Paramètres enregistrés",
     "saveFailed": "Échec de l'enregistrement : {{message}}",
+    "memoryConflict": "Les réglages de mémoire ont été modifiés ailleurs depuis le chargement de cette page. La page affiche maintenant les valeurs en vigueur. Appliquez à nouveau votre modification.",
     "loadFailed": "Échec du chargement des paramètres : {{message}}",
     "sections": {
       "branding": "Image de marque",
@@ -101,7 +102,8 @@
       "retry": "Réessayer la même opération",
       "policy": "Politique du propriétaire · révision {{revision}}",
       "apply": "Appliquer le réglage de mise à jour"
-    }
+    },
+    "memoryCluster": "S'applique à chaque nœud worker. Pour une autre valeur sur un nœud, utilisez la page Nœuds."
   },
   "traces": {
     "title": "Traces",
@@ -208,7 +210,13 @@
     "sheet": {
       "account": "Compte",
       "activity": "Activité",
-      "apiKeys": "Clés API"
+      "apiKeys": "Clés API",
+      "defaultOn": "Activé par défaut pour les utilisateurs",
+      "defaultOnHint": "Enregistré immédiatement. S'applique à chaque utilisateur dont l'accès ne définit pas cette fonction.",
+      "followsDefault": "Cet utilisateur suit la valeur par défaut.",
+      "explicit": "Défini pour cet utilisateur : un changement de la valeur par défaut ne s'applique pas.",
+      "useDefault": "Utiliser la valeur par défaut",
+      "useDefaultFor": "Utiliser la valeur par défaut pour {{feature}}"
     },
     "empty": {
       "title": "Aucun utilisateur pour l'instant",
@@ -237,7 +245,10 @@
       "deleted": "Utilisateur supprimé",
       "deleteFailed": "Échec de la suppression : {{message}}",
       "passwordReset": "Mot de passe réinitialisé pour {{name}}",
-      "resetFailed": "Échec de la réinitialisation du mot de passe : {{message}}"
+      "resetFailed": "Échec de la réinitialisation du mot de passe : {{message}}",
+      "defaultOn": "La fonction est maintenant activée par défaut pour les utilisateurs.",
+      "defaultOff": "La fonction est maintenant désactivée par défaut pour les utilisateurs.",
+      "defaultFailed": "Impossible de changer la valeur par défaut : {{message}}"
     },
     "reset": {
       "title": "Réinitialiser le mot de passe",

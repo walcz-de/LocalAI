@@ -34,8 +34,10 @@ inline std::optional<backend_sampling_mode> parse_backend_sampling_mode(std::str
     return std::nullopt;
 }
 
-// The default of backend_sampling_min_slots.
-constexpr int backend_sampling_default_min_slots = 4;
+// The default of backend_sampling_min_slots. On a GB10 with Qwen3-8B, backend
+// sampling for every request gained nothing at 8 decoding streams, 2.5% at
+// 12 and 6.5% at 16 (aggregate tokens per second).
+constexpr int backend_sampling_default_min_slots = 16;
 
 // backend_sampling_model is what backend_sampling:auto knows about the loaded
 // model.

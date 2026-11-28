@@ -1,5 +1,5 @@
 
-LLAMA_VERSION?=9c003a97ab34a69cc49243f9b02014038205ffae
+LLAMA_VERSION?=8e23278c7c36f4429fb237467d50e2935a91e655
 LLAMA_REPO?=https://github.com/ggerganov/llama.cpp
 
 CMAKE_ARGS?=
@@ -20,6 +20,15 @@ ARCH?=$(shell uname -m)
 SHARED_LIBS?=OFF
 EXTRA_CMAKE_ARGS?=
 CMAKE_ARGS+=-DBUILD_SHARED_LIBS=$(SHARED_LIBS) -DLLAMA_CURL=OFF $(EXTRA_CMAKE_ARGS)
+
+# LLGUIDANCE=ON links llguidance (-DLLAMA_LLGUIDANCE=ON), the grammar engine that
+# the grammar_engine model option selects. It needs cargo on PATH: llama.cpp builds
+# the library with cargo at configure time. Off by default, so a build without a
+# Rust toolchain is unchanged. The image builds turn it on in .docker/llama-cpp-compile.sh.
+LLGUIDANCE?=OFF
+ifeq ($(LLGUIDANCE),ON)
+	CMAKE_ARGS+=-DLLAMA_LLGUIDANCE=ON
+endif
 
 CURRENT_MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 ifeq ($(NATIVE),false)

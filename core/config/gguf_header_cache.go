@@ -35,6 +35,10 @@ type ggufHeader struct {
 	MTPLayers uint32 // <arch>.nextn_predict_layers, when an embedded MTP head exists
 	HasMTP    bool
 
+	// RecurrentStateBytes is the recurrent state of one sequence (and the size
+	// of one context checkpoint) of a hybrid or recurrent model, 0 otherwise.
+	RecurrentStateBytes uint64
+
 	// TrainedContext is the estimator's default context size (0 when the
 	// estimator yields nothing usable).
 	TrainedContext int
@@ -80,6 +84,8 @@ func readGGUFHeader(f *gguf.GGUFFile) ggufHeader {
 		h.ChatTemplate = t.ValueString()
 		h.HasChatTemplate = true
 	}
+
+	h.RecurrentStateBytes = recurrentStateBytes(f)
 
 	arch, ok := safeArchitecture(f)
 	if !ok {
@@ -238,4 +244,22 @@ func loadGGUFHeader(modelFile string, parse ggufParser) (ggufHeader, error) {
 	return ggufHeaders.loadVia(modelFile, func(p string) (ggufHeader, error) {
 		return parseGGUFHeader(p, parse)
 	})
+}
+
+// GGUFModelInfo is what the model editor reads of a GGUF file to offer the
+// drafting modes: the architecture, to say whether a draft model is of the
+// same family, and the layers of an embedded MTP head (0 without one).
+type GGUFModelInfo struct {
+	Architecture string
+	MTPLayers    uint32
+}
+
+// ReadGGUFModelInfo returns the GGUFModelInfo of a local GGUF file. It reads
+// the cached header snapshot, so a model that loaded once costs no parse.
+func ReadGGUFModelInfo(path string) (GGUFModelInfo, error) {
+	h, err := loadGGUFHeader(path, gguf.ParseGGUFFile)
+	if err != nil {
+		return GGUFModelInfo{}, err
+	}
+	return GGUFModelInfo{Architecture: h.Architecture, MTPLayers: h.MTPLayers}, nil
 }

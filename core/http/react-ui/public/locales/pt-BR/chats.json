@@ -284,6 +284,13 @@
       "done": "{{count}} importados. Estão desligados: teste e ligue-os abaixo.",
       "failed": "{{name}} não foi importado: {{error}}",
       "left": "Os servidores que não foram importados continuam neste navegador."
+    },
+    "plugin": {
+      "tag": "Plugin: {{name}}",
+      "switch": "{{name}} é ativado e desativado com o plugin {{plugin}}",
+      "title": "Gerenciado pelo plugin {{name}}",
+      "body": "O plugin criou este conector e o remove quando você desativa o plugin. Você não pode alterá-lo aqui.",
+      "manage": "Abrir o plugin"
     }
   },
   "connectorsPage": {
@@ -781,7 +788,8 @@
         "kind": {
           "model": "Modelo",
           "backend": "Backend",
-          "addon": "Complemento"
+          "addon": "Complemento",
+          "plugin": "Plugin"
         },
         "done": {
           "install": "{{kind}} {{name}} instalado",
@@ -1180,7 +1188,8 @@
       "page": "Página",
       "dashboard": "Painel",
       "knowledge": "Conhecimento",
-      "voice_profile": "Perfil de voz"
+      "voice_profile": "Perfil de voz",
+      "plugin": "Plugin"
     },
     "scope": {
       "user": "Todos os seus chats",
@@ -1283,6 +1292,17 @@
       "thisProject": "este projeto",
       "why": "Compartilhe o projeto de novo com acesso de edição e peça a nota outra vez, se ainda a quiser.",
       "nameHint": "Nome do projeto tirado da pasta dele"
+    },
+    "plugin": {
+      "label": "A ação do plugin",
+      "help": "O assistente pediu isto. Roda em seu nome quando você confirma. Verifique se você quer: o assistente lê texto de marketplaces de plugins, que qualquer pessoa pode publicar.",
+      "action": "Ação",
+      "plugin": "Plugin",
+      "scope": "Para",
+      "install": "Instalação",
+      "source": "Origem",
+      "ref": "Branch ou tag",
+      "marketplace": "ID do marketplace"
     }
   },
   "proposalsPage": {

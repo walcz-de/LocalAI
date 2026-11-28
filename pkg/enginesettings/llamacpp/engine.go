@@ -136,7 +136,10 @@ var loadMode = es.Combined{
 	Keys:  []string{"mmap", "mmlock", "direct_io"},
 	Unset: map[string]any{"mmap": true, "mmlock": false, "direct_io": false},
 	Choices: []es.Choice{
-		{Value: "default", Label: "Default (memory-mapped)", Set: map[string]any{"mmap": nil, "mmlock": nil, "direct_io": nil}},
+		// With mmap unset, the backend lets llama.cpp pick (--load-mode auto):
+		// memory-mapped, except on CUDA, ROCm and Vulkan integrated GPUs.
+		{Value: "default", Label: "Default (auto)", Set: map[string]any{"mmap": nil, "mmlock": nil, "direct_io": nil},
+			Doc: "llama.cpp picks: memory-mapped, except on integrated GPUs that would hold the model twice."},
 		{Value: "none", Label: "None (read into memory)", Set: map[string]any{"mmap": false, "mmlock": nil, "direct_io": nil}},
 		{Value: "mmap", Label: "mmap", Set: map[string]any{"mmap": true, "mmlock": nil, "direct_io": nil}},
 		{Value: "mlock", Label: "mlock", Set: map[string]any{"mmap": false, "mmlock": true, "direct_io": nil}},
@@ -149,7 +152,7 @@ var loadMode = es.Combined{
 // entry, so a model without the option keeps the backend default.
 var backendSampling = es.Combined{
 	ID: "backend_sampling", Group: GroupSpeed,
-	Doc:   "Where tokens are sampled. A backend without GPU sampling ignores the setting.",
+	Doc:   "Where the next token is picked: on the CPU or on the GPU.",
 	Keys:  []string{"backend_sampling"},
 	Unset: map[string]any{"backend_sampling": "off"},
 	Choices: []es.Choice{
@@ -159,6 +162,55 @@ var backendSampling = es.Combined{
 			Doc: "Use GPU sampling when the model runs on a GPU with several parallel requests and the request does not need grammar or logprobs."},
 		{Value: "on", Label: "On", Set: map[string]any{"backend_sampling": "on"},
 			Doc: "Sample tokens on the GPU. Faster with many parallel requests. Turned off automatically for requests that use a grammar, a reasoning budget or logprobs."},
+	},
+}
+
+// drafting is the Drafting section of the editor: one choice of how tokens
+// are drafted, with the few fields each choice needs. The other flags of the
+// speculative group stay under it as more options.
+var drafting = &es.Drafting{
+	Group:    GroupSpeculative,
+	TypeKey:  "spec_type",
+	ModelKey: "draft_model",
+	// LocalAI turns MTP on for a model with an MTP head when the file names
+	// no kind (core/config ApplyMTPDefaults), so Off must say none.
+	OffType: "none",
+	// spec_max_streams is read by builds with paged serving and ignored by
+	// the others, so it is a plain option here.
+	Streams: &es.DraftStreams{
+		Option:  "spec_max_streams",
+		Default: "4 in builds with paged serving",
+		Doc:     "Pause drafting while more than this many requests generate, and resume when the load drops. 0 never pauses.",
+	},
+	Modes: []es.DraftMode{
+		{
+			ID: "off", Label: "Off",
+			Doc: "No drafting. Every token comes from the model alone.",
+		},
+		{
+			ID: "ngram", Label: "N-gram",
+			Doc:    "Propose the tokens that followed the same words earlier in the context. No extra model and no extra memory.",
+			Note:   "Best for output that repeats its input, such as code edits or long quotes. On normal chat it gains little and can cost a few percent.",
+			Types:  []string{"ngram-mod", "ngram-simple", "ngram-map-k", "ngram-map-k4v", "ngram-cache"},
+			Fields: []string{"spec_ngram_mod_n_min", "spec_ngram_mod_n_max", "spec_ngram_mod_n_match"},
+		},
+		{
+			ID: "model", Label: "Draft model",
+			Doc:    "A small model with the same vocabulary proposes tokens, and the model checks them in one step.",
+			Note:   "The draft model is loaded beside the model and uses its own memory.",
+			Model:  true,
+			Fields: []string{"spec_n_min", "spec_n_max", "spec_p_min"},
+		},
+		{
+			ID: "mtp", Label: "MTP",
+			Doc:   "The model's own multi-token prediction head proposes the next tokens. No second model to load.",
+			Types: []string{"draft-mtp"},
+			Needs: es.NeedsMTPHead, Auto: true,
+			// The values LocalAI applies to a model with an MTP head
+			// (core/config mtpSpecOptions); a test keeps them equal.
+			Set:    map[string]any{"spec_n_max": 6, "spec_p_min": 0.75},
+			Fields: []string{"spec_n_max", "spec_p_min"},
+		},
 	},
 }
 
@@ -193,38 +245,6 @@ var presets = []es.Preset{
 	},
 }
 
-// profiles are the quick setups of the editor: one is current at a time.
-// nil unsets a key, so Balanced is the defaults of LocalAI and llama.cpp for
-// the host. Balanced and Long prompts do not list flash_attention: a value
-// the person set stays, and the editor removes it only when the values came
-// from More concurrent users. They change memory needs, so nothing applies
-// them unless the person picks one.
-var profiles = []es.Preset{
-	{
-		ID: "balanced", Name: "Balanced", Profile: true,
-		Description: "The defaults: LocalAI picks the batch and the slots for the GPU, with an f16 KV cache.",
-		Settings: map[string]any{
-			"batch": nil, "ubatch": nil, "cache_type_k": nil, "cache_type_v": nil, "paged_kv": nil, "parallel": nil,
-		},
-	},
-	{
-		ID: "longPrompts", Name: "Long prompts", Profile: true,
-		Description: "Batch and micro-batch of 2048: long prompts are read much faster, and the compute buffers grow.",
-		Settings: map[string]any{
-			"batch": 2048, "ubatch": 2048, "cache_type_k": nil, "cache_type_v": nil, "paged_kv": nil, "parallel": nil,
-		},
-	},
-	{
-		ID: "concurrent", Name: "More concurrent users", Profile: true,
-		Description: "8-bit KV cache, paged serving and 8 slots: about twice the tokens fit, shared by more users, at a small cost in quality.",
-		Settings: map[string]any{
-			// A quantized V cache needs flash attention.
-			"batch": nil, "ubatch": nil, "cache_type_k": "q8_0", "cache_type_v": "q8_0",
-			"flash_attention": "on", "paged_kv": true, "parallel": 8,
-		},
-	},
-}
-
 // Engine returns the llama.cpp engine.
 func Engine() *es.Engine {
 	return &es.Engine{
@@ -242,7 +262,9 @@ func Engine() *es.Engine {
 		},
 		Groups: []es.Group{GroupMemory, GroupSpeed, GroupServing, GroupPlacement, GroupSampling, GroupTemplate, GroupSpeculative, GroupAdvanced},
 		// Drawn closed: rarely used, and some of them turn other features off.
-		Collapsed: []es.Group{GroupSpeculative, GroupAdvanced},
+		// The speculative group is the Drafting section, drawn open with its
+		// rarely used flags folded inside it.
+		Collapsed: []es.Group{GroupAdvanced},
 		Flags:     flags,
 		Combined:  []es.Combined{loadMode, backendSampling},
 		Presets:   append(append([]es.Preset{}, profiles...), presets...),
@@ -270,5 +292,7 @@ func Engine() *es.Engine {
 			Build:     Option,
 			Recognise: ParseOption,
 		},
+		Drafting: drafting,
+		Memory:   memory,
 	}
 }

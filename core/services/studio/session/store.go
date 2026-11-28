@@ -90,6 +90,10 @@ type ChatRecord struct {
 	// name of a server of the model, or "connector:<id>" for a connector of the
 	// user. It is kept the way AddonsOff is.
 	McpOff []string
+	// PluginsOff holds the install IDs of the plugins this chat has switched
+	// off. A chat keeps what is off, so a plugin enabled later is on in it.
+	// It is kept the way AddonsOff is.
+	PluginsOff []string
 	// BuiltinsOff holds the groups of built-in tools this chat has switched
 	// off, such as "web". It is kept the way AddonsOff is.
 	BuiltinsOff []string
@@ -330,9 +334,10 @@ type LoopMark struct {
 
 // Invocation is the command a user message carried.
 type Invocation struct {
-	// Kind is InvokeSkill or InvokeAgent.
+	// Kind is InvokeSkill, InvokeCommand or InvokeAgent.
 	Kind string `json:"kind"`
-	// Name is the skill's name, or the saved agent's name.
+	// Name is the skill's name, the plugin command's name
+	// ("<plugin>:<command>"), or the saved agent's name.
 	Name string `json:"name"`
 	// ID is the saved agent's id; empty for a skill.
 	ID string `json:"id,omitempty"`
@@ -341,7 +346,9 @@ type Invocation struct {
 // Invocation kinds.
 const (
 	InvokeSkill = "skill"
-	InvokeAgent = "agent"
+	// InvokeCommand is a command of a plugin.
+	InvokeCommand = "command"
+	InvokeAgent   = "agent"
 )
 
 // Entry roles.

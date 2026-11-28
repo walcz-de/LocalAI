@@ -54,6 +54,10 @@ func (n *natsControlServer) subject(v controlVerb) (string, error) {
 		return messaging.SubjectNodeFilesListDir(n.nodeID), nil
 	case verbFilesRelease:
 		return messaging.SubjectNodeFilesRelease(n.nodeID), nil
+	case verbPromptCacheSync:
+		return messaging.SubjectNodePromptCacheSync(n.nodeID), nil
+	case verbPromptCacheUsage:
+		return messaging.SubjectNodePromptCacheUsage(n.nodeID), nil
 	}
 	return "", fmt.Errorf("no NATS subject for control verb %q", v)
 }
@@ -72,6 +76,25 @@ func (n *natsControlServer) handle(v controlVerb, h controlHandler) error {
 		if r, _ := h(context.Background(), data); r != nil {
 			replyJSON(reply, r)
 		}
+	}); err != nil {
+		return fmt.Errorf("serving %s: %w", v, err)
+	}
+	return nil
+}
+
+// handleConcurrent is handle with a goroutine per request, for a verb whose
+// handler may wait: the next request of the verb does not queue behind it.
+func (n *natsControlServer) handleConcurrent(v controlVerb, h controlHandler) error {
+	subject, err := n.subject(v)
+	if err != nil {
+		return fmt.Errorf("serving %s: %w", v, err)
+	}
+	if _, err := n.bus.SubscribeReply(subject, func(data []byte, reply func([]byte)) {
+		go func() {
+			if r, _ := h(context.Background(), data); r != nil {
+				replyJSON(reply, r)
+			}
+		}()
 	}); err != nil {
 		return fmt.Errorf("serving %s: %w", v, err)
 	}

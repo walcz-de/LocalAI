@@ -8,6 +8,7 @@
     "subtitle": "LocalAI 런타임 설정을 구성합니다",
     "saved": "설정이 저장되었습니다",
     "saveFailed": "저장 실패: {{message}}",
+    "memoryConflict": "이 페이지를 불러온 후 다른 곳에서 메모리 설정이 변경되었습니다. 이제 페이지에 현재 적용 중인 값이 표시됩니다. 변경 사항을 다시 적용하세요.",
     "loadFailed": "설정을 불러오지 못했습니다: {{message}}",
     "sections": {
       "branding": "브랜딩",
@@ -101,7 +102,8 @@
       "retry": "같은 작업 다시 시도",
       "policy": "소유자 정책 · 리비전 {{revision}}",
       "apply": "업데이트 설정 적용"
-    }
+    },
+    "memoryCluster": "모든 워커 노드에 적용됩니다. 한 노드에 다른 값을 쓰려면 노드 페이지에서 설정하세요."
   },
   "backends": {
     "lifecycle": {
@@ -281,7 +283,13 @@
     "sheet": {
       "account": "계정",
       "activity": "활동",
-      "apiKeys": "API 키"
+      "apiKeys": "API 키",
+      "defaultOn": "사용자에게 기본으로 켜기",
+      "defaultOnHint": "즉시 저장됩니다. 접근 권한에 이 기능이 지정되지 않은 모든 사용자에게 적용됩니다.",
+      "followsDefault": "이 사용자는 기본값을 따릅니다.",
+      "explicit": "이 사용자에게 직접 설정됨: 기본값을 바꿔도 적용되지 않습니다.",
+      "useDefault": "기본값 사용",
+      "useDefaultFor": "{{feature}}에 기본값 사용"
     },
     "empty": {
       "title": "아직 사용자가 없습니다",
@@ -310,7 +318,10 @@
       "deleted": "사용자 삭제됨",
       "deleteFailed": "사용자 삭제 실패: {{message}}",
       "passwordReset": "{{name}} 비밀번호 재설정됨",
-      "resetFailed": "비밀번호 재설정 실패: {{message}}"
+      "resetFailed": "비밀번호 재설정 실패: {{message}}",
+      "defaultOn": "이제 이 기능이 사용자에게 기본으로 켜집니다.",
+      "defaultOff": "이제 이 기능이 사용자에게 기본으로 꺼집니다.",
+      "defaultFailed": "기본값을 바꿀 수 없습니다: {{message}}"
     },
     "reset": {
       "title": "비밀번호 재설정",

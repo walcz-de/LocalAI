@@ -133,6 +133,17 @@ type LocalAIClient interface {
 	// node's VRAM allocation cap as a sticky admin override. Only meaningful
 	// in distributed mode; single-process clients report it as unavailable.
 	SetNodeVRAMBudget(ctx context.Context, nodeID, budget string) error
+	// SetNodeLimits sets the per-node overrides of the memory settings, or
+	// with Reset clears all of them, and returns the effective limits.
+	// Only meaningful in distributed mode.
+	SetNodeLimits(ctx context.Context, req SetNodeLimitsRequest) (*NodeLimits, error)
+	// DrainNode drains a node (action drain) or resumes a draining one
+	// (action resume). A drain keeps the node's replicas serving until
+	// replacements load elsewhere, unless Force.
+	DrainNode(ctx context.Context, req DrainNodeRequest) (*NodeDrain, error)
+	// SetModelMemoryPolicy changes the memory settings (Settings > Models in
+	// memory). In distributed mode they apply to every frontend and node.
+	SetModelMemoryPolicy(ctx context.Context, req ModelMemoryPolicy) error
 	VRAMEstimate(ctx context.Context, req VRAMEstimateRequest) (*vram.EstimateResult, error)
 	// ParseEngineCommand reads a pasted command line of an engine (for
 	// example llama-cpp) into model config keys. It only tokenises the text;
@@ -155,6 +166,12 @@ type LocalAIClient interface {
 	// SetBranding updates the text branding fields. Asset uploads are not
 	// exposed over MCP — admins use the Settings UI for binary files.
 	SetBranding(ctx context.Context, req SetBrandingRequest) (*Branding, error)
+	// GetPromptCache reports the disk prompt cache: size, free disk,
+	// effective cap and state of each node, and the size of each model.
+	GetPromptCache(ctx context.Context) (*PromptCacheStatus, error)
+	// ClearPromptCache deletes the disk prompt cache of one model, or of
+	// every model when model is empty.
+	ClearPromptCache(ctx context.Context, model string) (*PromptCacheClearResult, error)
 
 	// ---- Shared folders ----
 	// ListSharedFolders returns every shared folder with its members.
@@ -255,6 +272,10 @@ type LocalAIClient interface {
 	GetP2PRelayLimits(ctx context.Context, id string) (*P2PRelayLimitsInfo, error)
 	// SetP2PRelayLimits changes the limits of a relay this server administers.
 	SetP2PRelayLimits(ctx context.Context, id string, req SetP2PRelayLimitsRequest) (*P2PRelayLimitsInfo, error)
+	// GetP2PUserPairing reads the setting p2p_user_pairing.
+	GetP2PUserPairing(ctx context.Context) (*P2PUserPairingInfo, error)
+	// SetP2PUserPairing changes the setting p2p_user_pairing.
+	SetP2PUserPairing(ctx context.Context, req SetP2PUserPairingRequest) (*P2PUserPairingInfo, error)
 	// RevokeP2PDevice revokes a paired device: it is cut off at once.
 	RevokeP2PDevice(ctx context.Context, id string) error
 	// CancelP2PInvite cancels a pending invite.
@@ -292,6 +313,29 @@ type LocalAIClient interface {
 	// group. It returns the group as it is after the change, nil after a
 	// delete.
 	ManageFederationGroup(ctx context.Context, req FederationGroupAction) (*FederationGroupInfo, error)
+
+	// ---- Plugins (Claude Code plugin format) ----
+	// They act as the acting user, with the rights of the plugins API:
+	// browsing, the user's own text-only installs and the user's switch for
+	// anyone; marketplaces and installs for everyone for administrators.
+	ListPluginMarketplaces(ctx context.Context) ([]PluginMarketplace, error)
+	AddPluginMarketplace(ctx context.Context, source, ref, id string) (*PluginMarketplace, error)
+	RefreshPluginMarketplace(ctx context.Context, id string) (*PluginMarketplace, error)
+	BrowsePlugins(ctx context.Context, q PluginBrowseQuery) (*PluginCatalog, error)
+	ListPluginInstalls(ctx context.Context, all bool) ([]PluginInstall, error)
+	// InstallPlugin fetches and checks the plugin (inspect), then queues the
+	// install of exactly what was checked. A plugin that runs code fails with
+	// an error that matches ErrPluginNeedsBrowser: only the administrator's
+	// browser session installs it.
+	InstallPlugin(ctx context.Context, plugin, scope string) (*PluginInstallResult, error)
+	// CheckPluginUpdate previews the update of one install. It applies
+	// nothing.
+	CheckPluginUpdate(ctx context.Context, installID string) (*PluginUpdateCheck, error)
+	// SetPluginEnabled turns an install on or off for the acting user. It
+	// never accepts code: an install that gained code fails with
+	// ErrPluginNeedsReenable.
+	SetPluginEnabled(ctx context.Context, installID string, on bool) (*PluginState, error)
+	RemovePlugin(ctx context.Context, installID string) error
 
 	// ---- Client (inference) ----
 	// These run inference through the LocalAI API as the acting user, so the

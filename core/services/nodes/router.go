@@ -394,10 +394,22 @@ func applyNodeHardwareDefaults(opts *pb.ModelOptions, node *BackendNode, backend
 	// parallel option is set. parallel is a llama.cpp option string, so it is
 	// also gated by backend: a strict backend (e.g. longcat-video) rejects an
 	// unknown option at LoadModel. The typed NBatch above needs no such gate.
+	//
+	// A hybrid or recurrent model keeps one recurrent state per slot on the
+	// device and up to n_ctx_checkpoints copies of it in host memory, so the
+	// slot count counts the state, and the checkpoints are bounded by the
+	// node's RAM. The state comes from the GGUF header on this host: the
+	// options still carry the local path, staging rewrites it later.
 	if config.UsesLlamaCppServingOptions(backend) {
-		opts.Options = config.EnsureParallelOptionForContext(opts.Options, gpu, int(opts.ContextSize))
+		state := recurrentStateOf(opts.ModelFile)
+		opts.Options = config.EnsureParallelOptionForModel(opts.Options, gpu, int(opts.ContextSize), state)
+		opts.Options = config.EnsureCheckpointOption(opts.Options, state, config.SlotsFromOptions(opts.Options), node.TotalRAM)
 	}
 }
+
+// recurrentStateOf reads the recurrent state of a model file; a var so tests
+// can set it without a GGUF file.
+var recurrentStateOf = config.RecurrentStateForModelFile
 
 // scheduleAndLoad is the shared core for loading a model on a new node.
 // Used by both Route() (for first-time loads) and ScheduleAndLoadModel() (for reconciler scale-ups).
@@ -564,6 +576,7 @@ func (r *SmartRouter) scheduleAndLoad(ctx context.Context, backendType, tracking
 		return nil, fmt.Errorf("publishing loaded model: %w", err)
 	}
 	lifecycleSettled = true
+	r.recordReplicaSize(ctx, node.ID, trackingKey, replicaIndex, r.replicaSize(ctx, placed, modelOpts))
 
 	// Store load metadata for future replica scale-ups by the reconciler.
 	// Writes both per-replica (NodeModel.model_opts_blob) for backward compat
@@ -873,6 +886,20 @@ func (r *SmartRouter) Route(ctx context.Context, modelID, modelName, backendType
 	// matching node where the model was already at capacity (eviction-busy).
 	candidateNodeIDs, err := r.resolveSelectorCandidates(ctx, trackingKey, sched)
 	if err != nil {
+		// No healthy node matches the rule. A matching node that drains may
+		// still serve the model until its replacement loads.
+		if errors.Is(err, ErrNoAvailableNodes) {
+			// Only the draining path: with no candidate, the healthy
+			// path would take any replica, also one on a node the rule
+			// excludes, and reject it after the lock.
+			if result := r.tryWarmPath(ctx, &routeAttempt{
+				trackingKey: trackingKey, modelName: modelName, backendType: backendType,
+				configRevision: configRevision, modelOpts: modelOpts, parallel: parallel,
+				sched: sched, drainingOnly: true,
+			}); result != nil {
+				return result, nil
+			}
+		}
 		return nil, err
 	}
 	// A node that this frontend cannot reach on any route is not asked for a
@@ -939,6 +966,9 @@ type routeAttempt struct {
 	candidateNodeIDs []string
 	pref             *RoutePreference
 	observeChain     []uint64
+	// drainingOnly limits the warm path to replicas on draining nodes: no
+	// healthy node matches the model's rule.
+	drainingOnly bool
 }
 
 // warmProbeRetryDelay is how long the warm path waits before it probes a replica
@@ -951,8 +981,8 @@ var warmProbeRetryDelay = 500 * time.Millisecond
 // waiter woken by a finished job re-runs it rather than trusting the signal,
 // because the model may have been evicted between ready and wake.
 func (r *SmartRouter) tryWarmPath(ctx context.Context, att *routeAttempt) *RouteResult {
-	node, nm, err := r.registry.FindAndLockNodeWithModel(ctx, att.trackingKey, att.candidateNodeIDs, att.pref)
-	if err != nil || node == nil {
+	node, nm := r.lockWarmReplica(ctx, att)
+	if node == nil {
 		return nil
 	}
 	modelAddr := node.Address
@@ -1021,6 +1051,66 @@ func (r *SmartRouter) tryWarmPath(ctx context.Context, att *routeAttempt) *Route
 	grpcClient := r.buildClientForAddr(node, modelAddr, att.parallel)
 	tracked := NewInFlightTrackingClient(grpcClient, r.registry, node.ID, att.trackingKey, replicaIdx)
 	return r.newRouteResult(node, att.trackingKey, replicaIdx, grpcClient, tracked)
+}
+
+// lockWarmReplica locks the loaded replica the warm path routes to, or
+// returns nil.
+//
+// A replica on a draining node has the lowest preference, but it serves until
+// it leaves: it takes the request when no healthy node has the model, and
+// also when it runs fewer requests than the least busy healthy replica. The
+// handover then does not put every request on the replacements while the
+// draining replica sits idle.
+func (r *SmartRouter) lockWarmReplica(ctx context.Context, att *routeAttempt) (*BackendNode, *NodeModel) {
+	if att.drainingOnly {
+		return r.lockDrainingReplica(ctx, att.trackingKey, att.sched, -1)
+	}
+	node, nm, err := r.registry.FindAndLockNodeWithModel(ctx, att.trackingKey, att.candidateNodeIDs, att.pref)
+	if err != nil || node == nil {
+		return r.lockDrainingReplica(ctx, att.trackingKey, att.sched, -1)
+	}
+	if nm.InFlight == 0 {
+		return node, nm
+	}
+	dn, dnm := r.lockDrainingReplica(ctx, att.trackingKey, att.sched, nm.InFlight)
+	if dn == nil {
+		return node, nm
+	}
+	if err := r.registry.DecrementInFlight(ctx, node.ID, att.trackingKey, nm.ReplicaIndex); err != nil {
+		xlog.Warn("Failed to release the reservation of a busy replica",
+			"node", node.ID, "model", att.trackingKey, "replica", nm.ReplicaIndex, "error", err)
+	}
+	return dn, dnm
+}
+
+// drainingReplicaLocker is the part of the registry that routes to a replica
+// on a draining node. The router's own fakes need not implement it.
+type drainingReplicaLocker interface {
+	FindAndLockDrainingReplica(ctx context.Context, modelName string, selector map[string]string, inFlightBelow int) (*BackendNode, *NodeModel, error)
+}
+
+// lockDrainingReplica locks a loaded replica of the model on a draining node
+// that matches the rule's selector, or returns nil. With inFlightBelow zero or
+// more, only a replica that runs fewer requests than that is taken. A
+// selector that cannot be parsed matches nothing, as in placement.
+func (r *SmartRouter) lockDrainingReplica(ctx context.Context, trackingKey string, sched *ModelSchedulingConfig, inFlightBelow int) (*BackendNode, *NodeModel) {
+	var selector map[string]string
+	if sched != nil && sched.NodeSelector != "" {
+		sel, err := decodeSelector(sched.NodeSelector)
+		if err != nil {
+			return nil, nil
+		}
+		selector = sel
+	}
+	drained, ok := r.registry.(drainingReplicaLocker)
+	if !ok {
+		return nil, nil
+	}
+	node, nm, err := drained.FindAndLockDrainingReplica(ctx, trackingKey, selector, inFlightBelow)
+	if err != nil || node == nil {
+		return nil, nil
+	}
+	return node, nm
 }
 
 // coldLoad schedules the model onto a node and loads it, returning a route to
@@ -1439,6 +1529,11 @@ func (r *SmartRouter) placeNewReplica(ctx context.Context, modelID string, model
 	// per-node watchdog evicts on arrival.
 	candidateNodeIDs, err = r.narrowByGroupAntiAffinity(ctx, modelID, candidateNodeIDs)
 	if err != nil {
+		return nil, err
+	}
+	// The per-node model limit and model swap (router_swap_policy.go). It
+	// only narrows; makeRoom evicts for the limit after the claim.
+	if candidateNodeIDs, err = r.narrowByModelLimit(ctx, modelID, candidateNodeIDs); err != nil {
 		return nil, err
 	}
 
@@ -1861,6 +1956,13 @@ func (r *SmartRouter) installBackendOnNode(ctx context.Context, node *BackendNod
 		if owned && reply.Success && !reply.ReportsOperations {
 			// A worker that predates operations: it cannot confirm a stop.
 			markLegacyWorker(ctx)
+		}
+		if reply.ShuttingDown {
+			// The worker shuts down: drain its node now, so placement skips it
+			// before the worker's own drain arrives, and answer with an error
+			// that a client retries (the next attempt loads elsewhere).
+			r.drainShuttingDownNode(node)
+			return "", fmt.Errorf("%w: node %s: %w", ErrNodeShuttingDown, node.Name, ErrNoAvailableNodes)
 		}
 		if !reply.Success {
 			return "", fmt.Errorf("worker replied with error: %s", reply.Error)
@@ -2608,6 +2710,32 @@ var ErrNoLoadInfo = errors.New("no load info")
 // (which is what 500 would imply).
 var ErrNoAvailableNodes = errors.New("no available nodes")
 
+// ErrNodeShuttingDown is a load that a worker refused because it shuts down.
+// It wraps ErrNoAvailableNodes too, so the HTTP layer answers 503 with
+// Retry-After: the next attempt places the load on another node.
+var ErrNodeShuttingDown = errors.New("the node is shutting down")
+
+// nodeDrainer is the part of the registry that drains a node. The router's
+// own fakes need not implement it.
+type nodeDrainer interface {
+	DrainNode(ctx context.Context, nodeID string, opts DrainOptions) (DrainResult, error)
+}
+
+// drainShuttingDownNode marks a node whose worker refused a load because it
+// shuts down as draining. Its replicas keep serving until the worker
+// deregisters.
+func (r *SmartRouter) drainShuttingDownNode(node *BackendNode) {
+	d, ok := r.registry.(nodeDrainer)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if _, err := d.DrainNode(ctx, node.ID, DrainOptions{}); err != nil {
+		xlog.Warn("Failed to drain a node whose worker shuts down", "node", node.Name, "error", err)
+	}
+}
+
 // evictLRUAndFreeNode finds the globally least-recently-used model with zero in-flight,
 // unloads it, and returns its node for reuse. If all models are busy, retries briefly.
 //
@@ -2631,12 +2759,14 @@ func (r *SmartRouter) evictLRUAndFreeNode(ctx context.Context) (*BackendNode, er
 // unavailable this repeated, and the evicted model appeared to bounce between
 // nodes.
 func (r *SmartRouter) evictLRUAndFreeNodeFrom(ctx context.Context, candidateNodeIDs []string) (*BackendNode, error) {
-	const maxEvictionRetries = 5
-	const evictionRetryInterval = 500 * time.Millisecond
-
 	if r.db == nil {
 		return nil, ErrEvictionBusy // no DB means no row-level locking for safe eviction
 	}
+	candidateNodeIDs, err := r.swapCandidates(ctx, candidateNodeIDs)
+	if err != nil {
+		return nil, err
+	}
+	maxEvictionRetries, evictionRetryInterval := r.evictionRetries(ctx)
 
 	for attempt := range maxEvictionRetries {
 		var lru NodeModel
@@ -2644,7 +2774,7 @@ func (r *SmartRouter) evictLRUAndFreeNodeFrom(ctx context.Context, candidateNode
 			// Lock the row so no other frontend can evict the same model.
 			q := r.evictableReplicas(tx.Clauses(clause.Locking{Strength: "UPDATE"}), candidateNodeIDs)
 			if err := q.
-				Order("node_models.last_used ASC").
+				Order(r.evictionOrder()).
 				First(&lru).Error; err != nil {
 				return err
 			}
@@ -2690,20 +2820,23 @@ func (r *SmartRouter) evictLRUAndFreeNodeFrom(ctx context.Context, candidateNode
 
 // planLRUEviction finds the least-recently-used idle replica on one of
 // candidateNodeIDs (any healthy node when nil) and its node, without evicting
-// it. It waits briefly for one to become idle, like evictLRUAndFreeNodeFrom,
-// and returns ErrEvictionBusy when none does. makeRoom evicts it later, after
+// it. It waits for one to become idle, within the request deadline or
+// maxPlacementEvictionWait (placementRetries), and returns ErrEvictionBusy
+// when none does. makeRoom evicts it later, after
 // the load is claimed, and checks again that it is still evictable.
 func (r *SmartRouter) planLRUEviction(ctx context.Context, candidateNodeIDs []string) (*NodeModel, *BackendNode, error) {
-	const maxEvictionRetries = 5
-	const evictionRetryInterval = 500 * time.Millisecond
-
 	if r.db == nil {
 		return nil, nil, ErrEvictionBusy // no DB means no row-level locking for safe eviction
 	}
+	candidateNodeIDs, err := r.swapCandidates(ctx, candidateNodeIDs)
+	if err != nil {
+		return nil, nil, err
+	}
+	maxEvictionRetries, evictionRetryInterval := r.placementRetries(ctx)
 	for attempt := range maxEvictionRetries {
 		var lru NodeModel
 		err := r.evictableReplicas(r.db.WithContext(ctx).Model(&NodeModel{}), candidateNodeIDs).
-			Order("node_models.last_used ASC").
+			Order(r.evictionOrder()).
 			First(&lru).Error
 		if err == nil {
 			node, nodeErr := r.registry.Get(ctx, lru.NodeID)
@@ -2745,14 +2878,14 @@ func (r *SmartRouter) evictableReplicas(db *gorm.DB, candidateNodeIDs []string) 
 	// floor the reconciler then has to rebuild.
 	q := currentModelRevision(db).
 		Joins("JOIN backend_nodes ON backend_nodes.id = node_models.node_id").
-		Where(`node_models.in_flight = 0 AND node_models.state = ? AND backend_nodes.status = ?
+		Where(`(node_models.in_flight = 0 OR ?) AND node_models.state = ? AND backend_nodes.status = ?
   AND (
     NOT EXISTS (SELECT 1 FROM model_scheduling_configs sc WHERE COALESCE(NULLIF(sc.target_model, ''), sc.model_name) = node_models.model_name AND (sc.min_replicas > 0 OR sc.max_replicas > 0))
     OR (SELECT COUNT(*) FROM node_models nm2 WHERE nm2.model_name = node_models.model_name AND nm2.state = 'loaded'
          AND (NOT EXISTS (SELECT 1 FROM model_config_states mcs2 WHERE mcs2.model_name = nm2.model_name)
               OR nm2.config_revision = (SELECT mcs3.config_revision FROM model_config_states mcs3 WHERE mcs3.model_name = nm2.model_name)))
        > COALESCE((SELECT MAX(sc2.min_replicas) FROM model_scheduling_configs sc2 WHERE COALESCE(NULLIF(sc2.target_model, ''), sc2.model_name) = node_models.model_name), 1)
-  )`, "loaded", StatusHealthy)
+  )`, r.forceEviction(), "loaded", StatusHealthy)
 	if len(candidateNodeIDs) > 0 {
 		q = q.Where("node_models.node_id IN ?", candidateNodeIDs)
 	}

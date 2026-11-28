@@ -46,6 +46,9 @@ type ChatsSwitches struct {
 	BuiltinsOff []string `json:"builtins_off,omitempty"`
 	BuiltinsOn  []string `json:"builtins_on,omitempty"`
 	SkillsOff   []string `json:"skills_off,omitempty"`
+	// PluginsOff are the plugin install IDs the chat starts with off, in the
+	// form PUT /api/chats/{id}/plugins takes. At most 200.
+	PluginsOff []string `json:"plugins_off,omitempty"`
 	// Connections is the set of connections (connector binding IDs) the chat
 	// may use for each add-on whose tools run with a credential, by add-on ID.
 	// Each must be one of your own for that add-on. A single string is read as
@@ -65,6 +68,9 @@ type ChatsAgent struct {
 	Addons       []string `json:"addons"`
 	Collections  []string `json:"collections"`
 	Skills       []string `json:"skills"`
+	// Plugins are the install IDs of the plugins the agent may use (exact
+	// grant: empty grants none).
+	Plugins []string `json:"plugins"`
 	// Network is the network preset of the Sandbox commands of the agent's
 	// unattended runs: off (the default), registries or all, capped by the
 	// administrator's ceiling.
@@ -264,7 +270,9 @@ type ChatsAgentWrite struct {
 	Addons       []string `json:"addons,omitempty"`
 	Collections  []string `json:"collections,omitempty"`
 	Skills       []string `json:"skills,omitempty"`
-	Network      string   `json:"network,omitempty"`
+	// Plugins are the install IDs of the plugins the agent may use.
+	Plugins []string `json:"plugins,omitempty"`
+	Network string   `json:"network,omitempty"`
 	// ProjectID makes the agent a project agent. It is read on create only: it
 	// must be one of your own active projects (404 for an unknown or foreign
 	// one, 400 for an archived one). A write to an existing agent may leave it
@@ -359,9 +367,11 @@ type ChatsConversation struct {
 	PulledProjects []string `json:"pulled_projects,omitempty"`
 	// Collections is the restriction of the chat's collection tools: only
 	// these collections. Absent means all of the user's collections.
-	Collections []string  `json:"collections,omitempty"`
-	Created     time.Time `json:"created"`
-	Updated     time.Time `json:"updated"`
+	Collections []string `json:"collections,omitempty"`
+	// PluginsOff are the plugin install IDs switched off in the chat.
+	PluginsOff []string  `json:"plugins_off,omitempty"`
+	Created    time.Time `json:"created"`
+	Updated    time.Time `json:"updated"`
 	// Running is true while a turn runs. LastTurn is how the last finished turn
 	// ended: done, stopped, failed, interrupted, or paused (the tool loop
 	// reached its step limit; send a message to go on).
@@ -1286,6 +1296,18 @@ type ChatsSkill struct {
 	// New is true for a personal skill that was imported and that no chat has
 	// used yet. The first use clears it.
 	New bool `json:"new,omitempty"`
+	// Plugin, PluginTitle and PluginInstall name the plugin of a skill of the
+	// plugin layer: its plugin ID (name@marketplace), its name, and the
+	// install that provides it.
+	Plugin        string `json:"plugin,omitempty"`
+	PluginTitle   string `json:"plugin_title,omitempty"`
+	PluginInstall string `json:"plugin_install,omitempty"`
+	// NoModel is set for a plugin skill that only a person may call; NoMenu
+	// for one that stays out of the / menu. ArgumentHint is the hint of its
+	// arguments in that menu.
+	NoModel      bool   `json:"no_model,omitempty"`
+	NoMenu       bool   `json:"no_menu,omitempty"`
+	ArgumentHint string `json:"argument_hint,omitempty"`
 }
 
 // ChatsSkillList is the skills a user has.
@@ -2851,6 +2873,11 @@ type ChatsMCPConnector struct {
 	AgentsOnly bool      `json:"agents_only"`
 	Created    time.Time `json:"created"`
 	Updated    time.Time `json:"updated"`
+	// PluginInstall and PluginServer name the plugin install and the MCP
+	// server of a connector that a plugin owns. Such a connector is read
+	// only: a change answers 403. Absent for a connector you made.
+	PluginInstall string `json:"plugin_install,omitempty"`
+	PluginServer  string `json:"plugin_server,omitempty"`
 }
 
 // ChatsMCPConnectorWrite creates or replaces an MCP connector. token, headers and
@@ -2917,6 +2944,8 @@ type ChatsMCPConnectorSwitch struct {
 	Off    bool   `json:"off"`
 	Usable bool   `json:"usable"`
 	Reason string `json:"reason,omitempty"`
+	// PluginInstall is the plugin install that owns the connector.
+	PluginInstall string `json:"plugin_install,omitempty"`
 }
 
 // ChatsBuiltinGroup is a group of built-in tools of a chat, such as the web

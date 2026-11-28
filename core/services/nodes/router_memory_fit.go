@@ -37,10 +37,10 @@ func nodeMemoryCeiling(n *BackendNode) uint64 {
 
 // freeVRAM is the GPU memory the scheduler may still hand out on a node.
 func freeVRAM(n *BackendNode) uint64 {
-	if n.ReservedVRAM >= n.AvailableVRAM {
+	if n.ReservedVRAM+n.HeadroomVRAM >= n.AvailableVRAM {
 		return 0
 	}
-	return n.AvailableVRAM - n.ReservedVRAM
+	return n.AvailableVRAM - n.ReservedVRAM - n.HeadroomVRAM
 }
 
 // planMemoryFit finds the candidate node where evicting idle models frees
@@ -106,8 +106,11 @@ func (r *SmartRouter) planMemoryFit(ctx context.Context, need uint64, candidateN
 			continue
 		}
 		var evictable []NodeModel
+		if !r.nodePolicy(n).ModelSwap {
+			continue // nothing may be unloaded on this node for a load
+		}
 		if err := r.evictableReplicas(db.Model(&NodeModel{}), []string{n.ID}).
-			Order("node_models.last_used ASC").
+			Order(r.evictionOrder()).
 			Find(&evictable).Error; err != nil {
 			return nil, fmt.Errorf("listing evictable replicas on node %s: %w", n.Name, err)
 		}
@@ -143,6 +146,17 @@ func (r *SmartRouter) planMemoryFit(ctx context.Context, need uint64, candidateN
 func (r *SmartRouter) makeRoom(ctx context.Context, modelID string, p *replicaPlacement) error {
 	room := p.room
 	p.room = roomPlan{}
+	if err := r.runRoomPlan(ctx, modelID, p, room); err != nil {
+		return err
+	}
+	// The model limit last, on a fresh count: an eviction of the plan may
+	// have been skipped (the node had the memory by then, or a slot came
+	// free), so the plan's evictions are not counted in advance.
+	return r.makeRoomForLimit(ctx, modelID, p)
+}
+
+// runRoomPlan runs the memory and LRU evictions of room on the node of p.
+func (r *SmartRouter) runRoomPlan(ctx context.Context, modelID string, p *replicaPlacement, room roomPlan) error {
 	if len(room.memory) > 0 && r.stillShortOfMemory(ctx, p) {
 		for _, nm := range room.memory {
 			if !r.evictReplica(ctx, nm) {

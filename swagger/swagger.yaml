@@ -789,6 +789,24 @@ definitions:
           $ref: '#/definitions/apps.SlotView'
         type: array
     type: object
+  auth.FeatureMeta:
+    properties:
+      configurable:
+        description: |-
+          ConfigurableDefault marks a feature whose default an administrator may
+          change (PUT /api/auth/admin/features/:feature/default).
+        type: boolean
+      default:
+        description: |-
+          DefaultValue is the value a user gets when their permission map does
+          not name the feature. The metas functions give the built-in default;
+          EffectiveFeatureMetas gives the one in force.
+        type: boolean
+      key:
+        type: string
+      label:
+        type: string
+    type: object
   auth.WebSocketTicketResponse:
     properties:
       expires_at:
@@ -1155,6 +1173,7 @@ definitions:
     - dashboard
     - knowledge
     - voice_profile
+    - plugin
     type: string
     x-enum-varnames:
     - ChangeMemory
@@ -1164,6 +1183,7 @@ definitions:
     - ChangeDashboard
     - ChangeKnowledge
     - ChangeVoiceProfile
+    - ChangePlugin
   contract.ChangeProposal:
     properties:
       agent:
@@ -1703,6 +1723,25 @@ definitions:
       min:
         type: integer
     type: object
+  enginesettings.Advice:
+    properties:
+      avoid:
+        items:
+          type: string
+        type: array
+      control:
+        description: Control is a Combined id or a flag key.
+        type: string
+      doc:
+        type: string
+      id:
+        type: string
+      kind:
+        $ref: '#/definitions/enginesettings.MemoryKind'
+      value:
+        description: Value is the recommended choice (Combined) or value (flag).
+        type: string
+    type: object
   enginesettings.BackendMatch:
     properties:
       empty:
@@ -1740,14 +1779,21 @@ definitions:
     type: object
   enginesettings.Capability:
     enum:
+    - drafting
     - command-line
     - tensor-placement
     type: string
     x-enum-varnames:
+    - CapabilityDrafting
     - CapabilityCommandLine
     - CapabilityTensorPlacement
   enginesettings.Choice:
     properties:
+      doc:
+        description: |-
+          Doc says what the choice does. Optional; a client shows it for the
+          current choice.
+        type: string
       label:
         type: string
       set:
@@ -1791,6 +1837,88 @@ definitions:
   enginesettings.Config:
     additionalProperties: {}
     type: object
+  enginesettings.DraftMode:
+    properties:
+      auto:
+        description: |-
+          Auto: the backend turns the mode on by itself for a model that has
+          what Needs names when the file sets no kind.
+        type: boolean
+      doc:
+        type: string
+      fields:
+        description: Fields are the flag keys drawn under the mode, in order.
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      label:
+        type: string
+      model:
+        description: 'Model: the mode needs a draft model file (ModelKey).'
+        type: boolean
+      needs:
+        description: |-
+          Needs names what the model must have, such as NeedsMTPHead. A client
+          offers the mode only when the model has it, or when the file already
+          uses the mode.
+        type: string
+      note:
+        description: Note is the trade-off of the mode, said plainly. Optional.
+        type: string
+      set:
+        additionalProperties: {}
+        description: |-
+          Set lists flag values written when the mode is picked and the flag
+          is unset, such as the window LocalAI uses for MTP.
+        type: object
+      types:
+        description: |-
+          Types are the kinds read back as this mode. The first is written
+          when the mode is picked. Empty for Off and for a draft model.
+        items:
+          type: string
+        type: array
+    type: object
+  enginesettings.DraftStreams:
+    properties:
+      default:
+        type: string
+      doc:
+        type: string
+      option:
+        type: string
+    type: object
+  enginesettings.Drafting:
+    properties:
+      group:
+        description: |-
+          Group is the editor section the modes are drawn in. A client draws
+          its other flags under the modes as "more options".
+        type: string
+      model_key:
+        description: ModelKey is the flag key of the draft model file.
+        type: string
+      modes:
+        description: Modes are the choices, the first one being Off (no kind, no model).
+        items:
+          $ref: '#/definitions/enginesettings.DraftMode'
+        type: array
+      off_type:
+        description: |-
+          OffType is the kind Off writes when the model would draft without
+          one (a mode with Auto). Empty: Off always writes no kind.
+        type: string
+      streams:
+        allOf:
+        - $ref: '#/definitions/enginesettings.DraftStreams'
+        description: Streams is the load limit of drafting. Optional.
+      type_key:
+        description: TypeKey is the flag key of the drafting kind (a comma-separated
+          list).
+        type: string
+    type: object
   enginesettings.Flag:
     properties:
       cli:
@@ -1819,6 +1947,12 @@ definitions:
       key:
         description: Key is a stable identifier, unique in the table.
         type: string
+      localai_only:
+        description: |-
+          LocalAIOnly marks an option that LocalAI's backend reads and the
+          engine's own command line does not have. It has no CLI spelling, a
+          pasted command never sets it, and a built command leaves it out.
+        type: boolean
       max:
         type: number
       min:
@@ -1871,6 +2005,50 @@ definitions:
         type: integer
       to:
         type: integer
+    type: object
+  enginesettings.Memory:
+    properties:
+      advice:
+        description: Advice lists the recommended value of a control per kind.
+        items:
+          $ref: '#/definitions/enginesettings.Advice'
+        type: array
+      fallback:
+        allOf:
+        - $ref: '#/definitions/enginesettings.MemoryKind'
+        description: |-
+          Fallback is the kind a client assumes when the host is unknown. The
+          discrete rules are the cautious ones.
+      fit_fraction:
+        description: |-
+          FitFraction is the share of the device memory a profile's estimate may
+          take and still count as fitting. The rest is for the system, other
+          models and estimate error.
+        type: number
+      kinds:
+        description: Kinds says, for each kind, what it is and what the rules do there.
+        items:
+          $ref: '#/definitions/enginesettings.MemoryKindInfo'
+        type: array
+    type: object
+  enginesettings.MemoryKind:
+    enum:
+    - discrete
+    - unified
+    - system
+    type: string
+    x-enum-varnames:
+    - MemoryDiscrete
+    - MemoryUnified
+    - MemorySystem
+  enginesettings.MemoryKindInfo:
+    properties:
+      doc:
+        type: string
+      kind:
+        $ref: '#/definitions/enginesettings.MemoryKind'
+      label:
+        type: string
     type: object
   enginesettings.ParseResult:
     properties:
@@ -1962,10 +2140,20 @@ definitions:
     type: object
   enginesettings.Preset:
     properties:
+      best_for:
+        description: BestFor says in one line which use the profile fits. Optional.
+        type: string
       description:
         type: string
       id:
         type: string
+      memory:
+        additionalProperties:
+          $ref: '#/definitions/enginesettings.PresetMemory'
+        description: |-
+          Memory holds the values that depend on the memory kind of the host.
+          A kind it does not list uses Settings alone. Profiles only.
+        type: object
       name:
         type: string
       placement:
@@ -1974,10 +2162,59 @@ definitions:
         description: |-
           Placement is an optional tensor placement. Only for engines with the
           tensor-placement capability.
+      profile:
+        description: |-
+          Profile marks one of a set of exclusive setups, such as a balanced,
+          a long prompt and a many users setup. A client shows the profiles as
+          one choice and reads the current one back: a profile is current when
+          every key it lists has its value (unset for nil). A client that
+          switches from the current profile to another also unsets the keys the
+          current one sets and the new one does not list, so a value is removed
+          only when it came from a profile. A profile has no placement.
+        type: boolean
+      set:
+        description: |-
+          Set groups the profiles into independent choices. Empty is the default
+          set; ProfileSetConcurrency is the slot count. A switch within a set
+          only unsets the keys of that set's profiles. Profiles only.
+        type: string
       settings:
         additionalProperties: {}
-        description: Settings maps flag keys to values.
+        description: Settings maps flag keys to values. A nil value unsets the key.
         type: object
+      streams:
+        description: |-
+          Streams is the number of requests a concurrency profile serves at
+          once. Profiles only.
+        type: integer
+    type: object
+  enginesettings.PresetMemory:
+    properties:
+      min_memory:
+        description: |-
+          MinMemory is the smallest device memory, in bytes, the profile is
+          offered for. 0: any.
+        type: integer
+      note:
+        description: Note is the trade-off of the profile on this kind. Optional.
+        type: string
+      settings:
+        additionalProperties: {}
+        description: |-
+          Settings are merged over the profile's own settings for this kind. A
+          nil value unsets the key.
+        type: object
+      tight:
+        additionalProperties: {}
+        description: |-
+          Tight is merged over the result when the memory estimate of the
+          profile does not fit the device (Memory.FitFraction of it), for example
+          an 8-bit KV cache when the f16 one would not fit. Optional.
+        type: object
+      unsupported:
+        description: 'Unsupported: the profile is not offered for this kind; Note
+          says why.'
+        type: boolean
     type: object
   enginesettings.Schema:
     properties:
@@ -1989,10 +2226,24 @@ definitions:
         items:
           $ref: '#/definitions/enginesettings.Capability'
         type: array
+      collapsed_groups:
+        description: Collapsed lists the groups a client draws closed.
+        items:
+          type: string
+        type: array
       combined:
         items:
           $ref: '#/definitions/enginesettings.Combined'
         type: array
+      drafting:
+        allOf:
+        - $ref: '#/definitions/enginesettings.Drafting'
+        description: Drafting describes the drafting capability. Absent without it.
+      estimate:
+        additionalProperties:
+          type: string
+        description: Estimate maps VRAM estimate request fields to flag keys.
+        type: object
       example:
         description: Example is a sample command for the paste box (command-line only).
         type: string
@@ -2006,6 +2257,11 @@ definitions:
         type: array
       id:
         type: string
+      memory:
+        allOf:
+        - $ref: '#/definitions/enginesettings.Memory'
+        description: Memory describes the memory kinds of the profiles. Absent without
+          it.
       name:
         type: string
       placement:
@@ -3616,6 +3872,27 @@ definitions:
         example: 4f1c
         type: string
     type: object
+  github_com_mudler_LocalAI_core_http_endpoints_plugins.AddMarketplaceRequest:
+    properties:
+      id:
+        description: ID names the marketplace; the default comes from marketplace.json.
+        type: string
+      ref:
+        description: Ref is the branch or tag to follow; empty is the default branch.
+        type: string
+      source:
+        description: |-
+          Source is owner/repo, an https git URL, or an https URL of a
+          marketplace.json file.
+        type: string
+    type: object
+  github_com_mudler_LocalAI_core_http_endpoints_plugins.UpdateMarketplaceRequest:
+    properties:
+      enabled:
+        type: boolean
+      ref:
+        type: string
+    type: object
   hostops.RequestSummary:
     properties:
       deniedOptional:
@@ -3802,6 +4079,28 @@ definitions:
         items:
           $ref: '#/definitions/localai.ReplicaView'
         type: array
+    type: object
+  localai.DrainNodeResponse:
+    properties:
+      drain_deadline:
+        description: |-
+          DrainDeadline is when the replicas still on the node are removed even
+          if no replacement loaded. Absent for an immediate drain.
+        type: string
+      immediate:
+        description: |-
+          Immediate is true when the replicas were removed at once: the drain was
+          forced, or the node was not reachable.
+        type: boolean
+      leaving_replicas:
+        description: LeavingReplicas is the number of loaded replicas still on the
+          node.
+        type: integer
+      message:
+        type: string
+      status:
+        description: 'Status is the status of the node after the request: draining.'
+        type: string
     type: object
   localai.EngineCommandPreviewRequest:
     properties:
@@ -4184,6 +4483,19 @@ definitions:
     properties:
       origin:
         type: string
+    type: object
+  localai.PromptCacheClearRequest:
+    properties:
+      model:
+        description: Model is the model whose files go; empty clears every model.
+        type: string
+    type: object
+  localai.PromptCacheClearResponse:
+    properties:
+      bytes:
+        type: integer
+      files:
+        type: integer
     type: object
   localai.RecommendedHardwareInfo:
     properties:
@@ -4571,6 +4883,20 @@ definitions:
     type: object
   modeladmin.VRAMRequest:
     properties:
+      batch:
+        description: |-
+          Batch is the logical batch (parameters.batch). Absent uses the model's
+          config; 0 uses LocalAI's default for this host.
+        type: integer
+      cache_type_k:
+        description: |-
+          CacheTypeK and CacheTypeV are llama.cpp KV cache types (f16, q8_0,
+          q4_0, ...). Empty uses the model's config, then f16. They size the KV
+          cache of the runtime breakdown, and the KV term of the total when
+          KVQuantBits is not set.
+        type: string
+      cache_type_v:
+        type: string
       context_size:
         type: integer
       gpu_layers:
@@ -4579,9 +4905,22 @@ definitions:
         type: integer
       model:
         type: string
+      ubatch:
+        description: |-
+          UBatch is the physical batch (the ubatch option), capped by the batch.
+          Absent uses the model's config; 0 means the same as the batch.
+        type: integer
     type: object
   modeladmin.VRAMResponse:
     properties:
+      architecture:
+        description: |-
+          Architecture is general.architecture of a local GGUF model file, and
+          MTPLayers the layers of its embedded multi-token prediction head (absent
+          without one). VocabSize is the number of tokens of its vocabulary. The
+          model editor reads them to offer MTP and to say whether a draft model
+          fits. Absent when unknown.
+        type: string
       block_count:
         description: |-
           BlockCount is the number of layers of the model, read from the GGUF
@@ -4598,10 +4937,21 @@ definitions:
         type: integer
       model_max_context:
         type: integer
+      mtp_layers:
+        type: integer
+      runtime:
+        allOf:
+        - $ref: '#/definitions/vram.RuntimeBreakdown'
+        description: |-
+          Runtime is the KV cache and compute buffer part of a llama.cpp model
+          for the KV cache types and physical batch of the request. Absent when
+          the estimate has no weight files.
       size_bytes:
         type: integer
       size_display:
         type: string
+      vocab_size:
+        type: integer
       vram_bytes:
         type: integer
       vram_display:
@@ -5095,6 +5445,34 @@ definitions:
       updatedAt:
         type: string
     type: object
+  nodes.EffectiveLimits:
+    properties:
+      max_active_backends:
+        type: integer
+      memory_reclaimer_enabled:
+        type: boolean
+      memory_reclaimer_threshold:
+        type: number
+      model_swap:
+        type: boolean
+      sources:
+        additionalProperties:
+          type: string
+        type: object
+      vram_budget:
+        type: string
+    type: object
+  nodes.NodeLimits:
+    properties:
+      max_active_backends:
+        type: integer
+      memory_reclaimer_threshold:
+        type: number
+      model_swap:
+        type: boolean
+      vram_budget:
+        type: string
+    type: object
   nodes.NodeModel:
     properties:
       address:
@@ -5131,6 +5509,11 @@ definitions:
         type: string
       replica_index:
         type: integer
+      size_bytes:
+        description: |-
+          SizeBytes is the memory estimate the replica was placed with, for the
+          largest-first eviction order (size_aware_eviction). 0 when unknown.
+        type: integer
       state:
         description: staging, loading, loaded, unloading, idle
         type: string
@@ -5166,6 +5549,11 @@ definitions:
           $ref: '#/definitions/p2p.DeviceView'
         type: array
     type: object
+  p2p.DeviceSessionRequest:
+    properties:
+      credential:
+        type: string
+    type: object
   p2p.DeviceView:
     properties:
       all_models:
@@ -5189,10 +5577,21 @@ definitions:
       online:
         description: Online is true while the device is connected.
         type: boolean
+      owner_id:
+        description: |-
+          OwnerID is the user whose invite paired the device; empty for the
+          API key of LOCALAI_API_KEY.
+        type: string
+      owner_name:
+        description: OwnerName is the display name of the owner, when known.
+        type: string
       path:
         $ref: '#/definitions/p2p.PathView'
       peer_id:
         type: string
+      sign_in:
+        description: SignIn is true when the device signs in as its owner.
+        type: boolean
       status:
         description: Status is active or revoked.
         type: string
@@ -5331,6 +5730,38 @@ definitions:
           type: string
         type: array
     type: object
+  p2p.MyMintRequest:
+    properties:
+      label:
+        type: string
+      ttl_seconds:
+        description: |-
+          TTLSeconds is the life of the invite: 600 (or max_ttl_seconds, when
+          shorter) when zero, at most max_ttl_seconds.
+        type: integer
+    type: object
+  p2p.MyPairing:
+    properties:
+      available:
+        description: |-
+          Available is true when the server is in mode share, so a device can
+          pair now.
+        type: boolean
+      devices:
+        description: Devices is the number of active devices of the user.
+        type: integer
+      limits:
+        $ref: '#/definitions/p2p.UserPairingLimits'
+      mode:
+        description: Mode is the P2P mode in effect.
+        type: string
+      pending_invites:
+        description: PendingInvites is the number of pending invites of the user.
+        type: integer
+      reason:
+        description: 'Reason says why not: not_share.'
+        type: string
+    type: object
   p2p.OKResponse:
     properties:
       ok:
@@ -5378,15 +5809,26 @@ definitions:
         allOf:
         - $ref: '#/definitions/p2p.ClientKey'
         description: ClientKey is the API key of a remote invite; it is shown once.
+      device_credential:
+        description: |-
+          DeviceCredential lets the device of a sign-in invite sign in as its
+          owner over P2P; it is shown once. Absent for other invites.
+        type: string
       device_id:
         type: string
       kind:
+        type: string
+      owner_name:
+        description: OwnerName names the account the device signs in as, when known.
         type: string
       phrase:
         description: Phrase is shown on both sides; the person compares them.
         type: string
       server:
         $ref: '#/definitions/p2p.ServerInfo'
+      sign_in:
+        description: SignIn is true when the device got a credential.
+        type: boolean
     type: object
   p2p.RegenerateIdentityRequest:
     properties:
@@ -5553,6 +5995,17 @@ definitions:
       version:
         type: string
     type: object
+  p2p.SessionUser:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      role:
+        type: string
+    type: object
   p2p.SetRelayLimitsRequest:
     properties:
       circuit_bytes:
@@ -5566,6 +6019,21 @@ definitions:
           RateBPS is the bandwidth of one circuit in each direction, in bytes
           per second.
         type: integer
+    type: object
+  p2p.SetUserPairingRequest:
+    properties:
+      allow_open_relay:
+        type: boolean
+      max_devices:
+        type: integer
+      max_pending:
+        type: integer
+      max_ttl_seconds:
+        type: integer
+      omit_lan_addrs:
+        type: boolean
+      relays:
+        type: string
     type: object
   p2p.SplitNodeRelay:
     properties:
@@ -5761,6 +6229,878 @@ definitions:
       running:
         description: Running is true when the host runs.
         type: boolean
+    type: object
+  p2p.UserPairingLimits:
+    properties:
+      max_devices:
+        type: integer
+      max_mints_per_hour:
+        description: MaxMintsPerHour is fixed in code.
+        type: integer
+      max_pending:
+        type: integer
+      max_ttl_seconds:
+        type: integer
+    type: object
+  p2p.UserPairingSettings:
+    properties:
+      allow_open_relay:
+        type: boolean
+      max_devices:
+        type: integer
+      max_pending:
+        type: integer
+      max_ttl_seconds:
+        type: integer
+      omit_lan_addrs:
+        type: boolean
+      relays:
+        description: Relays is auto or none.
+        type: string
+    type: object
+  plugins.AgentRef:
+    properties:
+      description:
+        type: string
+      disallowedTools:
+        items:
+          type: string
+        type: array
+      maxTurns:
+        type: integer
+      model:
+        type: string
+      name:
+        type: string
+      path:
+        type: string
+      skills:
+        items:
+          type: string
+        type: array
+      tools:
+        items:
+          type: string
+        type: array
+    type: object
+  plugins.CatalogItem:
+    properties:
+      author:
+        type: string
+      category:
+        type: string
+      description:
+        type: string
+      homepage:
+        type: string
+      installs:
+        description: Installs are the installs of the plugin that the caller can see.
+        items:
+          $ref: '#/definitions/plugins.InstallRef'
+        type: array
+      marketplace:
+        type: string
+      name:
+        type: string
+      plugin:
+        description: PluginID is name@marketplace, the ID that inspect takes.
+        type: string
+      reason:
+        description: Reason says why an entry is not supported.
+        type: string
+      reviewed:
+        allOf:
+        - $ref: '#/definitions/plugins.ReviewedVersion'
+        description: |-
+          Reviewed is the last inspect of the plugin by anyone: the version and
+          what it contributes.
+      runsCode:
+        description: |-
+          RunsCode says whether the plugin runs code, from RunsCodeFrom; nil
+          when nothing says. Inspect tells for sure for the version it fetches.
+        type: boolean
+      runsCodeFrom:
+        description: |-
+          RunsCodeFrom is where RunsCode comes from: an install, the last
+          review (inspect) of the plugin, or the runsCode that the curated
+          marketplace claims (a hint; the review decides).
+        type: string
+      source:
+        type: object
+      strict:
+        type: boolean
+      supported:
+        type: boolean
+      tags:
+        items:
+          type: string
+        type: array
+      version:
+        type: string
+    type: object
+  plugins.CatalogPage:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/plugins.CatalogItem'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  plugins.ChatPluginsRequest:
+    properties:
+      "off":
+        items:
+          type: string
+        type: array
+    type: object
+  plugins.ChatPluginsResponse:
+    properties:
+      "off":
+        items:
+          type: string
+        type: array
+    type: object
+  plugins.CommandRef:
+    properties:
+      allowedTools:
+        items:
+          type: string
+        type: array
+      argumentHint:
+        type: string
+      arguments:
+        items:
+          type: string
+        type: array
+      description:
+        type: string
+      disableModelInvocation:
+        type: boolean
+      model:
+        type: string
+      name:
+        type: string
+      path:
+        type: string
+      shellInjection:
+        type: boolean
+    type: object
+  plugins.FileChange:
+    properties:
+      code:
+        type: boolean
+      newLines:
+        type: integer
+      oldLines:
+        description: |-
+          OldLines and NewLines count the lines of each side; 0 for a missing
+          side.
+        type: integer
+      path:
+        type: string
+    type: object
+  plugins.FileDiff:
+    properties:
+      diff:
+        type: string
+      path:
+        type: string
+    type: object
+  plugins.HookHandlerRef:
+    properties:
+      args:
+        items:
+          type: string
+        type: array
+      command:
+        type: string
+      timeout:
+        type: integer
+      type:
+        type: string
+      url:
+        description: URL is where an http hook sends the hook payloads.
+        type: string
+    type: object
+  plugins.HookRef:
+    properties:
+      event:
+        type: string
+      handlers:
+        items:
+          $ref: '#/definitions/plugins.HookHandlerRef'
+        type: array
+      matcher:
+        type: string
+    type: object
+  plugins.InspectRequest:
+    properties:
+      plugin:
+        description: Plugin is name@marketplace.
+        type: string
+    type: object
+  plugins.InstallDetail:
+    properties:
+      approvedAt:
+        type: string
+      approvedBy:
+        type: string
+      codeFiles:
+        items:
+          type: string
+        type: array
+      codeReasons:
+        items:
+          type: string
+        type: array
+      createdAt:
+        type: string
+      description:
+        type: string
+      digest:
+        type: string
+      enabled:
+        description: Enabled and NeedsReenable are the caller's own state.
+        type: boolean
+      files:
+        items:
+          $ref: '#/definitions/store.File'
+        type: array
+      hosts:
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      installedBy:
+        type: string
+      model:
+        $ref: '#/definitions/plugins.Model'
+      name:
+        type: string
+      needsReenable:
+        type: boolean
+      owner:
+        type: string
+      plugin:
+        type: string
+      previousDigest:
+        type: string
+      runsCode:
+        type: boolean
+      scope:
+        type: string
+      sha:
+        type: string
+      sizeBytes:
+        type: integer
+      skipped:
+        items:
+          $ref: '#/definitions/store.Skipped'
+        type: array
+      state:
+        type: string
+      updateDigest:
+        type: string
+      updateSha:
+        type: string
+      updatedAt:
+        type: string
+      version:
+        type: string
+    type: object
+  plugins.InstallList:
+    properties:
+      installs:
+        items:
+          $ref: '#/definitions/plugins.InstallView'
+        type: array
+    type: object
+  plugins.InstallRef:
+    properties:
+      id:
+        type: string
+      scope:
+        type: string
+      state:
+        type: string
+    type: object
+  plugins.InstallRequest:
+    properties:
+      scope:
+        description: Scope is "user" (the default) or "instance".
+        type: string
+      token:
+        type: string
+    type: object
+  plugins.InstallView:
+    properties:
+      approvedAt:
+        type: string
+      approvedBy:
+        type: string
+      createdAt:
+        type: string
+      description:
+        type: string
+      digest:
+        type: string
+      enabled:
+        description: Enabled and NeedsReenable are the caller's own state.
+        type: boolean
+      id:
+        type: string
+      installedBy:
+        type: string
+      name:
+        type: string
+      needsReenable:
+        type: boolean
+      owner:
+        type: string
+      plugin:
+        type: string
+      previousDigest:
+        type: string
+      runsCode:
+        type: boolean
+      scope:
+        type: string
+      sha:
+        type: string
+      state:
+        type: string
+      updateDigest:
+        type: string
+      updateSha:
+        type: string
+      updatedAt:
+        type: string
+      version:
+        type: string
+    type: object
+  plugins.JobAccepted:
+    properties:
+      jobID:
+        type: string
+      plugin:
+        type: string
+    type: object
+  plugins.MCPRef:
+    properties:
+      args:
+        items:
+          type: string
+        type: array
+      command:
+        type: string
+      env:
+        additionalProperties:
+          type: string
+        type: object
+      headers:
+        additionalProperties:
+          type: string
+        type: object
+      headersHelper:
+        description: |-
+          HeadersHelper is a shell command that Claude Code runs for the
+          headers. LocalAI does not run it; it makes the plugin code.
+        type: string
+      name:
+        type: string
+      type:
+        type: string
+      url:
+        type: string
+    type: object
+  plugins.Marketplace:
+    properties:
+      active:
+        description: 'Active is enabled and not suspended: browse and install read
+          it.'
+        type: boolean
+      createdAt:
+        type: string
+      createdBy:
+        type: string
+      default:
+        description: Default marks a marketplace that LocalAI ships (the curated one).
+        type: boolean
+      enabled:
+        type: boolean
+      headSha:
+        type: string
+      id:
+        type: string
+      kind:
+        type: string
+      lastError:
+        description: LastError is a short code of the last failed refresh.
+        type: string
+      location:
+        type: string
+      name:
+        type: string
+      ref:
+        type: string
+      refreshedAt:
+        type: string
+      suspended:
+        description: |-
+          Suspended is set for a default marketplace while the "official
+          libraries" switch is off.
+        type: boolean
+      updatedAt:
+        type: string
+    type: object
+  plugins.MarketplaceList:
+    properties:
+      marketplaces:
+        items:
+          $ref: '#/definitions/plugins.Marketplace'
+        type: array
+    type: object
+  plugins.Model:
+    properties:
+      agents:
+        items:
+          $ref: '#/definitions/plugins.AgentRef'
+        type: array
+      bin:
+        items:
+          type: string
+        type: array
+      commands:
+        items:
+          $ref: '#/definitions/plugins.CommandRef'
+        type: array
+      description:
+        type: string
+      hooks:
+        items:
+          $ref: '#/definitions/plugins.HookRef'
+        type: array
+      mcpServers:
+        items:
+          $ref: '#/definitions/plugins.MCPRef'
+        type: array
+      name:
+        type: string
+      skills:
+        items:
+          $ref: '#/definitions/plugins.SkillRef'
+        type: array
+      skipped:
+        items:
+          $ref: '#/definitions/plugins.SkippedRef'
+        type: array
+      userConfig:
+        items:
+          $ref: '#/definitions/plugins.OptionRef'
+        type: array
+      version:
+        type: string
+    type: object
+  plugins.MyState:
+    properties:
+      config:
+        type: object
+      enabled:
+        type: boolean
+      install:
+        type: string
+      needsReenable:
+        type: boolean
+      secretsSet:
+        description: |-
+          SecretsSet names the sensitive options that have a value. Empty until
+          sealed secrets exist (spec 12.4).
+        items:
+          type: string
+        type: array
+    type: object
+  plugins.MyStateRequest:
+    properties:
+      config:
+        description: Config replaces the non-sensitive settings of the plugin.
+        type: object
+      enabled:
+        type: boolean
+      reenable:
+        description: |-
+          Reenable confirms turning on an install that runs code since the
+          caller last turned it on.
+        type: boolean
+      secrets:
+        additionalProperties:
+          type: string
+        description: Secrets sets sensitive settings. Not supported yet (422).
+        type: object
+    type: object
+  plugins.OptionRef:
+    properties:
+      default: {}
+      description:
+        type: string
+      key:
+        type: string
+      max:
+        type: number
+      min:
+        type: number
+      multiple:
+        type: boolean
+      options:
+        items:
+          type: string
+        type: array
+      required:
+        type: boolean
+      sensitive:
+        type: boolean
+      title:
+        type: string
+      type:
+        type: string
+    type: object
+  plugins.Preview:
+    properties:
+      codeFiles:
+        items:
+          type: string
+        type: array
+      codeReasons:
+        items:
+          type: string
+        type: array
+      description:
+        type: string
+      digest:
+        type: string
+      entry:
+        type: string
+      expiresAt:
+        type: string
+      fileCount:
+        type: integer
+      files:
+        items:
+          $ref: '#/definitions/store.File'
+        type: array
+      hosts:
+        description: Hosts are the hosts that the remote MCP servers connect to.
+        items:
+          type: string
+        type: array
+      marketplace:
+        type: string
+      model:
+        $ref: '#/definitions/plugins.Model'
+      name:
+        type: string
+      plugin:
+        type: string
+      runsCode:
+        type: boolean
+      sha:
+        description: |-
+          SHA is the full commit the files come from; Digest names the files
+          and the effective manifest.
+        type: string
+      sizeBytes:
+        type: integer
+      token:
+        description: Token confirms this preview once, before ExpiresAt.
+        type: string
+      version:
+        type: string
+    type: object
+  plugins.ReviewedVersion:
+    properties:
+      checkedAt:
+        type: string
+      codeReasons:
+        items:
+          type: string
+        type: array
+      digest:
+        type: string
+      hosts:
+        items:
+          type: string
+        type: array
+      model:
+        $ref: '#/definitions/plugins.Model'
+      runsCode:
+        type: boolean
+      sha:
+        type: string
+    type: object
+  plugins.SkillRef:
+    properties:
+      allowedTools:
+        items:
+          type: string
+        type: array
+      argumentHint:
+        type: string
+      arguments:
+        items:
+          type: string
+        type: array
+      description:
+        type: string
+      dir:
+        type: string
+      disableModelInvocation:
+        type: boolean
+      model:
+        type: string
+      name:
+        type: string
+      path:
+        type: string
+      shellInjection:
+        type: boolean
+      userInvocable:
+        type: boolean
+    type: object
+  plugins.SkippedRef:
+    properties:
+      component:
+        type: string
+      name:
+        type: string
+      reasonCode:
+        type: string
+    type: object
+  plugins.UpdatePreview:
+    properties:
+      added:
+        items:
+          $ref: '#/definitions/plugins.FileChange'
+        type: array
+      changed:
+        items:
+          $ref: '#/definitions/plugins.FileChange'
+        type: array
+      codeFiles:
+        items:
+          type: string
+        type: array
+      codeItems:
+        description: |-
+          CodeItems are the code components that the new version adds or
+          changes (command hooks, stdio MCP servers, bin files), described for
+          the review. Some come from the marketplace entry and are in no file.
+        items:
+          type: string
+        type: array
+      diffs:
+        description: |-
+          Diffs are the unified diffs of the changed code files, up to
+          MaxDiffBytes in all; Truncated says that some were left out.
+        items:
+          $ref: '#/definitions/plugins.FileDiff'
+        type: array
+      expiresAt:
+        type: string
+      fromDigest:
+        type: string
+      fromSha:
+        type: string
+      install:
+        type: string
+      needsCodeReview:
+        description: |-
+          NeedsCodeReview is set for an instance install whose code changed:
+          a code file, the code reasons or the code components. The approval
+          needs the administrator's browser session and a tick for each file of
+          CodeFiles.
+        type: boolean
+      newCodeFiles:
+        description: |-
+          NewCodeFiles are the files that are code in the new version and were
+          not code before, although their bytes did not change: a hook of the
+          marketplace entry can start to run a file that was plain text. They
+          have no diff, so the review shows their full text. They are also in
+          CodeFiles.
+        items:
+          type: string
+        type: array
+      newCodeReasons:
+        items:
+          type: string
+        type: array
+      oldCodeReasons:
+        items:
+          type: string
+        type: array
+      plugin:
+        type: string
+      removed:
+        items:
+          $ref: '#/definitions/plugins.FileChange'
+        type: array
+      toDigest:
+        type: string
+      toSha:
+        type: string
+      token:
+        type: string
+      truncated:
+        type: boolean
+    type: object
+  plugins.UpdateRequest:
+    properties:
+      approved_files:
+        description: |-
+          ApprovedFiles names each changed code file when the preview has
+          needsCodeReview.
+        items:
+          type: string
+        type: array
+      token:
+        type: string
+    type: object
+  promptcache.Result:
+    properties:
+      bytes:
+        type: integer
+      files:
+        type: integer
+    type: object
+  promptcache.State:
+    enum:
+    - "on"
+    - paused_low_disk
+    - disabled_disk_full
+    - unknown
+    type: string
+    x-enum-varnames:
+    - StateOn
+    - StatePaused
+    - StateDisabled
+    - StateUnknown
+  promptcache.Status:
+    properties:
+      cache_bytes:
+        description: CacheBytes is what the cache holds after the sweep.
+        type: integer
+      critical_watermark_bytes:
+        type: integer
+      effective_cap_bytes:
+        type: integer
+      free_bytes:
+        description: |-
+          FreeBytes and TotalBytes are the numbers of the filesystem that holds
+          the cache (the models filesystem when they share it).
+        type: integer
+      low_watermark_bytes:
+        description: |-
+          LowWatermarkBytes and CriticalWatermarkBytes are the thresholds of
+          that filesystem.
+        type: integer
+      max_bytes:
+        description: |-
+          MaxBytes is the configured cap, EffectiveCapBytes the cap the sweep
+          enforced: never more than the cache plus the free space over the low
+          watermark, so the cache never fills the disk.
+        type: integer
+      removed:
+        allOf:
+        - $ref: '#/definitions/promptcache.Result'
+        description: Removed is what the sweep deleted.
+      shares_models_disk:
+        description: SharesModelsDisk is true when the models are on the same filesystem.
+        type: boolean
+      state:
+        $ref: '#/definitions/promptcache.State'
+      total_bytes:
+        type: integer
+    type: object
+  promptcachesvc.ModelUsage:
+    properties:
+      bytes:
+        type: integer
+      files:
+        type: integer
+      model:
+        description: |-
+          Model is the name of the model configuration, empty when no installed
+          model has these files (a deleted model, or a changed model file).
+        type: string
+      model16:
+        type: string
+    type: object
+  promptcachesvc.NodeStatus:
+    properties:
+      bytes:
+        type: integer
+      enabled:
+        description: |-
+          Enabled is false when the tier is off on the node; Error says why a
+          node gave no usage (offline, no answer).
+        type: boolean
+      error:
+        type: string
+      files:
+        type: integer
+      models:
+        items:
+          $ref: '#/definitions/promptcachesvc.ModelUsage'
+        type: array
+      namespaces:
+        type: integer
+      node:
+        type: string
+      off_reason:
+        description: |-
+          OffReason says why the tier is off on the node: no_path,
+          switched_off, network_disk or not_writable.
+        type: string
+      status:
+        $ref: '#/definitions/promptcache.Status'
+    type: object
+  promptcachesvc.StatusReport:
+    properties:
+      enabled:
+        description: Enabled is the global switch with a place to keep the files.
+        type: boolean
+      nodes:
+        items:
+          $ref: '#/definitions/promptcachesvc.NodeStatus'
+        type: array
+      shared:
+        description: Shared is true when every user shares one namespace.
+        type: boolean
+      total:
+        allOf:
+        - $ref: '#/definitions/promptcachesvc.Total'
+        description: Total sums the nodes that answered.
+    type: object
+  promptcachesvc.Total:
+    properties:
+      bytes:
+        type: integer
+      cap_bytes:
+        description: CapBytes sums the effective caps of the nodes.
+        type: integer
+      files:
+        type: integer
+      nodes:
+        description: |-
+          Nodes counts the nodes that answered, Unreachable the ones that did
+          not.
+        type: integer
+      unreachable:
+        type: integer
     type: object
   proposals.Event:
     properties:
@@ -6310,6 +7650,11 @@ definitions:
       items:
         $ref: '#/definitions/resourcesets.Entry'
       type: array
+    type: object
+  routes.featureDefaultRequest:
+    properties:
+      enabled:
+        type: boolean
     type: object
   schema.APIError:
     properties:
@@ -7098,6 +8443,13 @@ definitions:
           unattended runs: off (the default), registries or all, capped by the
           administrator's ceiling.
         type: string
+      plugins:
+        description: |-
+          Plugins are the install IDs of the plugins the agent may use (exact
+          grant: empty grants none).
+        items:
+          type: string
+        type: array
       project_id:
         description: |-
           ProjectID is the project the agent belongs to, absent for an agent of no
@@ -7722,6 +9074,11 @@ definitions:
         type: string
       network:
         type: string
+      plugins:
+        description: Plugins are the install IDs of the plugins the agent may use.
+        items:
+          type: string
+        type: array
       project_id:
         description: |-
           ProjectID makes the agent a project agent. It is read on create only: it
@@ -9413,6 +10770,11 @@ definitions:
         description: |-
           Place is set on a chat that a messaging connection started, when the
           connection kept where it lives.
+      plugins_off:
+        description: PluginsOff are the plugin install IDs switched off in the chat.
+        items:
+          type: string
+        type: array
       project_id:
         description: |-
           ProjectID is the project the chat belongs to; PulledProjects are the
@@ -9532,6 +10894,11 @@ definitions:
         description: |-
           Place is set on a chat that a messaging connection started, when the
           connection kept where it lives.
+      plugins_off:
+        description: PluginsOff are the plugin install IDs switched off in the chat.
+        items:
+          type: string
+        type: array
       project_id:
         description: |-
           ProjectID is the project the chat belongs to; PulledProjects are the
@@ -10692,6 +12059,14 @@ definitions:
         type: string
       name:
         type: string
+      plugin_install:
+        description: |-
+          PluginInstall and PluginServer name the plugin install and the MCP
+          server of a connector that a plugin owns. Such a connector is read
+          only: a change answers 403. Absent for a connector you made.
+        type: string
+      plugin_server:
+        type: string
       transport:
         description: http or stdio
         type: string
@@ -10715,6 +12090,9 @@ definitions:
         type: string
       "off":
         type: boolean
+      plugin_install:
+        description: PluginInstall is the plugin install that owns the connector.
+        type: string
       reason:
         type: string
       usable:
@@ -12134,6 +13512,8 @@ definitions:
         type: string
       agent_name:
         type: string
+      argument_hint:
+        type: string
       description:
         type: string
       editable:
@@ -12172,8 +13552,26 @@ definitions:
           New is true for a personal skill that was imported and that no chat has
           used yet. The first use clears it.
         type: boolean
+      no_menu:
+        type: boolean
+      no_model:
+        description: |-
+          NoModel is set for a plugin skill that only a person may call; NoMenu
+          for one that stays out of the / menu. ArgumentHint is the hint of its
+          arguments in that menu.
+        type: boolean
       path:
         description: Path is the path of its SKILL.md as the model sees it.
+        type: string
+      plugin:
+        description: |-
+          Plugin, PluginTitle and PluginInstall name the plugin of a skill of the
+          plugin layer: its plugin ID (name@marketplace), its name, and the
+          install that provides it.
+        type: string
+      plugin_install:
+        type: string
+      plugin_title:
         type: string
       project:
         description: |-
@@ -12406,6 +13804,13 @@ definitions:
           Each must be one of your own for that add-on. A single string is read as
           a set of one.
       mcp_off:
+        items:
+          type: string
+        type: array
+      plugins_off:
+        description: |-
+          PluginsOff are the plugin install IDs the chat starts with off, in the
+          form PUT /api/chats/{id}/plugins takes. At most 200.
         items:
           type: string
         type: array
@@ -15663,6 +17068,14 @@ definitions:
         type: number
       seed:
         type: integer
+      service_tier:
+        description: |-
+          ServiceTier is the OpenAI service tier of the request: auto, default,
+          flex or priority. It sets the priority class the backend serves the
+          request with (core/priority); a caller who is not an administrator
+          cannot raise it above default. After the request is read it holds the
+          tier that applied.
+        type: string
       size:
         description: image
         type: string
@@ -15723,6 +17136,11 @@ definitions:
       model:
         type: string
       object:
+        type: string
+      service_tier:
+        description: |-
+          ServiceTier is the service tier the request was served with, set on
+          the chat and text completion responses.
         type: string
       usage:
         allOf:
@@ -17335,6 +18753,27 @@ definitions:
           which a client sends back (Last-Event-ID or ?after=) to resume.
         type: integer
     type: object
+  store.File:
+    properties:
+      mode:
+        description: '"0644" or "0755"'
+        type: string
+      path:
+        type: string
+      sha256:
+        type: string
+      size:
+        type: integer
+    type: object
+  store.Skipped:
+    properties:
+      component:
+        type: string
+      name:
+        type: string
+      reason:
+        type: string
+    type: object
   studio.ContextFile:
     properties:
       index:
@@ -17735,6 +19174,30 @@ definitions:
         $ref: '#/definitions/voiceprofile.AudioMetadata'
       transcript:
         type: string
+    type: object
+  vram.RuntimeBreakdown:
+    properties:
+      approximate:
+        description: |-
+          Approximate is true when the layers and heads were not read from a
+          GGUF header, so the KV cache is a rule of thumb per token.
+        type: boolean
+      cache_type_k:
+        type: string
+      cache_type_v:
+        type: string
+      compute_bytes:
+        type: integer
+      compute_display:
+        type: string
+      context_length:
+        type: integer
+      kv_cache_bytes:
+        type: integer
+      kv_cache_display:
+        type: string
+      ubatch:
+        type: integer
     type: object
   vram.VRAMAt:
     properties:
@@ -21109,6 +22572,77 @@ paths:
       summary: List model aliases
       tags:
       - models
+  /api/auth/admin/features:
+    get:
+      description: Returns the agent, general and API features with their labels,
+        the default a user gets when their permissions do not name the feature (an
+        administrator's override, or the built-in default), and a configurable flag
+        that tells whether PUT /api/auth/admin/features/{feature}/default accepts
+        the feature. Also returns the names of the installed models.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List the features and their defaults (admin)
+      tags:
+      - auth
+  /api/auth/admin/features/{feature}/default:
+    put:
+      consumes:
+      - application/json
+      description: Sets the default of a feature for every user whose permissions
+        do not name it. An explicit value in a user's permissions still wins, and
+        administrators always have every feature. Only features reported as configurable
+        by GET /api/auth/admin/features accept a default; others answer 400. The default
+        is stored in the auth database, so every frontend applies it within 30 seconds.
+      parameters:
+      - description: Feature key, for example p2p_pair
+        in: path
+        name: feature
+        required: true
+        type: string
+      - description: The new default
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/routes.featureDefaultRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.FeatureMeta'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Change the default of a feature (admin)
+      tags:
+      - auth
   /api/backend-logs:
     get:
       description: Returns a sorted list of model IDs that have captured backend process
@@ -22746,6 +24280,47 @@ paths:
       summary: Edit a message that waits for the model.
       tags:
       - chats
+  /api/chats/{id}/plugins:
+    put:
+      consumes:
+      - application/json
+      description: Sets the installs switched off in one chat, replacing the list.
+        A chat keeps what is off, so a plugin turned on later is on in existing chats.
+        At most 200 install IDs. Needs the chats and the plugins features.
+      parameters:
+      - description: Chat ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Install IDs switched off
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/plugins.ChatPluginsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: The list as stored
+          schema:
+            $ref: '#/definitions/plugins.ChatPluginsResponse'
+        "400":
+          description: Invalid list
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: No such chat
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "501":
+          description: The chats of this server cannot keep plugin switches
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Switch plugins off in a chat
+      tags:
+      - Plugins
   /api/chats/{id}/project:
     put:
       description: 'project_id is the project''s id; an empty one takes the chat out
@@ -29988,12 +31563,12 @@ paths:
       - models
   /api/models/{id}/load-status:
     get:
-      description: 'Returns the live state of a distributed cold load (when the model loads on several nodes, the load that is furthest along): job id, phase,
-        node, byte progress, ETA, lease freshness, and for a failed attempt the cause,
-        whether the stop is pending and when the model is released. 404 means no load
-        exists for the model. A database error is 503, never an empty answer. This
-        is the same `loading` object the 503 response carries while a model is still
-        staging.'
+      description: 'Returns the live state of a distributed cold load (when the model
+        loads on several nodes, the load that is furthest along): job id, phase, node,
+        byte progress, ETA, lease freshness, and for a failed attempt the cause, whether
+        the stop is pending and when the model is released. 404 means no load exists
+        for the model. A database error is 503, never an empty answer. This is the
+        same `loading` object the 503 response carries while a model is still staging.'
       parameters:
       - description: Model ID
         in: path
@@ -30754,6 +32329,122 @@ paths:
       summary: Issue a motion WebSocket ticket (30 seconds, single use)
       tags:
       - motion
+  /api/nodes/{id}/drain:
+    post:
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Remove the node's replicas at once instead of waiting for replacements
+        in: query
+        name: force
+        type: boolean
+      - description: 'Drain deadline as a Go duration (default: the --drain-timeout
+          setting, 10m)'
+        in: query
+        name: timeout
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/localai.DrainNodeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Drain a node
+      tags:
+      - Nodes
+  /api/nodes/{id}/limits:
+    delete:
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/nodes.EffectiveLimits'
+        "404":
+          description: node not found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Clear a node's memory limit overrides
+      tags:
+      - Nodes
+    get:
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/nodes.EffectiveLimits'
+        "404":
+          description: node not found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Read a node's effective memory limits
+      tags:
+      - Nodes
+    put:
+      description: Sets max_active_backends (models kept loaded on the node, 0 = no
+        limit), vram_budget ("80%" or "12GB"; empty clears that override), memory_reclaimer_threshold
+        (0 to 1) and model_swap for one node. A key left out keeps its value. Returns
+        the effective limits. Admin only.
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: overrides to set
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/nodes.NodeLimits'
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/nodes.EffectiveLimits'
+        "400":
+          description: invalid value
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: node not found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Override a node's memory limits
+      tags:
+      - Nodes
   /api/nodes/{id}/max-replicas-per-model:
     delete:
       parameters:
@@ -30808,6 +32499,34 @@ paths:
             additionalProperties: true
             type: object
       summary: Update a node's max replicas per model
+      tags:
+      - Nodes
+  /api/nodes/{id}/resume:
+    post:
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Resume a draining node
       tags:
       - Nodes
   /api/nodes/{id}/split-server:
@@ -31099,11 +32818,66 @@ paths:
       summary: Mark notifications read.
       tags:
       - notifications
+  /api/p2p/device/session:
+    post:
+      consumes:
+      - application/json
+      description: 'Served only on the P2P protocol /localai/http/1, and only to a
+        paired device; the normal HTTP listener answers 404. The body carries the
+        credential that the redeem of a sign-in invite returned, as JSON or as the
+        form field "credential". The credential works only from the peer that redeemed
+        the invite. When the device is an active sign-in device, the credential matches,
+        the owner is active and still has the feature p2p_pair (admins always do),
+        the answer sets the session cookie: a form post gets 303 to /, JSON gets 200
+        with the user. Every other case gets the same 403. After 5 wrong credentials
+        from one peer in an hour the answer is 429.'
+      parameters:
+      - description: Device credential
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/p2p.DeviceSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/p2p.SessionUser'
+        "303":
+          description: Redirect to / for a form post
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Sign in with a device credential (over P2P only)
+      tags:
+      - p2p
   /api/p2p/devices:
     get:
       description: Lists the paired devices, revoked ones included, with how each
         one reaches the server now (path kind direct, hole_punched or relayed, the
-        relay and its limits). Needs P2P mode share. Admin only.
+        relay and its limits), the owner (owner_id, owner_name) and whether the device
+        signs in as its owner (sign_in). owner keeps the devices of one user. Needs
+        P2P mode share. Admin only.
+      parameters:
+      - description: Keep the devices of this user ID
+        in: query
+        name: owner
+        type: string
       produces:
       - application/json
       responses:
@@ -31300,6 +33074,231 @@ paths:
           schema:
             $ref: '#/definitions/schema.ErrorResponse'
       summary: Cancel a P2P invite
+      tags:
+      - p2p
+  /api/p2p/me:
+    get:
+      description: Whether a device can pair now (available is true in P2P mode share;
+        reason not_share otherwise), the limits of the user (max_devices, max_pending,
+        max_ttl_seconds, max_mints_per_hour) and how many devices and pending invites
+        the user has. Needs the feature p2p_pair and a user account (the API key of
+        LOCALAI_API_KEY gets 409 with error type needs_account).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/p2p.MyPairing'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: My P2P pairing
+      tags:
+      - p2p
+  /api/p2p/me/devices:
+    get:
+      description: Lists the devices the user paired, revoked ones included, with
+        the path each one uses now and when it was last seen. Needs P2P mode share,
+        the feature p2p_pair and a user account.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/p2p.DeviceList'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: List my P2P devices
+      tags:
+      - p2p
+  /api/p2p/me/devices/{id}:
+    delete:
+      description: 'Revokes a device of the user: it leaves the allowlist, its connections
+        close, the relays drop it and the web sessions it opened end. A device of
+        another user gets 404. Needs P2P mode share, the feature p2p_pair and a user
+        account.'
+      parameters:
+      - description: Device ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/p2p.RevokeResult'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Revoke one of my P2P devices
+      tags:
+      - p2p
+    patch:
+      consumes:
+      - application/json
+      description: A device of another user gets 404. Needs P2P mode share, the feature
+        p2p_pair and a user account.
+      parameters:
+      - description: Device ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New label
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/p2p.RenameDeviceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/p2p.OKResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Rename one of my P2P devices
+      tags:
+      - p2p
+  /api/p2p/me/invites:
+    get:
+      description: Lists the pending invites the user minted, without the links. Needs
+        P2P mode share, the feature p2p_pair and a user account.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/p2p.InviteList'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: List my pending P2P invites
+      tags:
+      - p2p
+    post:
+      consumes:
+      - application/json
+      description: 'Creates a one-time invite link for a device that signs in as the
+        user once it pairs: the redeem gives it a credential for POST /api/p2p/device/session.
+        The body takes label and ttl_seconds only; the kind (device, with sign-in),
+        the relays, open relays and local addresses come from the setting p2p_user_pairing,
+        and any other field is ignored. ttl_seconds above max_ttl_seconds gets 400.
+        429 with error type limit_reached when the user has max_pending pending invites
+        or max_devices devices, minted 10 invites in the last hour, or the server
+        has 20 pending sign-in invites. The link is shown once. Needs P2P mode share,
+        the feature p2p_pair and a user account.'
+      parameters:
+      - description: Label and life of the invite
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/p2p.MyMintRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/p2p.MintResult'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Pair one of my devices
+      tags:
+      - p2p
+  /api/p2p/me/invites/{id}:
+    delete:
+      description: Cancels a pending invite of the user and drops its relay pass.
+        An invite of another user gets 404. Needs P2P mode share, the feature p2p_pair
+        and a user account.
+      parameters:
+      - description: Invite ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/p2p.OKResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Cancel one of my P2P invites
       tags:
       - p2p
   /api/p2p/redeem:
@@ -31750,6 +33749,59 @@ paths:
       summary: P2P status
       tags:
       - p2p
+  /api/p2p/user-pairing:
+    get:
+      description: What an invite that a user mints for their own device carries (relays
+        auto or none, allow_open_relay, omit_lan_addrs) and the limits of each user
+        (max_devices, max_pending, max_ttl_seconds). It is kept in the auth database,
+        so every frontend uses the same setting. 409 without authentication. Admin
+        only.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/p2p.UserPairingSettings'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Read the P2P user pairing setting
+      tags:
+      - p2p
+    put:
+      consumes:
+      - application/json
+      description: A field left out stays as it is. relays is auto or none; max_devices
+        is 1 to 100, max_pending 1 to 20 and max_ttl_seconds 60 to 86400; any other
+        value gets 400. A change applies to the next invite and the next redeem; devices
+        and invites that exist stay. 409 without authentication. Admin only.
+      parameters:
+      - description: Fields to change
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/p2p.SetUserPairingRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/p2p.UserPairingSettings'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Change the P2P user pairing setting
+      tags:
+      - p2p
   /api/pii/analyze:
     post:
       description: 'Runs the configured PII detectors (NER and/or pattern tiers) over
@@ -31800,6 +33852,725 @@ paths:
       summary: Redact PII in a string by applying the configured policy.
       tags:
       - pii
+  /api/plugins/catalog:
+    get:
+      description: Lists the entries of the active marketplaces from their last good
+        list; nothing is fetched. runs_code keeps the entries known to run code (true)
+        or known to run none (false); an entry is known once a version of it was installed,
+        and inspect tells for sure. Needs the plugins feature.
+      parameters:
+      - description: Text in the name, description, category or tags
+        in: query
+        name: q
+        type: string
+      - description: Marketplace ID
+        in: query
+        name: marketplace
+        type: string
+      - description: Category
+        in: query
+        name: category
+        type: string
+      - description: Known to run code, or known to run none
+        in: query
+        name: runs_code
+        type: boolean
+      - description: First entry
+        in: query
+        name: offset
+        type: integer
+      - description: Entries per page (default 50, at most 200)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: One page
+          schema:
+            $ref: '#/definitions/plugins.CatalogPage'
+        "400":
+          description: Invalid query
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Browse the plugins
+      tags:
+      - Plugins
+  /api/plugins/catalog/{marketplace}/{name}:
+    get:
+      description: Returns one entry of an active marketplace, with the installs of
+        it that the caller can see. Needs the plugins feature.
+      parameters:
+      - description: Marketplace ID
+        in: path
+        name: marketplace
+        required: true
+        type: string
+      - description: Plugin name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: The entry
+          schema:
+            $ref: '#/definitions/plugins.CatalogItem'
+        "404":
+          description: No such entry or marketplace
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: One plugin of a marketplace
+      tags:
+      - Plugins
+  /api/plugins/inspect:
+    post:
+      consumes:
+      - application/json
+      description: Fetches the plugin at the commit its marketplace entry points at,
+        checks every file, computes the content digest, reads what it contributes
+        and whether it runs code, and returns a preview token. The token works once,
+        for 15 minutes, for the caller only. Any user with the plugins feature may
+        inspect.
+      parameters:
+      - description: Plugin ID (name@marketplace)
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/plugins.InspectRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: The preview and its token
+          schema:
+            $ref: '#/definitions/plugins.Preview'
+        "400":
+          description: Not name@marketplace, or an invalid plugin
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: No such entry, or its marketplace is off
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "422":
+          description: A source type LocalAI does not fetch (unsupported), or files
+            the checks refuse (content_refused)
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "429":
+          description: Too many inspects of this user, or too many at once on this
+            server (rate_limited)
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "502":
+          description: The plugin could not be fetched
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Inspect a plugin before an install
+      tags:
+      - Plugins
+  /api/plugins/inspect/{token}/files/{path}:
+    get:
+      description: Returns one file of the package that a preview token (of an inspect
+        or of an update preview) names, as plain text. It does not use the token up.
+        Only the caller who made the preview can read it.
+      parameters:
+      - description: Preview token
+        in: path
+        name: token
+        required: true
+        type: string
+      - description: File path inside the plugin
+        in: path
+        name: path
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: The file
+          schema:
+            type: string
+        "400":
+          description: Invalid or expired token, or an invalid path
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: No such file
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: One file of a preview, for review
+      tags:
+      - Plugins
+  /api/plugins/installs:
+    get:
+      description: Lists the installs for everyone and the caller's own, with the
+        caller's switch. An administrator adds all=true to list the personal installs
+        of every user. Needs the plugins feature.
+      parameters:
+      - description: Every install (administrators only)
+        in: query
+        name: all
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Installs
+          schema:
+            $ref: '#/definitions/plugins.InstallList'
+        "403":
+          description: all=true for a user
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: List the plugin installs
+      tags:
+      - Plugins
+    post:
+      consumes:
+      - application/json
+      description: 'Confirms a preview token and queues the install; the job fetches
+        the plugin again at the same commit and refuses files that differ from the
+        reviewed ones. scope is user (default: for the caller only, a plugin that
+        runs no code, while plugins_user_installs is on) or instance (for everyone,
+        administrators only). A plugin that runs code is installed for everyone only,
+        by an administrator from the browser: the request needs the administrator''s
+        own browser session and the header X-LocalAI-Confirm set to the plugin ID;
+        an API key or an MCP call gets 403 not_human_surface. The progress is in GET
+        /api/operations (isPlugin).'
+      parameters:
+      - description: Token and scope
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/plugins.InstallRequest'
+      - description: The plugin ID, for a plugin that runs code
+        in: header
+        name: X-LocalAI-Confirm
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Queued
+          schema:
+            $ref: '#/definitions/plugins.JobAccepted'
+        "400":
+          description: Invalid or used token (invalid_token), or an invalid scope
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "403":
+          description: needs_admin, code_for_everyone, forbidden or not_human_surface
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "409":
+          description: Installed already (conflict), or installed for everyone (instance_installed,
+            param names the install)
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "422":
+          description: Too many installs (limit_reached)
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Install a plugin
+      tags:
+      - Plugins
+  /api/plugins/installs/{id}:
+    delete:
+      description: Removes an install and the switches of its users. The owner removes
+        a personal install; an administrator removes any install.
+      parameters:
+      - description: Install ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Removed
+        "403":
+          description: forbidden
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: No such install
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Remove a plugin
+      tags:
+      - Plugins
+    get:
+      description: Returns an install with what its package contributes, the components
+        left out with their reasons, the code files and the hosts its remote MCP servers
+        connect to. A personal install of another user is not found, except for an
+        administrator.
+      parameters:
+      - description: Install ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: The install
+          schema:
+            $ref: '#/definitions/plugins.InstallDetail'
+        "404":
+          description: No such install
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: One plugin install
+      tags:
+      - Plugins
+  /api/plugins/installs/{id}/files/{path}:
+    get:
+      description: Returns one file of the installed package as plain text.
+      parameters:
+      - description: Install ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: File path inside the plugin
+        in: path
+        name: path
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: The file
+          schema:
+            type: string
+        "400":
+          description: Invalid path
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: No such install or file
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: One file of an installed plugin
+      tags:
+      - Plugins
+  /api/plugins/installs/{id}/me:
+    get:
+      description: Returns whether the caller has the install on, whether it waits
+        for a new confirmation because it now runs code, the caller's settings, and
+        which secret settings are set.
+      parameters:
+      - description: Install ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: The state
+          schema:
+            $ref: '#/definitions/plugins.MyState'
+        "403":
+          description: A personal install of another user
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: No such install
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: My state of a plugin
+      tags:
+      - Plugins
+    put:
+      consumes:
+      - application/json
+      description: Turns an install on or off for the caller and sets their settings.
+        Turning off keeps the settings. An install that runs code since the caller
+        turned it on answers 409 needs_reenable until the request also sends reenable
+        true. Secret settings are not supported yet (422).
+      parameters:
+      - description: Install ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Changes
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/plugins.MyStateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: The state
+          schema:
+            $ref: '#/definitions/plugins.MyState'
+        "400":
+          description: A setting the plugin does not have
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "403":
+          description: A personal install of another user
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: No such install
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "409":
+          description: needs_reenable
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "422":
+          description: Secret settings (unsupported)
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Turn a plugin on or off for me
+      tags:
+      - Plugins
+  /api/plugins/installs/{id}/rollback:
+    post:
+      description: Sets the previous version of an install again, with the rights
+        of an update; the version rolled back from becomes the available update. For
+        an install for everyone that runs code, in either version, the request needs
+        the administrator's own browser session with X-LocalAI-Confirm set to the
+        install ID.
+      parameters:
+      - description: Install ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: The install ID, when code is involved
+        in: header
+        name: X-LocalAI-Confirm
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: The install after the rollback
+          schema:
+            $ref: '#/definitions/plugins.InstallDetail'
+        "400":
+          description: No previous version
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "403":
+          description: blocked, forbidden or not_human_surface
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: No such install, or the previous version is gone
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "409":
+          description: The install changed meanwhile
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Roll a plugin back
+      tags:
+      - Plugins
+  /api/plugins/installs/{id}/update:
+    post:
+      consumes:
+      - application/json
+      description: Confirms an update preview and queues the update. When the preview
+        has needsCodeReview, the request needs the administrator's own browser session
+        with the header X-LocalAI-Confirm set to the install ID (else 403 not_human_surface),
+        and approved_files must name every changed code file. The progress is in GET
+        /api/operations (isPlugin).
+      parameters:
+      - description: Install ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Token and approved code files
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/plugins.UpdateRequest'
+      - description: The install ID, for an update whose code changed
+        in: header
+        name: X-LocalAI-Confirm
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Queued
+          schema:
+            $ref: '#/definitions/plugins.JobAccepted'
+        "400":
+          description: Invalid token, or a changed code file not approved
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "403":
+          description: blocked, forbidden or not_human_surface
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: No such install
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Update a plugin
+      tags:
+      - Plugins
+  /api/plugins/installs/{id}/update/preview:
+    post:
+      description: Fetches the newer version and returns the files added, removed
+        and changed, the unified diffs of the changed code files (256 KiB in all),
+        the old and new code reasons and a preview token. The owner of a personal
+        install or an administrator may ask. A personal install whose new version
+        runs code is blocked and keeps its version (403 blocked).
+      parameters:
+      - description: Install ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: The diff and its token
+          schema:
+            $ref: '#/definitions/plugins.UpdatePreview'
+        "403":
+          description: blocked or forbidden
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: No such install
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "409":
+          description: No update available (no_update)
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Preview the update of a plugin
+      tags:
+      - Plugins
+  /api/plugins/marketplaces:
+    get:
+      description: Lists the marketplaces of plugins compatible with the Claude Code
+        plugin format, with their state and the short code of the last failed refresh.
+        Needs the plugins feature.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Marketplaces
+          schema:
+            $ref: '#/definitions/plugins.MarketplaceList'
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "403":
+          description: The plugins feature is off for the caller
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "503":
+          description: Plugins are not set up on this server (plugins_unavailable)
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: List the plugin marketplaces
+      tags:
+      - Plugins
+    post:
+      consumes:
+      - application/json
+      description: Adds a marketplace (owner/repo, an https git URL or an https URL
+        of a marketplace.json file) and reads it at once. Nothing is kept when the
+        first read fails. Administrators only.
+      parameters:
+      - description: Source
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_mudler_LocalAI_core_http_endpoints_plugins.AddMarketplaceRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: The new marketplace
+          schema:
+            $ref: '#/definitions/plugins.Marketplace'
+        "400":
+          description: Invalid source, ref or ID, or the marketplace could not be
+            read
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "403":
+          description: Not an administrator
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "409":
+          description: The ID is taken
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "422":
+          description: Too many marketplaces (limit_reached)
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Add a plugin marketplace
+      tags:
+      - Plugins
+  /api/plugins/marketplaces/{id}:
+    delete:
+      description: Removes a marketplace and its list. A default marketplace stays
+        removed and is not added again at start. The installs from it stay. Administrators
+        only.
+      parameters:
+      - description: Marketplace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Removed
+        "403":
+          description: Not an administrator
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: No such marketplace
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Remove a plugin marketplace
+      tags:
+      - Plugins
+    put:
+      consumes:
+      - application/json
+      description: Changes the ref (read at the next refresh) or the enabled switch
+        of a marketplace. Administrators only.
+      parameters:
+      - description: Marketplace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Changes
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_mudler_LocalAI_core_http_endpoints_plugins.UpdateMarketplaceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: The marketplace
+          schema:
+            $ref: '#/definitions/plugins.Marketplace'
+        "400":
+          description: Invalid ref
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "403":
+          description: Not an administrator
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: No such marketplace
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Change a plugin marketplace
+      tags:
+      - Plugins
+  /api/plugins/marketplaces/{id}/refresh:
+    post:
+      description: Reads the marketplace now. A failure keeps the last good list and
+        records a short code in lastError; the answer is the marketplace in either
+        case. A refresh never installs anything. Administrators only.
+      parameters:
+      - description: Marketplace ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: The marketplace after the refresh
+          schema:
+            $ref: '#/definitions/plugins.Marketplace'
+        "403":
+          description: Not an administrator
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+        "404":
+          description: No such marketplace
+          schema:
+            $ref: '#/definitions/schema.ErrorResponse'
+      summary: Refresh a plugin marketplace
+      tags:
+      - Plugins
+  /api/prompt-cache:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Response
+          schema:
+            $ref: '#/definitions/promptcachesvc.StatusReport'
+      summary: 'Show the disk prompt cache: size, free disk, effective cap and state
+        of each node, and the size of each model.'
+      tags:
+      - prompt-cache
+  /api/prompt-cache/clear:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: model to clear, empty for all
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/localai.PromptCacheClearRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Response
+          schema:
+            $ref: '#/definitions/localai.PromptCacheClearResponse'
+      summary: Clear the disk prompt cache, of every model or of one model.
+      tags:
+      - prompt-cache
+  /api/prompt-cache/mine:
+    delete:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Response
+          schema:
+            $ref: '#/definitions/localai.PromptCacheClearResponse'
+      summary: Clear my cached prompts from the disk prompt cache.
+      tags:
+      - prompt-cache
   /api/quantization/status:
     get:
       description: Returns model_exports=false when this instance does not share the

@@ -21,12 +21,15 @@ import (
 
 	"github.com/mudler/LocalAI/core/services/messaging"
 	"github.com/mudler/LocalAI/core/services/nodes"
+	"github.com/mudler/LocalAI/core/services/promptcachesvc"
 	"github.com/mudler/LocalAI/core/services/workerctl"
 	grpc "github.com/mudler/LocalAI/pkg/grpc"
 	"github.com/mudler/LocalAI/pkg/model"
+	pc "github.com/mudler/LocalAI/pkg/promptcache"
 	"github.com/mudler/LocalAI/pkg/signals"
 	"github.com/mudler/LocalAI/pkg/splitenv"
 	"github.com/mudler/LocalAI/pkg/system"
+	"github.com/mudler/LocalAI/pkg/xsysinfo"
 	"github.com/mudler/xlog"
 )
 
@@ -35,6 +38,9 @@ import (
 // on signals.
 func Run(ctx *cliContext.Context, cfg *Config) error {
 	xlog.Info("Starting worker", "advertise", cfg.advertiseAddr(), "basePort", cfg.effectiveBasePort())
+	// Before any detection (system state, registration, heartbeats), so the
+	// total the frontend sees is the operator's.
+	xsysinfo.ApplyVRAMTotalSetting(cfg.VRAMTotal)
 	if err := cfg.validateFrontend(); err != nil {
 		return err
 	}
@@ -123,6 +129,27 @@ func Run(ctx *cliContext.Context, cfg *Config) error {
 	// other background goroutines.
 	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
 	defer shutdownCancel()
+
+	// The disk tier of the prompt cache. This worker owns its files: they
+	// live under its own data dir, its backends write them and its own
+	// janitor keeps them in bounds. The settings and the purges come from
+	// the frontends over the control verbs (promptcache.sync); until the
+	// first sync the worker runs the defaults. Its own switch can only turn
+	// the tier off.
+	promptCache := promptcachesvc.NewWorker(!cfg.PromptCacheDisk, workerIncarnation)
+	promptCacheRoot, promptCacheSource := cfg.promptCacheRoot(pc.OSStats{})
+	if promptCacheRoot == "" {
+		xlog.Warn("The disk prompt cache is off on this worker: it has no local directory for it. Set --data-path, or --prompt-cache-path or LOCALAI_PROMPT_CACHE_PATH, to a directory on a local disk",
+			"models_path", cfg.ModelsPath)
+	} else {
+		xlog.Debug("prompt cache root", "path", promptCacheRoot, "from", promptCacheSource)
+	}
+	promptCacheNode := promptcachesvc.NewNode(promptCacheRoot, cfg.ModelsPath, promptCache.Settings,
+		promptcachesvc.WithUsers(promptCache.Users))
+	promptCacheNode.CheckRoot()
+	promptCache.Attach(promptCacheNode)
+	ml.SetBackendEnv(promptCacheNode.BackendEnv)
+	promptCacheNode.Start(shutdownCtx)
 
 	// Backends of a worker on NATS listen on every interface, and the frontends
 	// dial the address it registered. Such a worker can be dialled whether or not
@@ -302,6 +329,9 @@ func Run(ctx *cliContext.Context, cfg *Config) error {
 		if err := prefetcher.register(control); err != nil {
 			return fmt.Errorf("serving model.prefetch: %w", err)
 		}
+		if err := registerPromptCacheVerbs(control, promptCache); err != nil {
+			return fmt.Errorf("serving the prompt cache verbs: %w", err)
+		}
 		// Serve the file staging verbs only when S3 is configured
 		if cfg.StorageURL != "" {
 			if err := cfg.registerFileStagingVerbs(control, ephemeralCapacity); err != nil {
@@ -346,9 +376,27 @@ func Run(ctx *cliContext.Context, cfg *Config) error {
 	<-sigCh
 
 	xlog.Info("Shutting down worker")
+	// Refuse new loads and abort the running ones first, while the routes
+	// still carry the frontend's stops: a load that the frontend is waiting
+	// for is then released in seconds, not after its stop window.
+	supervisor.beginShutdown()
+	abortWait := parseShutdownWindow("LOCALAI_SHUTDOWN_ABORT_WAIT", cfg.ShutdownAbortWait, defaultShutdownAbortWait)
+	aborted, loadsEnded := supervisor.abortLoadOperations(abortWait)
+	if len(aborted) > 0 {
+		xlog.Info("Aborted the loads in progress", "count", len(aborted))
+	}
+	if !loadsEnded {
+		// Telling the frontend the loads ended would let it place a model
+		// again while a process of this worker may still load it.
+		xlog.Warn("Not every load ended in the abort wait; the frontend releases them after their stop window", "abort_wait", abortWait)
+	}
 	shutdownCancel() // stop heartbeat loop immediately
 	<-splitDone
-	regClient.GracefulDeregister(nodeID)
+	regClient.GracefulShutdown(nodeID, workerregistry.ShutdownOptions{
+		LoadsEnded:  loadsEnded,
+		RequestWait: parseShutdownWindow("LOCALAI_SHUTDOWN_REQUEST_WAIT", cfg.ShutdownRequestWait, workerregistry.DefaultShutdownRequestWait),
+		Timeout:     parseShutdownWindow("LOCALAI_SHUTDOWN_TIMEOUT", cfg.ShutdownTimeout, workerregistry.DefaultShutdownTimeout),
+	})
 	supervisor.stopAllBackends(false)
 	nodes.ShutdownFileTransferServer(httpServer)
 	return nil

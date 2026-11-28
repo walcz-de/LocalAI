@@ -41,7 +41,6 @@
     },
     "engineSettings": {
         "title": "Penyetelan runtime",
-        "lead": "Cara {{engine}} memuat dan menjalankan model ini. Setiap kolom adalah flag {{binary}}. Kolom kosong memakai nilai bawaan.",
         "leadNoCommand": "Cara {{engine}} memuat dan menjalankan model ini. Kolom kosong memakai nilai bawaan.",
         "loading": "Memuat pengaturan {{engine}}",
         "default": "Bawaan",
@@ -89,8 +88,17 @@
             "options_slot_prompt_similarity": "Kemiripan prompt per slot",
             "options_kv_unified_per_slot": "Token per slot",
             "options_cache_ram": "Memori cache prompt (MiB)",
+            "options_prompt_cache_disk": "Cache prompt di disk",
+            "options_prompt_cache_disk_ttl_hours": "Masa simpan cache disk (jam)",
+            "options_prompt_cache_disk_min_tokens": "Token minimum untuk cache disk",
+            "options_prompt_cache_disk_quota_mib": "Kuota cache disk per pengguna (MiB)",
+            "options_prompt_cache_disk_max_size_mib": "Batas ukuran cache disk (MiB)",
+            "options_prompt_cache_disk_shared": "Cache disk bersama",
+            "options_prompt_cache_disk_low_free_mib": "Ruang kosong rendah untuk cache (MiB)",
+            "options_prompt_cache_disk_critical_free_mib": "Ruang kosong kritis untuk cache (MiB)",
             "options_mmproj_use_gpu": "Proyektor visi di GPU",
             "options_backend_sampling_min_slots": "Slot minimum untuk sampling GPU",
+            "options_grammar_engine": "Mesin tata bahasa",
             "options_context_shift": "Pergeseran konteks",
             "options_cont_batching": "Batching berkelanjutan",
             "options_kv_unified": "Cache KV terpadu",
@@ -148,11 +156,13 @@
             "options_spec_ngram_map_k4v_size_m": "Panjang usulan ngram-map-k4v",
             "options_spec_ngram_map_k4v_min_hits": "Kecocokan minimum ngram-map-k4v",
             "options_spec_lookup_cache_static": "File cache n-gram statis",
-            "options_spec_lookup_cache_dynamic": "File cache n-gram dinamis"
+            "options_spec_lookup_cache_dynamic": "File cache n-gram dinamis",
+            "draft_model": "Berkas model draf",
+            "options_spec_max_streams": "Jeda draf di atas N aliran"
         },
         "choices": {
             "load_mode": {
-                "default": "Bawaan (dipetakan ke memori)",
+                "default": "Bawaan (otomatis)",
                 "none": "Tidak ada (dibaca ke memori)",
                 "mmap": "mmap",
                 "mlock": "mlock",
@@ -167,7 +177,7 @@
         },
         "hints": {
             "load_mode": "Cara file model dibaca. Menulis mmap, mmlock, dan opsi direct_io.",
-            "backend_sampling": "Tempat token di-sampling. Backend tanpa sampling GPU mengabaikan pengaturan ini."
+            "backend_sampling": "Tempat token berikutnya dipilih: di CPU atau di GPU."
         },
         "errors": {
             "notInteger": "Ketik bilangan bulat.",
@@ -292,30 +302,76 @@
             "title": "Pengaturan cepat",
             "custom": "Kustom",
             "customText": "Atur sendiri kolom di bawah.",
-            "current": "Pengaturan Anda",
             "estimating": "Memperkirakan...",
-            "noEstimate": "Tidak ada perkiraan",
-            "same": "Memori kurang lebih sama",
             "more": "≈ {{size}} memori lebih banyak",
             "less": "≈ {{size}} memori lebih sedikit",
-            "now": "Sekarang: cache KV ≈ {{kv}} dan buffer komputasi ≈ {{compute}} pada {{context}} token, di luar bobot.",
             "estimate": "Angka-angka ini adalah perkiraan.",
             "approximate": "Perkiraan kasar: susunan model tidak dibaca dari file.",
-            "failed": "Perkiraan memori tidak tersedia."
+            "failed": "Perkiraan memori tidak tersedia.",
+            "batch": "Batch",
+            "concurrency": "Konkurensi",
+            "bestFor": "Cocok untuk: {{use}}",
+            "share": "Sekitar {{tokens}} token konteks per aliran",
+            "tight": "Cache KV f16 tidak muat, jadi dipakai cache 8-bit.",
+            "unsupported": "Tidak tersedia di sini",
+            "needs": "Butuh memori {{size}}",
+            "noFit": "Tidak muat: ≈ {{size}} dari {{limit}}",
+            "shared": "Slot berbagi satu cache KV, jadi lebih banyak aliran butuh memori yang kurang lebih sama: tiap aliran mendapat bagian konteks yang lebih kecil.",
+            "compare": "Bandingkan pengaturan",
+            "nowLabel": "Memori sekarang",
+            "nowShort": "Cache KV ≈ {{kv}}, buffer komputasi ≈ {{compute}}, pada {{context}} token",
+            "estimateShort": "Perkiraan",
+            "approximateShort": "Perkiraan kasar",
+            "moreShort": "+{{size}}",
+            "lessShort": "−{{size}}"
         },
         "profiles": {
             "balanced": {
                 "name": "Seimbang",
-                "text": "Bawaan: LocalAI memilih batch dan slot untuk GPU Anda, dengan cache KV f16."
+                "text": "Ukuran batch bawaan: LocalAI memilihnya untuk GPU Anda.",
+                "line": "Ukuran batch yang dipilih LocalAI untuk GPU Anda."
             },
             "longPrompts": {
                 "name": "Prompt panjang",
-                "text": "Batch dan micro-batch 2048. Prompt panjang dibaca jauh lebih cepat; buffer komputasi memakai lebih banyak memori."
+                "text": "Batch 2048. Prompt panjang dibaca jauh lebih cepat; buffer komputasi memakai lebih banyak memori.",
+                "memory": {
+                    "discrete": "Pada GPU diskret micro-batch-nya 1024: buffer komputasinya harus muat di satu kartu."
+                },
+                "line": "Membaca prompt panjang jauh lebih cepat. Memakai lebih banyak memori."
             },
-            "concurrent": {
-                "name": "Lebih banyak pengguna serentak",
-                "text": "Cache KV 8-bit, layanan berhalaman, dan 8 slot. Sekitar dua kali lipat token muat di memori yang sama, dibagi oleh lebih banyak pengguna, dengan sedikit penurunan kualitas.",
-                "note": "Cache KV terkuantisasi bisa lebih lambat pada beberapa jalur atensi sampai llama.cpp punya kernel cepat untuknya. Layanan berhalaman butuh build backend yang mendukungnya; build lain mengabaikan opsi ini."
+            "concurrencyDefault": {
+                "name": "Bawaan",
+                "text": "LocalAI memilih slot untuk GPU Anda dan backend memakai nilai bawaannya.",
+                "bestFor": "Satu orang, atau beberapa.",
+                "line": "Untuk satu orang atau beberapa. LocalAI memilih slotnya."
+            },
+            "streams8": {
+                "name": "8 aliran",
+                "text": "8 slot dengan paged serving: permintaan berbagi cache KV dan menunggu, bukan gagal, saat cache penuh.",
+                "bestFor": "Tim yang mengobrol dengan satu model.",
+                "short": "8",
+                "line": "Untuk tim yang mengobrol dengan satu model."
+            },
+            "streams16": {
+                "name": "16 aliran",
+                "text": "16 slot, sampling GPU saat 16 permintaan berjalan, tanpa drafting.",
+                "bestFor": "Agen dan alat yang mengirim permintaan secara paralel.",
+                "memory": {
+                    "system": "Tanpa GPU: token di-sampling di CPU."
+                },
+                "short": "16",
+                "line": "Untuk agen dan alat yang mengirim permintaan secara paralel."
+            },
+            "streams32": {
+                "name": "32+ aliran",
+                "text": "32 slot dengan sampling GPU selalu aktif dan tanpa drafting: token per detik total paling tinggi, tiap aliran lebih lambat.",
+                "bestFor": "Pekerjaan batch dan banyak pengguna sekaligus.",
+                "memory": {
+                    "discrete": "Cache KV 8-bit: kira-kira dua kali lebih banyak token muat, dengan sedikit penurunan kualitas dan kecepatan.",
+                    "system": "Tidak tersedia tanpa GPU: CPU yang dibagi 32 aliran membuat tiap aliran terlalu lambat."
+                },
+                "short": "32+",
+                "line": "Untuk pekerjaan batch dan banyak pengguna. Token per detik total paling tinggi."
             }
         },
         "choiceHints": {
@@ -323,8 +379,150 @@
                 "off": "Sampling token di CPU. Tidak ada yang ditulis ke file.",
                 "auto": "Gunakan sampling GPU saat model berjalan di GPU dengan beberapa permintaan paralel dan permintaan tidak butuh grammar atau logprobs.",
                 "on": "Sampling token di GPU. Lebih cepat dengan banyak permintaan paralel. Dimatikan otomatis untuk permintaan yang memakai grammar, anggaran penalaran, atau logprobs."
+            },
+            "load_mode": {
+                "default": "llama.cpp yang memilih: di-mmap, kecuali pada GPU terintegrasi yang akan menyimpan model dua kali."
             }
         },
-        "groupCount": "{{count}} pengaturan"
+        "groupCount": "{{count}} pengaturan",
+        "drafting": {
+            "title": "Draf (decoding spekulatif)",
+            "lead": "Penyusun cepat mengusulkan token berikutnya dan model memeriksanya dalam satu langkah. Jawaban datang lebih cepat; hasilnya tetap sama.",
+            "mode": "Mode",
+            "more": "Opsi draf lainnya",
+            "auto": "{{mode}} aktif secara bawaan: model ini punya kepala MTP, jadi LocalAI membuat draf dengannya kecuali Anda memilih Mati.",
+            "custom": {
+                "title": "Pengaturan draf khusus",
+                "body": "Model ini memakai spec_type {{kinds}}, yang tidak dicakup mode mana pun. Pengaturan ini tetap sampai Anda memilih mode."
+            },
+            "modes": {
+                "off": {
+                    "label": "Mati",
+                    "doc": "Tanpa draf. Setiap token hanya berasal dari model."
+                },
+                "ngram": {
+                    "label": "N-gram",
+                    "doc": "Mengusulkan token yang sebelumnya mengikuti kata-kata yang sama dalam percakapan. Tanpa model tambahan dan tanpa memori tambahan.",
+                    "note": "Paling cocok untuk keluaran yang mengulang masukannya, seperti suntingan kode atau kutipan panjang. Pada obrolan biasa hasilnya kecil dan bisa lebih lambat beberapa persen."
+                },
+                "model": {
+                    "label": "Model draf",
+                    "doc": "Model kecil dengan kosakata yang sama mengusulkan token, lalu model memeriksanya dalam satu langkah.",
+                    "note": "Model draf dimuat di samping model dan memakai memorinya sendiri."
+                },
+                "mtp": {
+                    "label": "MTP",
+                    "doc": "Kepala prediksi multi-token milik model sendiri mengusulkan token berikutnya. Tidak ada model kedua yang perlu dimuat."
+                }
+            },
+            "fields": {
+                "ngram": {
+                    "options_spec_ngram_mod_n_min": {
+                        "label": "Token draf, minimal",
+                        "hint": "Jumlah token paling sedikit yang harus diusulkan sebuah kecocokan sebelum dipakai."
+                    },
+                    "options_spec_ngram_mod_n_max": {
+                        "label": "Token draf, maksimal",
+                        "hint": "Jumlah token paling banyak yang diusulkan setelah sebuah kecocokan."
+                    },
+                    "options_spec_ngram_mod_n_match": {
+                        "label": "Panjang kecocokan",
+                        "hint": "Token yang harus cocok dengan bagian sebelumnya sebelum bagian itu disalin."
+                    }
+                },
+                "model": {
+                    "options_spec_n_min": {
+                        "label": "Token draf, minimal",
+                        "hint": "Jumlah token draf paling sedikit yang layak diperiksa. 0 memeriksa draf apa pun."
+                    },
+                    "options_spec_n_max": {
+                        "label": "Token draf, maksimal",
+                        "hint": "Jumlah token paling banyak yang diusulkan model draf per langkah. Lebih banyak hanya membantu jika tebakannya bagus."
+                    },
+                    "options_spec_p_min": {
+                        "label": "Ambang penerimaan",
+                        "hint": "Model draf menghentikan draf jika keyakinannya lebih rendah dari nilai ini, dari 0 sampai 1."
+                    }
+                },
+                "mtp": {
+                    "options_spec_n_max": {
+                        "label": "Token draf, maksimal",
+                        "hint": "Jumlah token paling banyak yang diusulkan kepala MTP per langkah."
+                    },
+                    "options_spec_p_min": {
+                        "label": "Ambang penerimaan",
+                        "hint": "Kepala menghentikan draf jika keyakinannya lebih rendah dari nilai ini, dari 0 sampai 1."
+                    }
+                }
+            },
+            "streams": {
+                "label": "Jeda draf di atas N aliran",
+                "hint": "Drafting berhenti sementara selama lebih banyak permintaan dari nilai ini berjalan bersamaan, dan lanjut saat beban turun. 0 tidak pernah berhenti."
+            },
+            "picker": {
+                "label": "Model draf",
+                "placeholder": "Pilih model terpasang",
+                "hint": "Model kecil dari keluarga yang sama, misalnya model 0.6B atau 1B.",
+                "filter": "Saring model",
+                "loading": "Memuat model terpasang...",
+                "empty": "Tidak ada model lain yang dijalankan {{engine}} yang terpasang. Pasang dulu model kecil dari keluarga yang sama.",
+                "same": "Keluarga yang sama dengan model ini",
+                "other": "Model terpasang lainnya",
+                "file": "Diatur di berkas",
+                "fileRow": "Bukan model terpasang",
+                "noFile": "{{name}} tidak punya berkas model untuk dipakai sebagai draf.",
+                "failed": "Model terpasang tidak dapat ditampilkan."
+            },
+            "fit": {
+                "title": "Kecocokan",
+                "ok": "Kompatibel",
+                "okText": "Kosakata sama: {{tokens}} token.",
+                "mismatch": "Tidak akan dimuat",
+                "mismatchText": "Kosakatanya berbeda ({{main}} dan {{draft}} token). llama.cpp menolak pasangan ini, jadi model gagal dimuat.",
+                "family": "Keluarga sama",
+                "familyText": "Keduanya model {{family}}. Kosakata tidak dapat dibaca untuk memastikannya.",
+                "unknown": "Belum diperiksa",
+                "unknownText": "Kosakata tidak dapat dibandingkan. Draf harus memakai tokenizer yang sama dengan model.",
+                "unmatched": "Berkas ini bukan model terpasang, jadi tidak dapat diperiksa."
+            },
+            "memory": {
+                "title": "Memori",
+                "total": "≈ {{size}} lebih banyak",
+                "split": "({{weights}} bobot dan {{kv}} cache KV pada {{context}} token).",
+                "none": "Tidak ada perkiraan untuk model ini.",
+                "unmatched": "Tidak ada perkiraan: perkirakan sekitar ukuran berkas ditambah cache KV sebesar konteks model."
+            }
+        },
+        "memory": {
+            "label": "Jenis memori",
+            "auto": "Terdeteksi: {{kind}}",
+            "autoUnknown": "Tidak terdeteksi",
+            "detected": "{{kind}} di server ini ({{size}})",
+            "detectedDevice": "{{kind}} di server ini: {{device}}, {{size}}",
+            "chosen": "{{kind}}, pilihan Anda",
+            "unknown": "Jenis memori tidak terdeteksi: memakai aturan {{kind}}",
+            "useValue": "Pakai {{value}}",
+            "kinds": {
+                "unified": {
+                    "label": "Memori terpadu",
+                    "doc": "GPU berbagi memori sistem (DGX Spark, Jetson, Apple silicon, APU AMD). Lebih banyak slot muat; cache prompt dan checkpoint dibuat kecil karena memakai memori yang sama."
+                },
+                "discrete": {
+                    "label": "GPU diskret",
+                    "doc": "GPU punya memori sendiri. Slot dibatasi oleh estimasi VRAM, 32 aliran memakai cache KV 8-bit, dan cache prompt tetap di memori sistem."
+                },
+                "system": {
+                    "label": "Tanpa GPU",
+                    "doc": "Model berjalan di CPU dalam memori sistem. Cache dibuat kecil, dan 32 aliran tidak ditawarkan."
+                }
+            },
+            "advice": {
+                "unifiedLoadMode": "Pada memori terpadu, model yang dipetakan ke memori disimpan dua kali saat dimuat. Default memuatnya sekali."
+            }
+        },
+        "flags": {
+            "show": "Tampilkan flag {{engine}}"
+        },
+        "more": "Selengkapnya"
     }
 }

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/mudler/LocalAI/core/config"
+	pc "github.com/mudler/LocalAI/pkg/promptcache"
 	"github.com/mudler/xlog"
 )
 
@@ -40,6 +42,15 @@ type Config struct {
 	// so a worker with heavy start/stop churn needs headroom above its true
 	// concurrency. 0 = up to 65535.
 	GRPCMaxPort int `env:"LOCALAI_GRPC_MAX_PORT" default:"0" help:"Highest port the worker may assign to a backend gRPC process. The range is [base port, this]; its width caps concurrent backends on this worker. 0 uses up to 65535." group:"server"`
+
+	// PromptCacheDisk turns the disk tier of the llama.cpp prompt cache of
+	// this worker on or off. Its root comes from promptCacheRoot.
+	PromptCacheDisk bool `env:"LOCALAI_PROMPT_CACHE_DISK" default:"true" help:"Keep the prompt cache of long llama.cpp prompts on the local disk of this worker, so it survives a model reload" group:"server"`
+	// PromptCachePath and DataPath choose the root of the disk tier (see
+	// promptCacheRoot). DataPath has no default on purpose: without it the
+	// worker keeps the old root next to the models, when that is local.
+	PromptCachePath string `env:"LOCALAI_PROMPT_CACHE_PATH" type:"path" help:"Directory of the disk prompt cache of this worker. Give a directory on a local disk. Default: <data-path>/prompt-cache" group:"server"`
+	DataPath        string `env:"LOCALAI_DATA_PATH" type:"path" help:"Data directory of this worker. The disk prompt cache goes under it, in prompt-cache. Default: none, and the cache uses <models path>/../data/prompt-cache when that is on a local disk" group:"server"`
 
 	PreferDevelopmentBackends bool   `env:"LOCALAI_PREFER_DEV_BACKENDS,PREFER_DEV_BACKENDS" default:"false" help:"Prefer compatible installed development aliases and development downloads (worker-local; restart to apply)" group:"server"`
 	BackendsPath              string `env:"LOCALAI_BACKENDS_PATH,BACKENDS_PATH" type:"path" default:"${basepath}/backends" help:"Path containing backends" group:"server"`
@@ -81,6 +92,9 @@ type Config struct {
 	RegistrationRequireAuth bool     `env:"LOCALAI_REGISTRATION_REQUIRE_AUTH" default:"false" help:"Refuse to start the HTTP file-transfer server when no registration token is set (otherwise it fails open and serves read/write to models/staging/data unauthenticated)" group:"registration"`
 	DistributedRequireAuth  bool     `env:"LOCALAI_DISTRIBUTED_REQUIRE_AUTH" default:"false" help:"Umbrella switch implying both --nats-require-auth and --registration-require-auth" group:"distributed"`
 	HeartbeatInterval       string   `env:"LOCALAI_HEARTBEAT_INTERVAL" default:"10s" help:"Interval between heartbeats" group:"registration"`
+	ShutdownAbortWait       string   `env:"LOCALAI_SHUTDOWN_ABORT_WAIT" default:"30s" help:"On SIGTERM, how long the worker waits for the loads it aborts to end (their processes to exit and their installs to return) before it drains. The frontend releases a load that did not end after its stop window" group:"registration"`
+	ShutdownRequestWait     string   `env:"LOCALAI_SHUTDOWN_REQUEST_WAIT" default:"30s" help:"On SIGTERM, how long the worker waits for the requests in flight on its models before it deregisters. Loads in progress are aborted at once" group:"registration"`
+	ShutdownTimeout         string   `env:"LOCALAI_SHUTDOWN_TIMEOUT" default:"60s" help:"On SIGTERM, the bound of drain, wait for requests and deregistration together. Stopping the backends comes after it" group:"registration"`
 	NodeLabels              string   `env:"LOCALAI_NODE_LABELS" help:"Comma-separated key=value labels for this node (e.g. tier=fast,gpu=a100)" group:"registration"`
 	// MaxReplicasPerModel caps how many replicas of any one model can run on
 	// this worker concurrently. Default 1 = historical single-replica
@@ -95,6 +109,17 @@ type Config struct {
 	// "12GB"). Reported to the server as a string; the server resolves and
 	// enforces it against the raw VRAM this worker reports. Empty = no cap.
 	VRAMBudget string `env:"LOCALAI_VRAM_BUDGET" help:"Cap VRAM used for model allocation on this worker node, as a percentage (e.g. 80%) or absolute amount (e.g. 12GB)." group:"registration"`
+
+	// VRAMTotal sets the total VRAM this worker reports ("40GB"), overriding
+	// GPU detection. VRAMBudget, when set, is resolved against it.
+	VRAMTotal string `env:"LOCALAI_VRAM_TOTAL" help:"Total VRAM of this worker as an absolute amount (e.g. 40GB or 48GiB). Overrides GPU detection; use it when the detected VRAM is wrong. LOCALAI_VRAM_BUDGET then caps the share used for placement." group:"registration"`
+
+	// The memory settings of this node. Each one, when set, wins over the
+	// cluster value of Settings > Models in memory for this node; an admin
+	// override on the Nodes page wins over it. Empty: the cluster value.
+	MaxActiveBackends        string `env:"LOCALAI_MAX_ACTIVE_BACKENDS" help:"Models kept loaded on this node (0 = no limit). Empty uses the cluster setting." group:"registration"`
+	ModelSwap                string `env:"LOCALAI_MODEL_SWAP" help:"true or false: unload the least recently used idle model on this node to make room for another. Empty uses the cluster setting." group:"registration"`
+	MemoryReclaimerThreshold string `env:"LOCALAI_MEMORY_RECLAIMER_THRESHOLD" help:"Memory use (0 to 1) above which idle models on this node are unloaded. Empty uses the cluster setting." group:"registration"`
 
 	// Routes are the ways this worker reaches the cluster. Empty derives them
 	// from the other flags (see routes).
@@ -129,6 +154,22 @@ type Config struct {
 // dataDir is the state directory of the worker. It holds its own credential, the
 // process ledger and the P2P identity.
 func (c Config) dataDir() string { return filepath.Join(c.ModelsPath, "..", "data") }
+
+// promptCacheRoot is the root of the disk prompt cache of the worker and
+// where it comes from: --prompt-cache-path, else <data-path>/prompt-cache,
+// else the old <models path>/../data/prompt-cache when stats says it is on a
+// local filesystem. Models often sit on a network share, and ../data of the
+// share is then on the share, or on the ephemeral root filesystem of a
+// container.
+func (c Config) promptCacheRoot(stats pc.StatProvider) (root, source string) {
+	derived := filepath.Join(c.dataDir(), config.PromptCacheDirName)
+	return config.ResolvePromptCacheRoot(c.PromptCachePath, c.DataPath, derived, func(p string) bool {
+		st, err := stats.Stat(pc.ExistingDir(p))
+		// An unreadable filesystem is not known to be remote: CheckRoot
+		// still checks that the root is writable.
+		return err != nil || !st.Network
+	})
+}
 
 // nodeName is the name that the worker registers under.
 func (c Config) nodeName() string {

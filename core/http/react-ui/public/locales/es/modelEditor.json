@@ -5,7 +5,6 @@
     },
     "engineSettings": {
         "title": "Ajuste del tiempo de ejecución",
-        "lead": "Cómo {{engine}} carga y ejecuta este modelo. Cada campo es un flag de {{binary}}. Un campo vacío mantiene el valor predeterminado.",
         "leadNoCommand": "Cómo {{engine}} carga y ejecuta este modelo. Un campo vacío mantiene el valor predeterminado.",
         "loading": "Cargando los ajustes de {{engine}}",
         "default": "Predeterminado",
@@ -53,8 +52,17 @@
             "options_slot_prompt_similarity": "Similitud del prompt por slot",
             "options_kv_unified_per_slot": "Tokens por slot",
             "options_cache_ram": "Memoria de la caché de prompts (MiB)",
+            "options_prompt_cache_disk": "Caché de prompts en disco",
+            "options_prompt_cache_disk_ttl_hours": "Vida de la caché en disco (horas)",
+            "options_prompt_cache_disk_min_tokens": "Tokens mínimos para la caché en disco",
+            "options_prompt_cache_disk_quota_mib": "Cuota de caché en disco por usuario (MiB)",
+            "options_prompt_cache_disk_max_size_mib": "Límite de la caché en disco (MiB)",
+            "options_prompt_cache_disk_shared": "Caché en disco compartida",
+            "options_prompt_cache_disk_low_free_mib": "Espacio libre bajo para la caché (MiB)",
+            "options_prompt_cache_disk_critical_free_mib": "Espacio libre crítico para la caché (MiB)",
             "options_mmproj_use_gpu": "Proyector de visión en GPU",
             "options_backend_sampling_min_slots": "Slots mínimos para muestreo en GPU",
+            "options_grammar_engine": "Motor de gramática",
             "options_context_shift": "Desplazamiento de contexto",
             "options_cont_batching": "Batching continuo",
             "options_kv_unified": "Caché KV unificada",
@@ -112,11 +120,13 @@
             "options_spec_ngram_map_k4v_size_m": "Longitud de propuesta ngram-map-k4v",
             "options_spec_ngram_map_k4v_min_hits": "Coincidencias mínimas ngram-map-k4v",
             "options_spec_lookup_cache_static": "Archivo de caché n-gram estática",
-            "options_spec_lookup_cache_dynamic": "Archivo de caché n-gram dinámica"
+            "options_spec_lookup_cache_dynamic": "Archivo de caché n-gram dinámica",
+            "draft_model": "Archivo del modelo borrador",
+            "options_spec_max_streams": "Pausar el borrador con más de N flujos"
         },
         "choices": {
             "load_mode": {
-                "default": "Predeterminado (mapeado en memoria)",
+                "default": "Predeterminado (auto)",
                 "none": "Ninguno (leído en memoria)",
                 "mmap": "mmap",
                 "mlock": "mlock",
@@ -131,7 +141,7 @@
         },
         "hints": {
             "load_mode": "Cómo se lee el archivo del modelo. Escribe mmap, mmlock y la opción direct_io.",
-            "backend_sampling": "Dónde se muestrean los tokens. Un backend sin muestreo en GPU ignora el ajuste."
+            "backend_sampling": "Dónde se elige el siguiente token: en la CPU o en la GPU."
         },
         "errors": {
             "notInteger": "Escribe un número entero.",
@@ -256,30 +266,76 @@
             "title": "Configuración rápida",
             "custom": "Personalizada",
             "customText": "Ajusta tú los campos de abajo.",
-            "current": "Tus ajustes",
             "estimating": "Estimando...",
-            "noEstimate": "Sin estimación",
-            "same": "Más o menos la misma memoria",
             "more": "≈ {{size}} más de memoria",
             "less": "≈ {{size}} menos de memoria",
-            "now": "Ahora: caché KV ≈ {{kv}} y búferes de cálculo ≈ {{compute}} con {{context}} tokens, además de los pesos.",
             "estimate": "Estas cifras son estimaciones.",
             "approximate": "Estimaciones aproximadas: la estructura del modelo no se leyó del archivo.",
-            "failed": "La estimación de memoria no está disponible."
+            "failed": "La estimación de memoria no está disponible.",
+            "batch": "Lote",
+            "concurrency": "Concurrencia",
+            "bestFor": "Ideal para: {{use}}",
+            "share": "Unos {{tokens}} tokens de contexto por flujo",
+            "tight": "La caché KV f16 no cabe, así que se usa una de 8 bits.",
+            "unsupported": "No disponible aquí",
+            "needs": "Necesita {{size}} de memoria",
+            "noFit": "No cabe: ≈ {{size}} de {{limit}}",
+            "shared": "Los slots comparten una sola caché KV, así que más flujos necesitan más o menos la misma memoria: cada flujo recibe una parte menor del contexto.",
+            "compare": "Comparar configuraciones",
+            "nowLabel": "Memoria ahora",
+            "nowShort": "Caché KV ≈ {{kv}}, búferes de cálculo ≈ {{compute}}, con {{context}} tokens",
+            "estimateShort": "Estimación",
+            "approximateShort": "Estimación aproximada",
+            "moreShort": "+{{size}}",
+            "lessShort": "−{{size}}"
         },
         "profiles": {
             "balanced": {
-                "name": "Equilibrada",
-                "text": "Los valores por defecto: LocalAI elige el batch y los slots para tu GPU, con caché KV f16."
+                "name": "Equilibrado",
+                "text": "Los tamaños de lote predeterminados: LocalAI los elige para tu GPU.",
+                "line": "Tamaños de lote que LocalAI elige para su GPU."
             },
             "longPrompts": {
                 "name": "Prompts largos",
-                "text": "Batch y micro-batch de 2048. Los prompts largos se leen mucho más rápido; los búferes de cálculo usan más memoria."
+                "text": "Un lote de 2048. Los prompts largos se leen mucho más rápido; los búferes de cálculo usan más memoria.",
+                "memory": {
+                    "discrete": "En una GPU dedicada el microlote es 1024: su búfer de cálculo debe caber en una sola tarjeta."
+                },
+                "line": "Lee los prompts largos mucho más rápido. Usa más memoria."
             },
-            "concurrent": {
-                "name": "Más usuarios a la vez",
-                "text": "Caché KV de 8 bits, servicio paginado y 8 slots. Caben unas dos veces más tokens en la misma memoria, compartidos por más usuarios, con una pequeña pérdida de calidad.",
-                "note": "Una caché KV cuantizada puede ser más lenta en algunas rutas de atención hasta que llama.cpp tenga un kernel rápido para ellas. El servicio paginado necesita una compilación del backend que lo admita; las demás ignoran la opción."
+            "concurrencyDefault": {
+                "name": "Predeterminado",
+                "text": "LocalAI elige los slots para tu GPU y el backend usa sus valores predeterminados.",
+                "bestFor": "Una persona o pocas.",
+                "line": "Para una persona o unas pocas. LocalAI elige los slots."
+            },
+            "streams8": {
+                "name": "8 flujos",
+                "text": "8 slots con servicio paginado: las solicitudes comparten la caché KV y esperan en lugar de fallar cuando está llena.",
+                "bestFor": "Un equipo que chatea con un modelo.",
+                "short": "8",
+                "line": "Para un equipo que chatea con un modelo."
+            },
+            "streams16": {
+                "name": "16 flujos",
+                "text": "16 slots, muestreo en GPU cuando corren 16 solicitudes, sin borradores.",
+                "bestFor": "Agentes y herramientas que envían solicitudes en paralelo.",
+                "memory": {
+                    "system": "Sin GPU: los tokens se muestrean en la CPU."
+                },
+                "short": "16",
+                "line": "Para agentes y herramientas que envían solicitudes en paralelo."
+            },
+            "streams32": {
+                "name": "32+ flujos",
+                "text": "32 slots con muestreo en GPU siempre activo y sin borradores: el máximo de tokens por segundo en total, cada flujo más lento.",
+                "bestFor": "Trabajos por lotes y muchos usuarios a la vez.",
+                "memory": {
+                    "discrete": "Caché KV de 8 bits: caben el doble de tokens, con un pequeño coste en calidad y velocidad.",
+                    "system": "No disponible sin GPU: una CPU repartida entre 32 flujos hace que cada uno sea demasiado lento."
+                },
+                "short": "32+",
+                "line": "Para trabajos por lotes y muchos usuarios. El máximo de tokens por segundo en total."
             }
         },
         "choiceHints": {
@@ -287,8 +343,150 @@
                 "off": "Muestrea los tokens en la CPU. No se escribe nada en el archivo.",
                 "auto": "Usa el muestreo en GPU cuando el modelo se ejecuta en una GPU con varias peticiones en paralelo y la petición no necesita gramática ni logprobs.",
                 "on": "Muestrea los tokens en la GPU. Más rápido con muchas peticiones en paralelo. Se desactiva solo en las peticiones que usan una gramática, un presupuesto de razonamiento o logprobs."
+            },
+            "load_mode": {
+                "default": "Elige llama.cpp: mapeado en memoria, salvo en GPU integradas, donde el modelo ocuparía el doble."
             }
         },
-        "groupCount": "{{count}} ajustes"
+        "groupCount": "{{count}} ajustes",
+        "drafting": {
+            "title": "Borrador (decodificación especulativa)",
+            "lead": "Un borrador rápido propone los siguientes tokens y el modelo los comprueba en un paso. Las respuestas llegan antes; la salida no cambia.",
+            "mode": "Modo",
+            "more": "Más opciones de borrador",
+            "auto": "{{mode}} está activado por defecto: este modelo tiene un cabezal MTP, así que LocalAI hace borradores con él salvo que elijas Desactivado.",
+            "custom": {
+                "title": "Configuración de borrador personalizada",
+                "body": "Este modelo usa spec_type {{kinds}}, que ningún modo cubre. Se queda así hasta que elijas un modo."
+            },
+            "modes": {
+                "off": {
+                    "label": "Desactivado",
+                    "doc": "Sin borrador. Cada token sale solo del modelo."
+                },
+                "ngram": {
+                    "label": "N-grama",
+                    "doc": "Propone los tokens que siguieron a las mismas palabras antes en la conversación. Sin modelo extra ni memoria extra.",
+                    "note": "Ideal para salidas que repiten su entrada, como ediciones de código o citas largas. En un chat normal gana poco y puede costar un pequeño porcentaje."
+                },
+                "model": {
+                    "label": "Modelo borrador",
+                    "doc": "Un modelo pequeño con el mismo vocabulario propone tokens y el modelo los comprueba en un paso.",
+                    "note": "El modelo borrador se carga junto al modelo y usa su propia memoria."
+                },
+                "mtp": {
+                    "label": "MTP",
+                    "doc": "El propio cabezal de predicción multitoken del modelo propone los siguientes tokens. No hay un segundo modelo que cargar."
+                }
+            },
+            "fields": {
+                "ngram": {
+                    "options_spec_ngram_mod_n_min": {
+                        "label": "Tokens de borrador, mínimo",
+                        "hint": "Menor número de tokens que debe proponer una coincidencia para usarla."
+                    },
+                    "options_spec_ngram_mod_n_max": {
+                        "label": "Tokens de borrador, máximo",
+                        "hint": "Mayor número de tokens propuestos tras una coincidencia."
+                    },
+                    "options_spec_ngram_mod_n_match": {
+                        "label": "Longitud de coincidencia",
+                        "hint": "Tokens que deben coincidir con un pasaje anterior antes de copiarlo."
+                    }
+                },
+                "model": {
+                    "options_spec_n_min": {
+                        "label": "Tokens de borrador, mínimo",
+                        "hint": "Menor número de tokens de borrador que vale la pena comprobar. 0 comprueba cualquier borrador."
+                    },
+                    "options_spec_n_max": {
+                        "label": "Tokens de borrador, máximo",
+                        "hint": "Mayor número de tokens que propone el modelo borrador por paso. Más solo ayuda si acierta a menudo."
+                    },
+                    "options_spec_p_min": {
+                        "label": "Umbral de aceptación",
+                        "hint": "El modelo borrador corta el borrador cuando está menos seguro que este valor, de 0 a 1."
+                    }
+                },
+                "mtp": {
+                    "options_spec_n_max": {
+                        "label": "Tokens de borrador, máximo",
+                        "hint": "Mayor número de tokens que propone el cabezal MTP por paso."
+                    },
+                    "options_spec_p_min": {
+                        "label": "Umbral de aceptación",
+                        "hint": "El cabezal corta el borrador cuando está menos seguro que este valor, de 0 a 1."
+                    }
+                }
+            },
+            "streams": {
+                "label": "Pausar el borrador con más de N flujos",
+                "hint": "El borrador se pausa mientras generan a la vez más solicitudes que este número, y se reanuda cuando baja la carga. 0 nunca pausa."
+            },
+            "picker": {
+                "label": "Modelo borrador",
+                "placeholder": "Elige un modelo instalado",
+                "hint": "Un modelo pequeño de la misma familia, como uno de 0.6B o 1B.",
+                "filter": "Filtrar modelos",
+                "loading": "Cargando modelos instalados...",
+                "empty": "No hay instalado otro modelo que ejecute {{engine}}. Instala primero un modelo pequeño de la misma familia.",
+                "same": "Misma familia que este modelo",
+                "other": "Otros modelos instalados",
+                "file": "Definido en el archivo",
+                "fileRow": "No es un modelo instalado",
+                "noFile": "{{name}} no tiene un archivo de modelo que usar como borrador.",
+                "failed": "No se pudieron listar los modelos instalados."
+            },
+            "fit": {
+                "title": "Compatibilidad",
+                "ok": "Compatible",
+                "okText": "Mismo vocabulario: {{tokens}} tokens.",
+                "mismatch": "No cargará",
+                "mismatchText": "Los vocabularios difieren ({{main}} y {{draft}} tokens). llama.cpp rechaza esta pareja, así que el modelo no carga.",
+                "family": "Misma familia",
+                "familyText": "Ambos son modelos {{family}}. No se pudo leer el vocabulario para confirmarlo.",
+                "unknown": "Sin comprobar",
+                "unknownText": "No se pudieron comparar los vocabularios. El borrador debe usar el mismo tokenizador que el modelo.",
+                "unmatched": "El archivo no es un modelo instalado, así que no se puede comprobar."
+            },
+            "memory": {
+                "title": "Memoria",
+                "total": "≈ {{size}} más",
+                "split": "({{weights}} de pesos y {{kv}} de caché KV con {{context}} tokens).",
+                "none": "No hay estimación para este modelo.",
+                "unmatched": "Sin estimación: cuenta con el tamaño del archivo más una caché KV tan grande como el contexto del modelo."
+            }
+        },
+        "memory": {
+            "label": "Tipo de memoria",
+            "auto": "Detectado: {{kind}}",
+            "autoUnknown": "No detectado",
+            "detected": "{{kind}} en este servidor ({{size}})",
+            "detectedDevice": "{{kind}} en este servidor: {{device}}, {{size}}",
+            "chosen": "{{kind}}, elegido por ti",
+            "unknown": "Tipo de memoria no detectado: se usan las reglas de {{kind}}",
+            "useValue": "Usar {{value}}",
+            "kinds": {
+                "unified": {
+                    "label": "Memoria unificada",
+                    "doc": "La GPU comparte la memoria del sistema (DGX Spark, Jetson, Apple silicon, APU de AMD). Caben más slots; la caché de prompts y los checkpoints se mantienen pequeños porque usan la misma memoria."
+                },
+                "discrete": {
+                    "label": "GPU dedicada",
+                    "doc": "La GPU tiene su propia memoria. Los slots se limitan según la estimación de VRAM, 32 flujos usan una caché KV de 8 bits y la caché de prompts queda en la memoria del sistema."
+                },
+                "system": {
+                    "label": "Sin GPU",
+                    "doc": "El modelo se ejecuta en la CPU en la memoria del sistema. Las cachés se mantienen pequeñas y no se ofrecen 32 flujos."
+                }
+            },
+            "advice": {
+                "unifiedLoadMode": "Con memoria unificada, un modelo mapeado en memoria se guarda dos veces mientras carga. Default lo carga una vez."
+            }
+        },
+        "flags": {
+            "show": "Mostrar flags de {{engine}}"
+        },
+        "more": "Más"
     }
 }

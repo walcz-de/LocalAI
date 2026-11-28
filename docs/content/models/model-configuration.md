@@ -498,6 +498,9 @@ Speculative decoding speeds up text generation by predicting multiple tokens ahe
 
 There are two approaches:
 
+The model editor sets up drafting without these flags: see
+[Drafting]({{%relref "/models/engine-settings#drafting" %}}).
+
 #### Draft Model Speculative Decoding
 
 Uses a smaller, faster model from the same model family to draft candidate tokens, which the main model then verifies. Requires a separate GGUF file for the draft model.
@@ -557,9 +560,9 @@ These are set via the `options:` array in the model configuration (format: `key:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `spec_type` / `speculative_type` | string | `none` | Speculative decoding type, or comma-separated list to chain multiple (see table below) |
-| `spec_n_max` / `draft_max` | int | 16 | Maximum number of tokens to draft per step |
+| `spec_n_max` / `draft_max` | int | 3 | Maximum number of tokens to draft per step |
 | `spec_n_min` / `draft_min` | int | 0 | Minimum draft tokens required to use speculation |
-| `spec_p_min` / `draft_p_min` | float | 0.75 | Minimum probability threshold for greedy acceptance |
+| `spec_p_min` / `draft_p_min` | float | 0 | Minimum probability threshold for greedy acceptance |
 | `spec_p_split` | float | 0.1 | Split probability for tree-based branching |
 
 **Draft-model options** (apply when `spec_type=draft`, i.e. a `draft_model` is configured)
@@ -854,6 +857,12 @@ These llama.cpp options are passed through the `options:` array.
 | `n_cpu_moe` | int | 0 | Keep MoE expert weights of the first N main-model layers on CPU (upstream `--n-cpu-moe`). |
 | `n_cpu_ffn` | int | 0 | Keep the dense FFN weights of the first N main-model layers on CPU (upstream `--n-cpu-ffn`). The counterpart of `n_cpu_moe` for dense models. A negative or non-numeric value is ignored with a warning. |
 | `kv_unified_per_slot` | int | 0 (unset) | Context limit per parallel slot (upstream `--kv-unified-per-slot`). Without `context_size`, the shared KV cache is sized to `parallel` times this value. |
+| `paged_kv` / `paged_serving` | bool | `true` | Paged serving: admission control and preemption over the shared KV pool, see [Paged serving]({{%relref "/models/capabilities/text/text-generation#paged-serving" %}}). Sets `parallel` to 8 when it is not set. Turns itself off for `kv_unified:false`, `context_shift` or `cont_batching:false`; an explicit `paged_kv:true` with one of those fails the load. |
+| `kv_pool_tokens` | int | `context_size` | Total KV pool in tokens for paged serving. Sets the context size. |
+| `prefill_budget` / `max_prefill_tokens` | int or `auto` | `256` | Prompt tokens read per step while other requests generate. `auto` adapts it to the number of decoding streams; `0` turns it off. Works without paged serving. |
+| `prefill_long` | int | `1024` | The prefill budget applies only to prompts longer than this; `0` applies it to every prompt. |
+| `kv_output_reserve` | int | `256` | With paged serving: free cells a request needs beyond its prompt to start, capped at its max tokens. |
+| `paged_preempt` | bool | `true` | With paged serving: preempt and later resume a request when the pool runs out. Keep it on: with `false`, an overflow fails every in-flight stream with HTTP 500. |
 | `yarn_orig_ctx` | int | 0 (model value) | Original context size of the model for YaRN scaling (upstream `--yarn-orig-ctx`). |
 
 #### Generic option passthrough

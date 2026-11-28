@@ -30,6 +30,7 @@ The MCP `tools/list` endpoint also exposes the full input schema for each of the
 - `get_chat_egress` — Read the network settings of the chats' isolated commands (ceiling, default, ports, registries, always-allowed hosts) and the requests of the last 24 hours.
 - `list_egress_events` — Read the audit of the isolated commands' network requests, newest first, with filters.
 - `get_branding` — Read the resolved instance name, tagline, and branding asset URLs.
+- `get_prompt_cache` — Read the size, free disk, effective cap and state of the disk prompt cache of each node.
 - `get_usage_stats` — Read token/request usage aggregates when usage tracking is enabled.
 - `get_pii_events` — Inspect recent PII-filter events without returning redacted request bodies.
 - `get_middleware_status` — Inspect middleware configuration and health.
@@ -44,7 +45,9 @@ The MCP `tools/list` endpoint also exposes the full input schema for each of the
 - `list_p2p_relays` — List the P2P relays and their sync state.
 - `list_federation` — List the LocalAI instances (this server and LocalAI remotes) and the federation groups with member health and load.
 - `list_p2p_split_workers` — List the model-split workers (llama.cpp RPC, MLX), their state, path and memory.
+- `plugins` — Plugins in the Claude Code plugin format, one `action`. Read: `list_marketplaces`, `browse`, `list_installed`, `check_updates`. Change (confirm first): `add_marketplace`, `refresh_marketplace`, `install` (plugins that run no code only), `enable`, `disable`, `remove`.
 - `get_p2p_relay_limits` — Read the data, time and bandwidth limits of one circuit on a P2P relay, the ceiling the relay operator set for each, and whether this server may change them.
+- `get_p2p_user_pairing` — Read how users pair their own phones over P2P: the relays of their invites, open relays, local addresses and the limits of each user.
 
 ## Mutating (require user confirmation per safety rule 1)
 
@@ -69,6 +72,7 @@ The MCP `tools/list` endpoint also exposes the full input schema for each of the
 - `set_alias` — Create, update, or remove a model alias.
 - `seed_router_corpus` — Add validated labelled exemplars to a KNN router corpus.
 - `clear_router_corpus` — Permanently clear a KNN router corpus and its live index entries.
+- `clear_prompt_cache` — Delete the disk prompt cache of one model or of every model.
 - `create_shared_folder` — Create the shared folder `/shared/<name>` with no members.
 - `rename_shared_folder` — Rename a shared folder by id; its members and pages stay.
 - `delete_shared_folder` — Move a shared folder to the trash. Returns `undo_rev`; drops every user's consent to its pages.
@@ -76,6 +80,8 @@ The MCP `tools/list` endpoint also exposes the full input schema for each of the
 - `set_shared_folder_member` — Give a user (ID, email or name) or `@everyone` `read` or `write` access to a shared folder, or change it.
 - `remove_shared_folder_member` — Take a member's access to a shared folder away.
 - `set_node_vram_budget` — Set or clear a federated node's VRAM budget override.
+- `set_node_limits` — Override one node's memory settings (models kept loaded, GPU budget, threshold, model swap), or reset them.
+- `set_model_memory_policy` — Change Settings > Models in memory (model limit, model swap, eviction, idle unload, reclaimer, GPU budget).
 - `set_scheduling` — Create or update a distributed per-model scheduling config.
 - `delete_scheduling` — Remove a distributed per-model scheduling config.
 - `pin_failover_target` — Force a failover chain to one target.
@@ -85,6 +91,8 @@ The MCP `tools/list` endpoint also exposes the full input schema for each of the
 - `manage_federation_group` — Create, update or delete a federation group, or drain or undrain one member.
 - `set_p2p_split_slow_path` — Use a model-split worker over a relay ("Use anyway"), or stop; a relay of the user with limits cuts each connection at them.
 - `set_p2p_split_node` — Attach a model-split worker to a backend node of the cluster, or to this server; pin the model to that node.
+- `drain_node` — Drain a backend node (its models keep serving until replacements load elsewhere; `force` removes them at once) or resume a draining node.
 - `set_node_split_server` — Declare a backend node a split server so model-split workers can be attached to it, or clear it (detaches its workers, stops its P2P host).
 - `set_carrier_weights` — Change one or more carrier weights (whole numbers 0 to 1000; a weight left out stays). 0 means: use that carrier only when no other fits. Applies to every frontend within seconds.
 - `set_p2p_relay_limits` — Change the data, time or bandwidth limit of one circuit on a P2P relay this server administers, up to the relay's ceiling (a value above it is refused); a new data or time limit restarts the relay's circuit service.
+- `set_p2p_user_pairing` — Change how users pair their own phones over P2P (relays auto or none, open relays, local addresses, devices per user 1 to 100, pending invites per user 1 to 20, invite life 60 to 86400 seconds); a field left out stays.

@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -94,13 +95,16 @@ type ModelLoader struct {
 	externalBackends         map[string]string
 	lruEvictionMaxRetries    int           // Maximum number of retries when waiting for busy models
 	lruEvictionRetryInterval time.Duration // Interval between retries when waiting for busy models
-	onUnloadHooks            []ModelUnloadHook
-	loadObserver             func(BackendLoadEvent)
-	loadLifecycleObserver    func(BackendLoadEvent) (func(BackendLoadEvent), error)
-	remoteUnloader           RemoteModelUnloader
-	modelRouter              ModelRouter // distributed mode: route to remote node
-	backendLogs              *BackendLogStore
-	backendLoggingEnabled    atomic.Bool
+	// modelSwapDisabled stops the loader from unloading a model to make
+	// room for another. Stored negated so the zero value keeps swap on.
+	modelSwapDisabled     bool
+	onUnloadHooks         []ModelUnloadHook
+	loadObserver          func(BackendLoadEvent)
+	loadLifecycleObserver func(BackendLoadEvent) (func(BackendLoadEvent), error)
+	remoteUnloader        RemoteModelUnloader
+	modelRouter           ModelRouter // distributed mode: route to remote node
+	backendLogs           *BackendLogStore
+	backendLoggingEnabled atomic.Bool
 	// stoppingProcs marks backend processes that LocalAI is stopping on
 	// purpose (model unload / graceful shutdown), keyed by the
 	// *process.Process pointer. The exit-watcher goroutine in startProcess
@@ -121,6 +125,9 @@ type ModelLoader struct {
 	// blockedLoads are the models whose loads are refused while their files
 	// change (a model upgrade). Guarded by mu.
 	blockedLoads map[string]bool
+	// backendEnv gives environment entries that the node sets on every
+	// backend process it starts (see SetBackendEnv). Guarded by mu.
+	backendEnv func() map[string]string
 
 	// hiddenOutput hides the backend output of zero-retention requests
 	// (see HideBackendOutput).
@@ -181,6 +188,29 @@ func (e *ModelLoadCooldownError) Error() string {
 	return fmt.Sprintf("model %q load is in cooldown after a recent failure; retry after %s",
 		e.ModelID, e.RetryAfter.Round(time.Second))
 }
+
+// ErrModelSwapDisabled is the sentinel of ModelSwapDisabledError, for
+// errors.Is checks.
+var ErrModelSwapDisabled = errors.New("model swap is disabled and no room is free")
+
+// ModelSwapDisabledError is returned when a load needs another model unloaded
+// (the active model limit is reached or a concurrency group is held) and
+// model swap is off. The HTTP layer maps it to 503 with a Retry-After header:
+// room may free up when a model goes idle and the watchdog unloads it.
+type ModelSwapDisabledError struct {
+	ModelID    string
+	RetryAfter time.Duration
+}
+
+func (e *ModelSwapDisabledError) Error() string {
+	return fmt.Sprintf("cannot load model %q: %s; retry after %s",
+		e.ModelID, ErrModelSwapDisabled, e.RetryAfter.Round(time.Second))
+}
+
+func (e *ModelSwapDisabledError) Is(target error) bool { return target == ErrModelSwapDisabled }
+
+// RetryLater marks the refusal as a wait, not a fault of the request.
+func (e *ModelSwapDisabledError) RetryLater() bool { return true }
 
 // ModelLoadsBlockedError is returned when a load is refused because the
 // model's files are being replaced (a model upgrade). The HTTP layer maps it
@@ -399,12 +429,76 @@ func (ml *ModelLoader) BackendLogs() *BackendLogStore {
 	return ml.backendLogs
 }
 
+// SetBackendEnv sets a function that gives environment entries for every
+// backend process this loader starts, read at each start so a runtime setting
+// applies to the next start. A key with an empty value is removed from the
+// environment the process inherits, so the node decides it alone. The entries
+// win over the environment of the model configuration.
+func (ml *ModelLoader) SetBackendEnv(fn func() map[string]string) {
+	ml.mu.Lock()
+	defer ml.mu.Unlock()
+	ml.backendEnv = fn
+}
+
+func (ml *ModelLoader) nodeBackendEnv() map[string]string {
+	ml.mu.Lock()
+	fn := ml.backendEnv
+	ml.mu.Unlock()
+	if fn == nil {
+		return nil
+	}
+	return fn()
+}
+
+// withNodeEnv applies the node entries to env: every inherited or earlier
+// entry of a node key is dropped, and the keys with a value are appended.
+func withNodeEnv(env []string, node map[string]string) []string {
+	if len(node) == 0 {
+		return env
+	}
+	out := make([]string, 0, len(env)+len(node))
+	for _, entry := range env {
+		key, _, _ := strings.Cut(entry, "=")
+		if _, ok := node[key]; ok {
+			continue
+		}
+		out = append(out, entry)
+	}
+	keys := make([]string, 0, len(node))
+	for k := range node {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if v := node[k]; v != "" {
+			out = append(out, k+"="+v)
+		}
+	}
+	return out
+}
+
 func (ml *ModelLoader) SetBackendLoggingEnabled(enabled bool) {
 	ml.backendLoggingEnabled.Store(enabled)
 }
 
 func (ml *ModelLoader) BackendLoggingEnabled() bool {
 	return ml.backendLoggingEnabled.Load()
+}
+
+// SetModelSwap turns model swap on or off. With swap off, a load that needs
+// room waits for the LRU retry window and then fails with a
+// ModelSwapDisabledError; no other model is unloaded for it.
+func (ml *ModelLoader) SetModelSwap(enabled bool) {
+	ml.mu.Lock()
+	defer ml.mu.Unlock()
+	ml.modelSwapDisabled = !enabled
+}
+
+// ModelSwapEnabled reports whether a load may unload other models.
+func (ml *ModelLoader) ModelSwapEnabled() bool {
+	ml.mu.Lock()
+	defer ml.mu.Unlock()
+	return !ml.modelSwapDisabled
 }
 
 // SetLRUEvictionRetrySettings updates the LRU eviction retry settings
@@ -747,6 +841,15 @@ func (ml *ModelLoader) ShutdownModelAtAddress(modelName, address string, force b
 	if !ok || m.address != address {
 		return nil
 	}
+	if ml.isRemoteStub(m) {
+		// In distributed mode this frontend's watchdog owns only the
+		// backends it started. A remote replica is unloaded by the cluster
+		// (router eviction, reconciler sweeps); unloading it from here
+		// would stop the model on every node that holds it.
+		xlog.Debug("Watchdog eviction of a remote replica: dropping the local stub only", "model", modelName, "address", address)
+		ml.evictRemoteStub(modelName)
+		return nil
+	}
 	err = ml.deleteProcess(ctx, modelName, force)
 	if errors.Is(err, ErrModelBusy) && !force && forceBackendShutdown {
 		forceCtx, forceCancel := context.WithTimeout(context.Background(), forcedShutdownTimeout)
@@ -782,6 +885,30 @@ func (ml *ModelLoader) shutdownModel(ctx context.Context, modelName string, forc
 	}
 	defer release()
 	return ml.deleteProcess(ctx, modelName, force)
+}
+
+// isRemoteStub reports whether m is the local stub of a replica that runs on
+// a worker node: distributed mode, and no process of this frontend.
+func (ml *ModelLoader) isRemoteStub(m *Model) bool {
+	return ml.isDistributed() && m != nil && m.Process() == nil
+}
+
+// isDistributed reports whether loads are routed to worker nodes.
+func (ml *ModelLoader) isDistributed() bool {
+	ml.mu.Lock()
+	defer ml.mu.Unlock()
+	return ml.modelRouter != nil
+}
+
+// trackAddressBackend registers a backend reached by address with the
+// watchdog, so LRU and group eviction see it loaded. In distributed mode an
+// address-only backend is a remote replica, which the frontend's watchdog
+// leaves to the cluster.
+func (ml *ModelLoader) trackAddressBackend(modelID, address string) {
+	if ml.wd == nil || ml.isDistributed() {
+		return
+	}
+	ml.wd.AddAddressModelMap(address, modelID)
 }
 
 // evictRemoteStub drops the local stub of a remote model without telling any

@@ -28,6 +28,9 @@ type scope struct {
 	skillNames   []string
 	addonNames   []string
 	collNames    []string
+	// plugins is the agent's exact grant list of plugin install IDs. An
+	// empty list grants none.
+	plugins []string
 	// hostSkills are the skills the host grants for this chat on top of the
 	// agent's skills: those of the active memory provider while the chat reads
 	// the notes (memorySkillsOff sets them). hostSkillAddon is the add-on that
@@ -73,6 +76,7 @@ func (s *Service) scopeOf(ctx context.Context, rec session.ChatRecord) *scope {
 		instructions: strings.TrimSpace(ag.Instructions), mcp: ag.MCPServers, memory: ag.Memory,
 		addons: set(ag.Addons), collections: set(ag.Collections), skills: set(ag.Skills),
 		addonNames: ag.Addons, collNames: ag.Collections, skillNames: ag.Skills,
+		plugins: ag.Plugins,
 	}
 }
 

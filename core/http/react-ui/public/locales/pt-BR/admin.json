@@ -8,6 +8,7 @@
     "subtitle": "Configurar as configurações de runtime do LocalAI",
     "saved": "Configurações salvas com sucesso",
     "saveFailed": "Falha ao salvar: {{message}}",
+    "memoryConflict": "As configurações de memória foram alteradas em outro lugar depois que esta página as carregou. A página agora mostra os valores em vigor. Aplique sua alteração novamente.",
     "loadFailed": "Falha ao carregar as configurações: {{message}}",
     "sections": {
       "branding": "Identidade visual",
@@ -101,7 +102,8 @@
       "retry": "Tentar a mesma operação de novo",
       "policy": "Política do proprietário · revisão {{revision}}",
       "apply": "Aplicar a configuração de atualização"
-    }
+    },
+    "memoryCluster": "Vale para cada nó worker. Para um valor diferente em um nó, use a página Nós."
   },
   "backends": {
     "lifecycle": {
@@ -281,7 +283,13 @@
     "sheet": {
       "account": "Conta",
       "activity": "Atividade",
-      "apiKeys": "Chaves de API"
+      "apiKeys": "Chaves de API",
+      "defaultOn": "Ligado por padrão para usuários",
+      "defaultOnHint": "Salvo na hora. Vale para todo usuário cujo acesso não define este recurso.",
+      "followsDefault": "Este usuário segue o padrão.",
+      "explicit": "Definido para este usuário: uma mudança do padrão não se aplica.",
+      "useDefault": "Usar o padrão",
+      "useDefaultFor": "Usar o padrão para {{feature}}"
     },
     "empty": {
       "title": "Nenhum usuário ainda",
@@ -310,7 +318,10 @@
       "deleted": "Usuário excluído",
       "deleteFailed": "Falha ao excluir o usuário: {{message}}",
       "passwordReset": "Senha redefinida para {{name}}",
-      "resetFailed": "Falha ao redefinir a senha: {{message}}"
+      "resetFailed": "Falha ao redefinir a senha: {{message}}",
+      "defaultOn": "O recurso agora está ligado por padrão para usuários.",
+      "defaultOff": "O recurso agora está desligado por padrão para usuários.",
+      "defaultFailed": "Não foi possível mudar o padrão: {{message}}"
     },
     "reset": {
       "title": "Redefinir senha",

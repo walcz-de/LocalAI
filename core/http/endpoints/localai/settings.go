@@ -2,12 +2,14 @@ package localai
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/mudler/LocalAI/core/gallery"
 	"github.com/mudler/LocalAI/core/http/endpoints/openresponses"
 	"github.com/mudler/LocalAI/core/schema"
+	"github.com/mudler/LocalAI/core/services/clustersettings"
 	"github.com/mudler/LocalAI/core/services/studio/hostexec"
 	"github.com/mudler/LocalAI/pkg/addons/contract"
 	"github.com/mudler/LocalAI/pkg/vram"
@@ -37,6 +40,24 @@ func GetSettingsEndpoint(app *application.Application) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		appConfig := app.ApplicationConfig()
 		settings := appConfig.ToRuntimeSettings()
+		if cs := app.ClusterSettings(); cs != nil {
+			// The memory settings are the cluster's: report the stored
+			// revision, which a save may send back as memory_revision.
+			_, rev := cs.Memory()
+			projection, err := settingsProjection(settings)
+			if err != nil {
+				return err
+			}
+			projection["memory_scope"] = json.RawMessage(`"cluster"`)
+			projection["memory_revision"] = json.RawMessage(strconv.FormatInt(rev, 10))
+			if appConfig.Addons.Enabled {
+				for _, key := range addonHostSettingsKeys {
+					delete(projection, key)
+				}
+				projection["addon_host_settings_authority"] = json.RawMessage(`"owner_required"`)
+			}
+			return c.JSON(http.StatusOK, projection)
+		}
 		if appConfig.Addons.Enabled {
 			// Do not expose stale local values as policy, even when the owner is
 			// unavailable. Unrelated settings remain readable without an owner RPC.
@@ -59,6 +80,32 @@ func GetSettingsEndpoint(app *application.Application) echo.HandlerFunc {
 		}
 		return c.JSON(http.StatusOK, settings)
 	}
+}
+
+// settingsProjection is settings as a JSON object, for a response that adds
+// or removes keys.
+func settingsProjection(settings config.RuntimeSettings) (map[string]json.RawMessage, error) {
+	body, err := json.Marshal(settings) // #nosec G117 -- authenticated administrator settings response
+	if err != nil {
+		return nil, err
+	}
+	var projection map[string]json.RawMessage
+	if err := json.Unmarshal(body, &projection); err != nil {
+		return nil, err
+	}
+	return projection, nil
+}
+
+// memoryRevision reads the optional memory_revision of a settings body: the
+// revision of the cluster memory settings the client read.
+func memoryRevision(body []byte) (*int64, error) {
+	var probe struct {
+		MemoryRevision *int64 `json:"memory_revision"`
+	}
+	if err := json.Unmarshal(body, &probe); err != nil {
+		return nil, err
+	}
+	return probe.MemoryRevision, nil
 }
 
 // UpdateSettingsEndpoint updates settings, saves to file, and applies immediately
@@ -248,6 +295,36 @@ func UpdateSettingsEndpoint(app *application.Application) echo.HandlerFunc {
 			return c.JSON(http.StatusBadRequest, schema.SettingsResponse{Success: false, Error: msg})
 		}
 
+		// In distributed mode the memory settings are stored once for the
+		// cluster and applied on every frontend by the cluster settings
+		// service; they never reach this frontend's file.
+		var memoryRev int64
+		if cs := app.ClusterSettings(); cs != nil {
+			memory, rest := config.SplitMemorySettings(settings)
+			if !memory.IsEmpty() {
+				expected, err := memoryRevision(body)
+				if err != nil {
+					return c.JSON(http.StatusBadRequest, schema.SettingsResponse{Success: false, Error: "Invalid memory_revision: " + err.Error()})
+				}
+				_, rev, err := cs.UpdateMemory(c.Request().Context(), memory, expected, actor(c))
+				if errors.Is(err, clustersettings.ErrStaleRevision) {
+					return c.JSON(http.StatusConflict, schema.SettingsResponse{
+						Success:        false,
+						Error:          "The memory settings were changed by someone else. Reload the settings and apply again.",
+						MemoryRevision: rev,
+					})
+				}
+				if err != nil {
+					return c.JSON(http.StatusInternalServerError, schema.SettingsResponse{Success: false, Error: "Failed to store the cluster memory settings: " + err.Error()})
+				}
+				memoryRev = rev
+			}
+			settings = rest
+			if rest.IsEmpty() {
+				return c.JSON(http.StatusOK, schema.SettingsResponse{Success: true, Message: "Settings updated successfully", MemoryRevision: memoryRev})
+			}
+		}
+
 		// Save to file
 		if appConfig.DynamicConfigsDir == "" {
 			return c.JSON(http.StatusBadRequest, schema.SettingsResponse{
@@ -378,6 +455,11 @@ func UpdateSettingsEndpoint(app *application.Application) echo.HandlerFunc {
 			xlog.Info("Updated LRU eviction retry settings", "maxRetries", maxRetries, "retryInterval", retryInterval)
 		}
 
+		if settings.ModelSwap != nil {
+			app.ModelLoader().SetModelSwap(appConfig.ModelSwapEnabled())
+			xlog.Info("Updated model swap setting", "modelSwap", appConfig.ModelSwapEnabled())
+		}
+
 		// Update Open Responses store TTL dynamically
 		if settings.OpenResponsesStoreTTL != nil {
 			ttl := time.Duration(0)
@@ -455,6 +537,7 @@ func UpdateSettingsEndpoint(app *application.Application) echo.HandlerFunc {
 			Success:         true,
 			Message:         "Settings updated successfully",
 			RestartRequired: restartRequired,
+			MemoryRevision:  memoryRev,
 		})
 	}
 }
@@ -541,6 +624,19 @@ func validateEgressSettings(s config.RuntimeSettings, body []byte, privateOn boo
 	}
 	if s.ChatsIndexMaxTextBytes != nil && (*s.ChatsIndexMaxTextBytes < config.MinChatsIndexMaxTextBytes || *s.ChatsIndexMaxTextBytes > config.MaxChatsIndexMaxTextBytes) {
 		return fmt.Sprintf("Invalid chats_index_max_text_bytes: use %d to %d", config.MinChatsIndexMaxTextBytes, config.MaxChatsIndexMaxTextBytes)
+	}
+	if s.PluginsHookTimeoutSeconds != nil && (*s.PluginsHookTimeoutSeconds < 1 || *s.PluginsHookTimeoutSeconds > config.MaxPluginHookTimeoutSeconds) {
+		return fmt.Sprintf("Invalid plugins_hook_timeout_seconds: use 1 to %d", config.MaxPluginHookTimeoutSeconds)
+	}
+	if s.PluginsMaxBytes != nil && (*s.PluginsMaxBytes < config.MinPluginMaxBytes || *s.PluginsMaxBytes > config.MaxPluginMaxBytes) {
+		return fmt.Sprintf("Invalid plugins_max_bytes: use %d to %d", config.MinPluginMaxBytes, config.MaxPluginMaxBytes)
+	}
+	if s.PluginsModelTiers != nil {
+		for k, v := range *s.PluginsModelTiers {
+			if !slices.Contains(config.PluginModelTierNames, k) || strings.TrimSpace(v) == "" {
+				return "Invalid plugins_model_tiers: the keys are haiku, sonnet and opus, each with a model"
+			}
+		}
 	}
 	if s.ChatsExtractMaxBytes != nil && (*s.ChatsExtractMaxBytes < config.MinChatsExtractMaxBytes || *s.ChatsExtractMaxBytes > config.MaxChatsExtractMaxBytes) {
 		return fmt.Sprintf("Invalid chats_extract_max_bytes: use %d to %d", config.MinChatsExtractMaxBytes, config.MaxChatsExtractMaxBytes)

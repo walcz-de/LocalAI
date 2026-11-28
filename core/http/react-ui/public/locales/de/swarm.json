@@ -133,7 +133,9 @@
     "run": {}
   },
   "inspector": {
-    "peer": "Peer-ID"
+    "peer": "Peer-ID",
+    "leaving": "Noch hier",
+    "drainDeadline": "Frist der Entleerung"
   },
   "splitServer": {
     "label": "Split-Server",
@@ -191,5 +193,43 @@
   },
   "failover": {
     "lostConnection": "Verbindung:"
+  },
+  "limits": {
+    "title": "Limits",
+    "sub": "Speichereinstellungen dieses Knotens. Ein hier gesetzter Wert hat Vorrang vor der Umgebung des Workers und den Cluster-Einstellungen (Einstellungen, Modelle im Speicher).",
+    "maxActive": "Geladen gehaltene Modelle",
+    "vramBudget": "GPU-Speicherbudget",
+    "vramBudgetPlaceholder": "z. B. 80% oder 12GB",
+    "threshold": "Speicherschwelle",
+    "thresholdOff": "Aus ({{pct}}% wenn an)",
+    "swap": "Modelle tauschen, wenn der Speicher voll ist",
+    "noLimit": "Kein Limit",
+    "none": "Keins",
+    "on": "An",
+    "off": "Aus",
+    "edit": "Bearbeiten",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "reset": "Alle zurücksetzen",
+    "saved": "Limits auf {{name}} gespeichert",
+    "resetDone": "Überschreibungen auf {{name}} entfernt",
+    "failed": "Die Limits konnten nicht geändert werden: {{error}}",
+    "loadFailed": "Die Limits dieses Knotens konnten nicht gelesen werden",
+    "source": {
+      "override": "Hier gesetzt",
+      "worker": "Worker-Umgebung",
+      "cluster": "Cluster",
+      "default": "Standard"
+    }
+  },
+  "detail": {
+    "vramBudgetOf": "Budget, {{detected}} erkannt",
+    "drainingLeaving": "Noch hier: {{count}} Modelle. Was um {{time}} noch hier ist, wird entfernt.",
+    "drainingEmpty": "Hier ist nichts mehr. Sie können den Worker jetzt stoppen."
+  },
+  "leave": {
+    "reloadDrain": "wird auf einem anderen passenden gesunden Knoten geladen, während dieser es weiter bedient, und verlässt dann diesen Knoten. Hat es keine Regel und ist es unbenutzt (nicht angeheftet, nicht kürzlich genutzt), wird es stattdessen entfernt. Freier Speicher wird hier nicht verglichen.",
+    "reloadNoneDrain": "hat keinen anderen gesunden Knoten, auf den es wechseln kann, und bedient daher hier weiter bis zur Frist der Entleerung, dann stoppt es. Hat es keine Regel und ist es unbenutzt (nicht angeheftet, nicht kürzlich genutzt), wird es stattdessen entfernt.",
+    "blockedDrain": "bedient hier weiter bis zur Frist der Entleerung, dann stoppt es: seine Regel erlaubt nur {{selector}}, und kein anderer gesunder Knoten hat diese Labels."
   }
 }

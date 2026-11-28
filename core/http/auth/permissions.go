@@ -8,6 +8,10 @@ import (
 
 const contextKeyPermissions = "auth_permissions"
 
+// contextKeyPermissionsDB holds the database the cached permissions came from,
+// so FeatureAllowed can read an administrator's default for a feature.
+const contextKeyPermissionsDB = "auth_permissions_db"
+
 // GetCachedUserPermissions returns the user's permission record, using a
 // request-scoped cache stored in the echo context. This avoids duplicate
 // DB lookups when multiple middlewares (RequireRouteFeature, RequireModelAccess)
@@ -21,6 +25,7 @@ func GetCachedUserPermissions(c echo.Context, db *gorm.DB, userID string) (*User
 		return nil, err
 	}
 	c.Set(contextKeyPermissions, perm)
+	c.Set(contextKeyPermissionsDB, db)
 	return perm, nil
 }
 
@@ -42,7 +47,8 @@ func FeatureAllowed(c echo.Context, feature string) bool {
 	if val, exists := perm.Permissions[feature]; exists {
 		return val
 	}
-	return isDefaultOnFeature(feature)
+	db, _ := c.Get(contextKeyPermissionsDB).(*gorm.DB)
+	return isDefaultOnFeature(db, feature)
 }
 
 // Feature name constants — all code must use these, never bare strings.
@@ -71,6 +77,15 @@ const (
 	FeatureAddons       = "addons"
 	FeatureFineTuning   = "fine_tuning"
 	FeatureQuantization = "quantization"
+	// FeatureP2PPair lets a user pair their own devices over P2P. Off by
+	// default; an administrator can change the default for every user
+	// (see feature_defaults.go).
+	FeatureP2PPair = "p2p_pair"
+	// FeaturePlugins gates the plugins in the Claude Code plugin format
+	// (/api/plugins): browsing, personal installs and the per-user switch.
+	// Unlike the other general features it is on by default; administrator
+	// rights cover the rest.
+	FeaturePlugins = "plugins"
 
 	// API features (default ON for new users)
 	FeatureChat                = "chat"
@@ -107,8 +122,12 @@ const (
 // AgentFeatures lists agent-related features (default OFF).
 var AgentFeatures = []string{FeatureCollections, FeatureLocalAIAssistant, FeatureAgents, FeatureTriggers, FeatureConnectors, FeatureMCPJobs, FeaturePages}
 
-// GeneralFeatures lists general features (default OFF).
-var GeneralFeatures = []string{FeatureAddons, FeatureFineTuning, FeatureQuantization}
+// GeneralFeatures lists general features (default OFF, except the ones in
+// defaultOnGeneralFeatures).
+var GeneralFeatures = []string{FeatureAddons, FeatureFineTuning, FeatureQuantization, FeatureP2PPair, FeaturePlugins}
+
+// defaultOnGeneralFeatures are the general features that default to ON.
+var defaultOnGeneralFeatures = []string{FeaturePlugins}
 
 // APIFeatures lists API endpoint features (default ON).
 var APIFeatures = []string{
@@ -124,17 +143,30 @@ var APIFeatures = []string{
 // AllFeatures lists all known features (used by UI and validation).
 var AllFeatures = append(append(append([]string{}, AgentFeatures...), GeneralFeatures...), APIFeatures...)
 
-// defaultOnFeatures is the set of features that default to ON when absent from a user's permission map.
+// defaultOnFeatures is the built-in set of features that default to ON when
+// absent from a user's permission map. An administrator can override the
+// default of a configurable feature (see feature_defaults.go).
 var defaultOnFeatures = func() map[string]bool {
 	m := map[string]bool{}
 	for _, f := range APIFeatures {
 		m[f] = true
 	}
+	for _, f := range defaultOnGeneralFeatures {
+		m[f] = true
+	}
 	return m
 }()
 
-// isDefaultOnFeature returns true if the feature defaults to ON when not explicitly set.
-func isDefaultOnFeature(feature string) bool {
+// isDefaultOnFeature returns true if the feature defaults to ON when not
+// explicitly set. For a feature with a configurable default it reads the
+// override that an administrator stored in db; with a nil db it returns the
+// built-in default.
+func isDefaultOnFeature(db *gorm.DB, feature string) bool {
+	if db != nil && configurableDefaults[feature] {
+		if on, ok := featureDefaultOverride(db, feature); ok {
+			return on
+		}
+	}
 	return defaultOnFeatures[feature]
 }
 
@@ -195,7 +227,7 @@ func HasFeatureAccess(db *gorm.DB, user *User, feature string) bool {
 	}
 	val, exists := perm.Permissions[feature]
 	if !exists {
-		return isDefaultOnFeature(feature)
+		return isDefaultOnFeature(db, feature)
 	}
 	return val
 }
@@ -226,10 +258,31 @@ func GetPermissionMapForUser(db *gorm.DB, user *User) PermissionMap {
 		if exists {
 			effective[f] = val
 		} else {
-			effective[f] = isDefaultOnFeature(f)
+			effective[f] = isDefaultOnFeature(db, f)
 		}
 	}
 	return effective
+}
+
+// GetExplicitPermissions returns the keys stored in a user's permission map:
+// the features set to an explicit value. A feature it does not name follows
+// its default, so an administrator's later change to a configurable default
+// reaches the user. It only reads: a user without a record gets an empty map
+// and no record is created.
+func GetExplicitPermissions(db *gorm.DB, userID string) (PermissionMap, error) {
+	var perm UserPermission
+	err := db.Where("user_id = ?", userID).First(&perm).Error
+	if err == gorm.ErrRecordNotFound {
+		return PermissionMap{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make(PermissionMap, len(perm.Permissions))
+	for k, v := range perm.Permissions {
+		out[k] = v
+	}
+	return out, nil
 }
 
 // GetModelAllowlist returns the model allowlist for a user.

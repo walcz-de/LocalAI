@@ -133,7 +133,9 @@
     "run": {}
   },
   "inspector": {
-    "peer": "ID de pair"
+    "peer": "ID de pair",
+    "leaving": "Modèles encore ici",
+    "drainDeadline": "Échéance de la vidange"
   },
   "splitServer": {
     "label": "Serveur de découpage",
@@ -191,5 +193,43 @@
   },
   "failover": {
     "lostConnection": "Connexion :"
+  },
+  "limits": {
+    "title": "Limites",
+    "sub": "Réglages mémoire de ce nœud. Une valeur définie ici l'emporte sur l'environnement du worker et sur les réglages du cluster (Réglages, Modèles en mémoire).",
+    "maxActive": "Modèles gardés chargés",
+    "vramBudget": "Budget de mémoire GPU",
+    "vramBudgetPlaceholder": "ex. 80% ou 12GB",
+    "threshold": "Seuil de mémoire",
+    "thresholdOff": "Désactivé ({{pct}}% une fois activé)",
+    "swap": "Échanger les modèles quand la mémoire est pleine",
+    "noLimit": "Aucune limite",
+    "none": "Aucun",
+    "on": "Activé",
+    "off": "Désactivé",
+    "edit": "Modifier",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "reset": "Tout réinitialiser",
+    "saved": "Limites enregistrées sur {{name}}",
+    "resetDone": "Valeurs propres supprimées sur {{name}}",
+    "failed": "Impossible de modifier les limites : {{error}}",
+    "loadFailed": "Impossible de lire les limites de ce nœud",
+    "source": {
+      "override": "Défini ici",
+      "worker": "Environnement du worker",
+      "cluster": "Cluster",
+      "default": "Par défaut"
+    }
+  },
+  "detail": {
+    "vramBudgetOf": "Budget, {{detected}} détectés",
+    "drainingLeaving": "Modèles encore ici : {{count}}. Ce qui reste à {{time}} est retiré.",
+    "drainingEmpty": "Il n'y reste plus rien. Vous pouvez arrêter le worker."
+  },
+  "leave": {
+    "reloadDrain": "se charge sur un autre nœud sain qui convient pendant que celui-ci continue de le servir, puis quitte ce nœud. S'il n'a pas de règle et qu'il est inactif (non épinglé, pas utilisé récemment), il est retiré à la place. La mémoire libre n'est pas comparée ici.",
+    "reloadNoneDrain": "n'a aucun autre nœud sain où aller : il continue de servir ici jusqu'à l'échéance de la vidange, puis s'arrête. S'il n'a pas de règle et qu'il est inactif (non épinglé, pas utilisé récemment), il est retiré à la place.",
+    "blockedDrain": "continue de servir ici jusqu'à l'échéance de la vidange, puis s'arrête : sa règle n'autorise que {{selector}} et aucun autre nœud sain n'a ces étiquettes."
   }
 }

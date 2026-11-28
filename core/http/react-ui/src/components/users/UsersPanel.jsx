@@ -124,6 +124,23 @@ export default function UsersPanel({ addToast, registrationMode, initialQuery = 
 
   useEffect(() => { fetchUsers(); fetchFeatures() }, [fetchUsers, fetchFeatures])
 
+  // The default of a configurable feature applies to every user whose access
+  // does not name it; the answer is the feature with its new default.
+  const setFeatureDefault = async (key, enabled) => {
+    try {
+      const meta = await adminUsersApi.setFeatureDefault(key, enabled)
+      const value = typeof meta?.default === 'boolean' ? meta.default : enabled
+      setFeatureMeta(prev => {
+        if (!prev) return prev
+        const patch = list => (list || []).map(f => (f.key === key ? { ...f, default: value } : f))
+        return { ...prev, api_features: patch(prev.api_features), agent_features: patch(prev.agent_features), general_features: patch(prev.general_features) }
+      })
+      addToast(t(value ? 'users.toast.defaultOn' : 'users.toast.defaultOff'), 'success')
+    } catch (err) {
+      addToast(t('users.toast.defaultFailed', { message: err.message }), 'error')
+    }
+  }
+
   const isSelf = (u) => currentUser && (u.id === currentUser.id || u.email === currentUser.email)
   const label = (u) => u.name || u.email
   const stateLabel = (state) => t(`users.state.${state}`)
@@ -237,8 +254,8 @@ export default function UsersPanel({ addToast, registrationMode, initialQuery = 
     { key: 'delete', icon: 'trash', label: t('users.menu.delete'), danger: true, onClick: () => { setDeleting(u); setTyped('') } },
   ]
 
-  const handlePermissionSave = (userId, perms, models, quotas) => {
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, permissions: perms, allowed_models: models, quotas } : u))
+  const handlePermissionSave = (userId, perms, models, quotas, explicit) => {
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, permissions: perms, explicit_permissions: explicit, allowed_models: models, quotas } : u))
   }
 
   const sheetActions = (u) => (
@@ -432,7 +449,7 @@ export default function UsersPanel({ addToast, registrationMode, initialQuery = 
       {editingUser && featureMeta && (
         <AccessSheet
           user={editingUser} featureMeta={featureMeta} availableModels={availableModels} addToast={addToast}
-          onClose={() => setEditingUser(null)} onSave={handlePermissionSave} actions={sheetActions(editingUser)}
+          onClose={() => setEditingUser(null)} onSave={handlePermissionSave} actions={sheetActions(editingUser)} onFeatureDefault={setFeatureDefault}
         />
       )}
 

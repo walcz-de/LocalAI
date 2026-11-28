@@ -38,6 +38,8 @@ const (
 	routeVRAMEstimate           = "/api/models/vram-estimate"
 	routeEngines                = "/api/engines"
 	routeBranding               = "/api/branding"
+	routePromptCache            = "/api/prompt-cache"
+	routePromptCacheClear       = "/api/prompt-cache/clear"
 	routeSettings               = "/api/settings"
 	routeUsage                  = "/api/usage"
 	routeUsageAll               = "/api/usage/all"
@@ -54,8 +56,13 @@ const (
 	routeP2PDevices             = "/api/p2p/devices"
 	routeP2PInvites             = "/api/p2p/invites"
 	routeP2PRelays              = "/api/p2p/relays"
+	routeP2PUserPairing         = "/api/p2p/user-pairing"
 	routeFederation             = "/api/federation"
 	routeFederationGroups       = "/api/federation/groups"
+	routePluginMarketplaces     = "/api/plugins/marketplaces"
+	routePluginCatalog          = "/api/plugins/catalog"
+	routePluginInspect          = "/api/plugins/inspect"
+	routePluginInstalls         = "/api/plugins/installs"
 	routeP2PSplitWorkers        = "/api/p2p/split-workers"
 	routeSharedFolders          = "/api/chats/admin/shared-folders"
 	routeSharedFolderRestore    = "/api/chats/admin/shared-folders/restore"
@@ -107,8 +114,16 @@ func routeToggleModelPinned(name, action string) string {
 	return fmt.Sprintf("/models/toggle-pinned/%s/%s", url.PathEscape(name), url.PathEscape(action))
 }
 
+func routeNodeDrain(id, action string) string {
+	return "/api/nodes/" + url.PathEscape(id) + "/" + action
+}
+
 func routeNodeSplitServer(id string) string {
 	return "/api/nodes/" + url.PathEscape(id) + "/split-server"
+}
+
+func routeNodeLimits(id string) string {
+	return "/api/nodes/" + url.PathEscape(id) + "/limits"
 }
 
 func routeNodeVRAMBudget(id string) string {

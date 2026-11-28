@@ -26,6 +26,11 @@ type connectorRow struct {
 	AgentsOnly bool
 	Created    time.Time
 	Updated    time.Time
+	// The plugin columns came later: empty for the connectors a user made,
+	// so AutoMigrate is their migration.
+	PluginInstallID string `gorm:"index;size:64"`
+	PluginServer    string `gorm:"size:255"`
+	PluginDigest    string `gorm:"size:80"`
 }
 
 func (connectorRow) TableName() string { return "studio_mcp_connectors" }
@@ -46,7 +51,8 @@ func NewGORM(db *gorm.DB) (Store, error) {
 func (r connectorRow) connector() (Connector, error) {
 	c := Connector{ID: r.ID, Owner: r.Owner, Name: r.Name, Transport: r.Transport, URL: r.URL, Command: r.Command,
 		Secrets: append([]byte(nil), r.Secrets...), HasToken: r.HasToken, HasHeaders: r.HasHeaders, HasEnv: r.HasEnv,
-		Enabled: r.Enabled, AgentsOnly: r.AgentsOnly, Created: r.Created.UTC(), Updated: r.Updated.UTC()}
+		Enabled: r.Enabled, AgentsOnly: r.AgentsOnly, Created: r.Created.UTC(), Updated: r.Updated.UTC(),
+		PluginInstallID: r.PluginInstallID, PluginServer: r.PluginServer, PluginDigest: r.PluginDigest}
 	if r.Args != "" {
 		if err := json.Unmarshal([]byte(r.Args), &c.Args); err != nil {
 			return c, err
@@ -71,7 +77,8 @@ func (s *gormStore) Put(ctx context.Context, c Connector) error {
 		}
 		return tx.Save(&connectorRow{ID: c.ID, Owner: c.Owner, Name: c.Name, Transport: c.Transport, URL: c.URL, Command: c.Command,
 			Args: args, Secrets: c.Secrets, HasToken: c.HasToken, HasHeaders: c.HasHeaders, HasEnv: c.HasEnv, Enabled: c.Enabled,
-			AgentsOnly: c.AgentsOnly, Created: c.Created, Updated: c.Updated}).Error
+			AgentsOnly: c.AgentsOnly, Created: c.Created, Updated: c.Updated,
+			PluginInstallID: c.PluginInstallID, PluginServer: c.PluginServer, PluginDigest: c.PluginDigest}).Error
 	})
 }
 
@@ -105,4 +112,23 @@ func (s *gormStore) List(ctx context.Context, owner string) ([]Connector, error)
 
 func (s *gormStore) Delete(ctx context.Context, id string) error {
 	return s.db.WithContext(ctx).Where("id = ?", id).Delete(&connectorRow{}).Error
+}
+
+func (s *gormStore) ListPlugin(ctx context.Context, installID string) ([]Connector, error) {
+	if installID == "" {
+		return nil, nil
+	}
+	var rows []connectorRow
+	if err := s.db.WithContext(ctx).Where("plugin_install_id = ?", installID).Order("id").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]Connector, 0, len(rows))
+	for _, r := range rows {
+		c, err := r.connector()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
 }

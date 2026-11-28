@@ -133,7 +133,9 @@
     "run": {}
   },
   "inspector": {
-    "peer": "Peer ID"
+    "peer": "Peer ID",
+    "leaving": "Model yang masih di sini",
+    "drainDeadline": "Batas waktu pengosongan"
   },
   "splitServer": {
     "label": "Server split",
@@ -191,5 +193,43 @@
   },
   "failover": {
     "lostConnection": "Koneksi:"
+  },
+  "limits": {
+    "title": "Batas",
+    "sub": "Pengaturan memori node ini. Nilai yang diatur di sini mengalahkan lingkungan worker dan pengaturan cluster (Pengaturan, Model di memori).",
+    "maxActive": "Model yang tetap dimuat",
+    "vramBudget": "Anggaran memori GPU",
+    "vramBudgetPlaceholder": "mis. 80% atau 12GB",
+    "threshold": "Ambang memori",
+    "thresholdOff": "Mati ({{pct}}% saat aktif)",
+    "swap": "Tukar model saat memori penuh",
+    "noLimit": "Tanpa batas",
+    "none": "Tidak ada",
+    "on": "Aktif",
+    "off": "Mati",
+    "edit": "Ubah",
+    "save": "Simpan",
+    "cancel": "Batal",
+    "reset": "Atur ulang semua",
+    "saved": "Batas disimpan di {{name}}",
+    "resetDone": "Penimpaan di {{name}} dihapus",
+    "failed": "Tidak dapat mengubah batas: {{error}}",
+    "loadFailed": "Tidak dapat membaca batas node ini",
+    "source": {
+      "override": "Diatur di sini",
+      "worker": "Lingkungan worker",
+      "cluster": "Cluster",
+      "default": "Bawaan"
+    }
+  },
+  "detail": {
+    "vramBudgetOf": "Anggaran, {{detected}} terdeteksi",
+    "drainingLeaving": "Model yang masih di sini: {{count}}. Yang tersisa pada {{time}} akan dihapus.",
+    "drainingEmpty": "Tidak ada lagi yang tersisa. Anda dapat menghentikan worker sekarang."
+  },
+  "leave": {
+    "reloadDrain": "dimuat di node sehat lain yang cocok sementara node ini tetap melayaninya, lalu meninggalkan node ini. Jika tidak punya aturan dan sedang tidak dipakai (tidak disematkan, tidak dipakai baru-baru ini), model ini langsung dihapus. Memori bebas tidak dibandingkan di sini.",
+    "reloadNoneDrain": "tidak punya node sehat lain untuk berpindah, jadi tetap melayani di sini sampai batas waktu pengosongan, lalu berhenti. Jika tidak punya aturan dan sedang tidak dipakai (tidak disematkan, tidak dipakai baru-baru ini), model ini langsung dihapus.",
+    "blockedDrain": "tetap melayani di sini sampai batas waktu pengosongan, lalu berhenti: aturannya hanya mengizinkan {{selector}} dan tidak ada node sehat lain yang memiliki label tersebut."
   }
 }

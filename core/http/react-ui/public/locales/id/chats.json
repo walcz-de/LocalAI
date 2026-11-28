@@ -284,6 +284,13 @@
       "done": "{{count}} diimpor. Semuanya nonaktif: uji dan aktifkan di bawah.",
       "failed": "{{name}} tidak diimpor: {{error}}",
       "left": "Server yang tidak diimpor tetap ada di browser ini."
+    },
+    "plugin": {
+      "tag": "Plugin: {{name}}",
+      "switch": "{{name}} diaktifkan dan dinonaktifkan bersama plugin {{plugin}}",
+      "title": "Dikelola oleh plugin {{name}}",
+      "body": "Plugin ini membuat konektor ini dan menghapusnya saat Anda menonaktifkan plugin. Anda tidak dapat mengubahnya di sini.",
+      "manage": "Buka plugin"
     }
   },
   "connectorsPage": {
@@ -781,7 +788,8 @@
         "kind": {
           "model": "Model",
           "backend": "Backend",
-          "addon": "Add-on"
+          "addon": "Add-on",
+          "plugin": "Plugin"
         },
         "done": {
           "install": "{{kind}} {{name}} terinstal",
@@ -1180,7 +1188,8 @@
       "page": "Halaman",
       "dashboard": "Dasbor",
       "knowledge": "Pengetahuan",
-      "voice_profile": "Profil suara"
+      "voice_profile": "Profil suara",
+      "plugin": "Plugin"
     },
     "scope": {
       "user": "Semua obrolan Anda",
@@ -1283,6 +1292,17 @@
       "thisProject": "proyek ini",
       "why": "Bagikan proyek lagi dengan akses ubah, lalu minta catatan itu lagi jika Anda masih menginginkannya.",
       "nameHint": "Nama proyek diambil dari foldernya"
+    },
+    "plugin": {
+      "label": "Tindakan plugin",
+      "help": "Asisten memintanya. Tindakan berjalan atas namamu saat kamu mengonfirmasi. Pastikan kamu menginginkannya: asisten membaca teks dari marketplace plugin, yang bisa diterbitkan siapa saja.",
+      "action": "Tindakan",
+      "plugin": "Plugin",
+      "scope": "Untuk",
+      "install": "Pemasangan",
+      "source": "Sumber",
+      "ref": "Branch atau tag",
+      "marketplace": "ID marketplace"
     }
   },
   "proposalsPage": {

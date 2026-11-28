@@ -5,7 +5,6 @@
     },
     "engineSettings": {
         "title": "Réglages d'exécution",
-        "lead": "Comment {{engine}} charge et exécute ce modèle. Chaque champ est un flag de {{binary}}. Un champ vide garde la valeur par défaut.",
         "leadNoCommand": "Comment {{engine}} charge et exécute ce modèle. Un champ vide garde la valeur par défaut.",
         "loading": "Chargement des réglages de {{engine}}",
         "default": "Par défaut",
@@ -53,8 +52,17 @@
             "options_slot_prompt_similarity": "Similarité du prompt par slot",
             "options_kv_unified_per_slot": "Tokens par slot",
             "options_cache_ram": "Mémoire du cache de prompts (Mio)",
+            "options_prompt_cache_disk": "Cache des prompts sur disque",
+            "options_prompt_cache_disk_ttl_hours": "Durée de vie du cache disque (heures)",
+            "options_prompt_cache_disk_min_tokens": "Tokens minimum pour le cache disque",
+            "options_prompt_cache_disk_quota_mib": "Quota du cache disque par utilisateur (Mio)",
+            "options_prompt_cache_disk_max_size_mib": "Limite du cache disque (Mio)",
+            "options_prompt_cache_disk_shared": "Cache disque partagé",
+            "options_prompt_cache_disk_low_free_mib": "Espace libre bas pour le cache (Mio)",
+            "options_prompt_cache_disk_critical_free_mib": "Espace libre critique pour le cache (Mio)",
             "options_mmproj_use_gpu": "Projecteur de vision sur GPU",
             "options_backend_sampling_min_slots": "Slots minimum pour l'échantillonnage GPU",
+            "options_grammar_engine": "Moteur de grammaire",
             "options_context_shift": "Décalage du contexte",
             "options_cont_batching": "Batching continu",
             "options_kv_unified": "Cache KV unifié",
@@ -112,11 +120,13 @@
             "options_spec_ngram_map_k4v_size_m": "Longueur de proposition ngram-map-k4v",
             "options_spec_ngram_map_k4v_min_hits": "Correspondances min. ngram-map-k4v",
             "options_spec_lookup_cache_static": "Fichier de cache n-gram statique",
-            "options_spec_lookup_cache_dynamic": "Fichier de cache n-gram dynamique"
+            "options_spec_lookup_cache_dynamic": "Fichier de cache n-gram dynamique",
+            "draft_model": "Fichier du modèle brouillon",
+            "options_spec_max_streams": "Suspendre le brouillon au-delà de N flux"
         },
         "choices": {
             "load_mode": {
-                "default": "Par défaut (projeté en mémoire)",
+                "default": "Par défaut (auto)",
                 "none": "Aucun (lu en mémoire)",
                 "mmap": "mmap",
                 "mlock": "mlock",
@@ -131,7 +141,7 @@
         },
         "hints": {
             "load_mode": "Comment le fichier du modèle est lu. Écrit mmap, mmlock et l'option direct_io.",
-            "backend_sampling": "Où les tokens sont échantillonnés. Un backend sans échantillonnage sur GPU ignore ce réglage."
+            "backend_sampling": "Où le jeton suivant est choisi : sur le CPU ou sur le GPU."
         },
         "errors": {
             "notInteger": "Saisissez un nombre entier.",
@@ -256,30 +266,76 @@
             "title": "Configuration rapide",
             "custom": "Personnalisée",
             "customText": "Réglez vous-même les champs ci-dessous.",
-            "current": "Vos réglages",
             "estimating": "Estimation...",
-            "noEstimate": "Pas d'estimation",
-            "same": "À peu près la même mémoire",
             "more": "≈ {{size}} de mémoire en plus",
             "less": "≈ {{size}} de mémoire en moins",
-            "now": "Actuellement : cache KV ≈ {{kv}} et tampons de calcul ≈ {{compute}} pour {{context}} tokens, en plus des poids.",
             "estimate": "Ces chiffres sont des estimations.",
             "approximate": "Estimations grossières : la structure du modèle n'a pas été lue dans le fichier.",
-            "failed": "L'estimation de la mémoire n'est pas disponible."
+            "failed": "L'estimation de la mémoire n'est pas disponible.",
+            "batch": "Lot",
+            "concurrency": "Concurrence",
+            "bestFor": "Idéal pour : {{use}}",
+            "share": "Environ {{tokens}} tokens de contexte par flux",
+            "tight": "Le cache KV f16 ne tient pas, un cache 8 bits est donc utilisé.",
+            "unsupported": "Non proposé ici",
+            "needs": "Nécessite {{size}} de mémoire",
+            "noFit": "Ne tient pas : ≈ {{size}} sur {{limit}}",
+            "shared": "Les slots partagent un seul cache KV : plus de flux demandent à peu près la même mémoire, et chaque flux reçoit une plus petite part du contexte.",
+            "compare": "Comparer les réglages",
+            "nowLabel": "Mémoire actuelle",
+            "nowShort": "Cache KV ≈ {{kv}}, tampons de calcul ≈ {{compute}}, pour {{context}} jetons",
+            "estimateShort": "Estimation",
+            "approximateShort": "Estimation approximative",
+            "moreShort": "+{{size}}",
+            "lessShort": "−{{size}}"
         },
         "profiles": {
             "balanced": {
-                "name": "Équilibrée",
-                "text": "Les valeurs par défaut : LocalAI choisit le batch et les slots pour votre GPU, avec un cache KV f16."
+                "name": "Équilibré",
+                "text": "Les tailles de lot par défaut : LocalAI les choisit pour votre GPU.",
+                "line": "Tailles de lot choisies par LocalAI pour votre GPU."
             },
             "longPrompts": {
                 "name": "Prompts longs",
-                "text": "Batch et micro-batch de 2048. Les prompts longs sont lus bien plus vite ; les tampons de calcul utilisent plus de mémoire."
+                "text": "Un lot de 2048. Les prompts longs sont lus bien plus vite ; les tampons de calcul utilisent plus de mémoire.",
+                "memory": {
+                    "discrete": "Sur un GPU dédié, le micro-lot est de 1024 : son tampon de calcul doit tenir sur une seule carte."
+                },
+                "line": "Lit les longs prompts bien plus vite. Utilise plus de mémoire."
             },
-            "concurrent": {
-                "name": "Plus d'utilisateurs simultanés",
-                "text": "Cache KV 8 bits, service paginé et 8 slots. Environ deux fois plus de tokens tiennent dans la même mémoire, partagés par plus d'utilisateurs, avec une légère perte de qualité.",
-                "note": "Un cache KV quantifié peut être plus lent sur certains chemins d'attention tant que llama.cpp n'a pas de noyau rapide pour eux. Le service paginé demande une version du backend qui le prend en charge ; les autres ignorent l'option."
+            "concurrencyDefault": {
+                "name": "Par défaut",
+                "text": "LocalAI choisit les slots pour votre GPU et le backend applique ses valeurs par défaut.",
+                "bestFor": "Une personne, ou quelques-unes.",
+                "line": "Pour une personne ou quelques-unes. LocalAI choisit les slots."
+            },
+            "streams8": {
+                "name": "8 flux",
+                "text": "8 slots avec le service paginé : les requêtes partagent le cache KV et attendent au lieu d'échouer quand il est plein.",
+                "bestFor": "Une équipe qui discute avec un modèle.",
+                "short": "8",
+                "line": "Pour une équipe qui discute avec un modèle."
+            },
+            "streams16": {
+                "name": "16 flux",
+                "text": "16 slots, échantillonnage GPU à partir de 16 requêtes, sans brouillon.",
+                "bestFor": "Agents et outils qui envoient des requêtes en parallèle.",
+                "memory": {
+                    "system": "Pas de GPU : les tokens sont échantillonnés sur le CPU."
+                },
+                "short": "16",
+                "line": "Pour les agents et outils qui envoient des requêtes en parallèle."
+            },
+            "streams32": {
+                "name": "32+ flux",
+                "text": "32 slots, échantillonnage GPU toujours actif et sans brouillon : le plus de tokens par seconde au total, chaque flux plus lent.",
+                "bestFor": "Traitements par lots et nombreux utilisateurs à la fois.",
+                "memory": {
+                    "discrete": "Cache KV 8 bits : environ deux fois plus de tokens tiennent, avec un léger coût en qualité et en vitesse.",
+                    "system": "Non proposé sans GPU : un CPU partagé entre 32 flux rend chacun trop lent."
+                },
+                "short": "32+",
+                "line": "Pour les traitements par lots et de nombreux utilisateurs. Le plus de jetons par seconde au total."
             }
         },
         "choiceHints": {
@@ -287,8 +343,150 @@
                 "off": "Échantillonne les tokens sur le CPU. Rien n'est écrit dans le fichier.",
                 "auto": "Utilise l'échantillonnage sur GPU quand le modèle tourne sur un GPU avec plusieurs requêtes en parallèle et que la requête n'a besoin ni de grammaire ni de logprobs.",
                 "on": "Échantillonne les tokens sur le GPU. Plus rapide avec de nombreuses requêtes en parallèle. Désactivé automatiquement pour les requêtes avec une grammaire, un budget de raisonnement ou des logprobs."
+            },
+            "load_mode": {
+                "default": "llama.cpp choisit : projeté en mémoire, sauf sur les GPU intégrés qui garderaient le modèle deux fois."
             }
         },
-        "groupCount": "{{count}} réglages"
+        "groupCount": "{{count}} réglages",
+        "drafting": {
+            "title": "Brouillon (décodage spéculatif)",
+            "lead": "Un brouillon rapide propose les jetons suivants et le modèle les vérifie en une étape. Les réponses arrivent plus vite ; la sortie reste la même.",
+            "mode": "Mode",
+            "more": "Plus d'options de brouillon",
+            "auto": "{{mode}} est actif par défaut : ce modèle a une tête MTP, donc LocalAI s'en sert pour les brouillons sauf si vous choisissez Désactivé.",
+            "custom": {
+                "title": "Réglage de brouillon personnalisé",
+                "body": "Ce modèle utilise spec_type {{kinds}}, qu'aucun mode ne couvre. Il reste tel quel jusqu'à ce que vous choisissiez un mode."
+            },
+            "modes": {
+                "off": {
+                    "label": "Désactivé",
+                    "doc": "Pas de brouillon. Chaque token vient du modèle seul."
+                },
+                "ngram": {
+                    "label": "N-gramme",
+                    "doc": "Propose les tokens qui ont suivi les mêmes mots plus tôt dans la conversation. Pas de modèle en plus ni de mémoire en plus.",
+                    "note": "Idéal pour une sortie qui reprend son entrée, comme des modifications de code ou de longues citations. En discussion normale, le gain est faible et peut coûter quelques pour cent."
+                },
+                "model": {
+                    "label": "Modèle brouillon",
+                    "doc": "Un petit modèle au même vocabulaire propose des tokens, et le modèle les vérifie en une étape.",
+                    "note": "Le modèle brouillon est chargé à côté du modèle et utilise sa propre mémoire."
+                },
+                "mtp": {
+                    "label": "MTP",
+                    "doc": "La tête de prédiction multi-token du modèle propose les tokens suivants. Aucun second modèle à charger."
+                }
+            },
+            "fields": {
+                "ngram": {
+                    "options_spec_ngram_mod_n_min": {
+                        "label": "Tokens de brouillon, au moins",
+                        "hint": "Nombre minimal de tokens qu'une correspondance doit proposer pour être utilisée."
+                    },
+                    "options_spec_ngram_mod_n_max": {
+                        "label": "Tokens de brouillon, au plus",
+                        "hint": "Nombre maximal de tokens proposés après une correspondance."
+                    },
+                    "options_spec_ngram_mod_n_match": {
+                        "label": "Longueur de correspondance",
+                        "hint": "Tokens qui doivent correspondre à un passage antérieur avant qu'il soit copié."
+                    }
+                },
+                "model": {
+                    "options_spec_n_min": {
+                        "label": "Tokens de brouillon, au moins",
+                        "hint": "Nombre minimal de tokens de brouillon qui vaut la peine d'être vérifié. 0 vérifie tout brouillon."
+                    },
+                    "options_spec_n_max": {
+                        "label": "Tokens de brouillon, au plus",
+                        "hint": "Nombre maximal de tokens que le modèle brouillon propose par étape. Plus n'aide que s'il devine bien."
+                    },
+                    "options_spec_p_min": {
+                        "label": "Seuil d'acceptation",
+                        "hint": "Le modèle brouillon arrête un brouillon quand il est moins sûr que cette valeur, de 0 à 1."
+                    }
+                },
+                "mtp": {
+                    "options_spec_n_max": {
+                        "label": "Tokens de brouillon, au plus",
+                        "hint": "Nombre maximal de tokens que la tête MTP propose par étape."
+                    },
+                    "options_spec_p_min": {
+                        "label": "Seuil d'acceptation",
+                        "hint": "La tête arrête un brouillon quand elle est moins sûre que cette valeur, de 0 à 1."
+                    }
+                }
+            },
+            "streams": {
+                "label": "Suspendre le brouillon au-delà de N flux",
+                "hint": "Le brouillon se met en pause tant que plus de requêtes que ce nombre génèrent en même temps, et reprend quand la charge baisse. 0 ne met jamais en pause."
+            },
+            "picker": {
+                "label": "Modèle brouillon",
+                "placeholder": "Choisir un modèle installé",
+                "hint": "Un petit modèle de la même famille, par exemple un modèle 0.6B ou 1B.",
+                "filter": "Filtrer les modèles",
+                "loading": "Chargement des modèles installés...",
+                "empty": "Aucun autre modèle exécuté par {{engine}} n'est installé. Installez d'abord un petit modèle de la même famille.",
+                "same": "Même famille que ce modèle",
+                "other": "Autres modèles installés",
+                "file": "Défini dans le fichier",
+                "fileRow": "Pas un modèle installé",
+                "noFile": "{{name}} n'a pas de fichier de modèle à utiliser comme brouillon.",
+                "failed": "Impossible de lister les modèles installés."
+            },
+            "fit": {
+                "title": "Compatibilité",
+                "ok": "Compatible",
+                "okText": "Même vocabulaire : {{tokens}} tokens.",
+                "mismatch": "Ne se chargera pas",
+                "mismatchText": "Les vocabulaires diffèrent ({{main}} et {{draft}} tokens). llama.cpp refuse cette paire, donc le modèle ne se charge pas.",
+                "family": "Même famille",
+                "familyText": "Ce sont deux modèles {{family}}. Le vocabulaire n'a pas pu être lu pour le confirmer.",
+                "unknown": "Non vérifié",
+                "unknownText": "Les vocabulaires n'ont pas pu être comparés. Le brouillon doit utiliser le même tokenizer que le modèle.",
+                "unmatched": "Le fichier n'est pas un modèle installé, il ne peut donc pas être vérifié."
+            },
+            "memory": {
+                "title": "Mémoire",
+                "total": "≈ {{size}} de plus",
+                "split": "({{weights}} de poids et {{kv}} de cache KV à {{context}} tokens).",
+                "none": "Pas d'estimation pour ce modèle.",
+                "unmatched": "Pas d'estimation : comptez environ la taille du fichier plus un cache KV aussi grand que le contexte du modèle."
+            }
+        },
+        "memory": {
+            "label": "Type de mémoire",
+            "auto": "Détecté : {{kind}}",
+            "autoUnknown": "Non détecté",
+            "detected": "{{kind}} sur ce serveur ({{size}})",
+            "detectedDevice": "{{kind}} sur ce serveur : {{device}}, {{size}}",
+            "chosen": "{{kind}}, choisi par vous",
+            "unknown": "Type de mémoire non détecté : les règles {{kind}} s'appliquent",
+            "useValue": "Utiliser {{value}}",
+            "kinds": {
+                "unified": {
+                    "label": "Mémoire unifiée",
+                    "doc": "Le GPU partage la mémoire système (DGX Spark, Jetson, Apple silicon, APU AMD). Plus de slots tiennent ; le cache de prompts et les checkpoints restent petits car ils utilisent la même mémoire."
+                },
+                "discrete": {
+                    "label": "GPU dédié",
+                    "doc": "Le GPU a sa propre mémoire. Les slots sont limités par l'estimation de VRAM, 32 flux utilisent un cache KV 8 bits et le cache de prompts reste en mémoire système."
+                },
+                "system": {
+                    "label": "Pas de GPU",
+                    "doc": "Le modèle tourne sur le CPU en mémoire système. Les caches restent petits et 32 flux ne sont pas proposés."
+                }
+            },
+            "advice": {
+                "unifiedLoadMode": "En mémoire unifiée, un modèle mappé en mémoire est gardé deux fois pendant le chargement. Default le charge une seule fois."
+            }
+        },
+        "flags": {
+            "show": "Afficher les options {{engine}}"
+        },
+        "more": "Plus"
     }
 }

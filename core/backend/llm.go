@@ -57,6 +57,29 @@ func needsMediaMarkerProbe(mediaMarker string, modelAlreadyLoaded bool) bool {
 	return mediaMarker == "" || !modelAlreadyLoaded
 }
 
+// metadataProbeDue reports whether ModelInference reads the model metadata
+// from the backend after Load.
+//
+// Only llama.cpp backends answer the probe; for the others it reads nothing
+// and writes back what the config already holds, so it is skipped. A
+// reasoning slot that is still empty is probed until the probe fills it, as
+// before. The media marker is probed after a cold Load and while it is empty,
+// except on a running instance that answered the probe already: it answers
+// the same way for the rest of its life, so a text model, whose marker stays
+// empty, no longer pays a ModelMetadata round trip on every request.
+func metadataProbeDue(c *config.ModelConfig, loaded *model.Model) bool {
+	if !config.IsLlamaCppBackend(c.Backend) {
+		return false
+	}
+	if needsThinkingProbe(c) {
+		return true
+	}
+	if loaded != nil && loaded.MetadataProbed() {
+		return false
+	}
+	return needsMediaMarkerProbe(c.MediaMarker, loaded != nil)
+}
+
 // persistProbedReasoning writes the post-probe reasoning slots (and media
 // marker) from probed back into the loader's persisted config for modelName,
 // skipping any reasoning slot the probe was not actually allowed to fill.
@@ -99,6 +122,21 @@ func (t TokenUsage) ChatDeltaReasoningAndContent() (reasoning, content string) {
 	return reasoning, content
 }
 
+// modelListed reports whether galleryop.ListModels with SKIP_ALWAYS lists
+// modelName. That list holds the name of every loaded config, so a config of
+// that name answers it without building the list, which copies every config
+// for every request.
+func modelListed(cl *config.ModelConfigLoader, loader *model.ModelLoader, modelName string) (bool, error) {
+	if cl.HasModelConfig(modelName) {
+		return true, nil
+	}
+	modelNames, err := galleryop.ListModels(cl, loader, nil, galleryop.SKIP_ALWAYS)
+	if err != nil {
+		return false, err
+	}
+	return slices.Contains(modelNames, modelName), nil
+}
+
 // ModelInferenceFunc is a test-friendly indirection to call model inference logic.
 // Tests can override this variable to provide a stub implementation.
 var ModelInferenceFunc = ModelInference
@@ -108,15 +146,15 @@ func ModelInference(ctx context.Context, s string, messages schema.Messages, ima
 
 	// Check if the modelFile exists, if it doesn't try to load it from the gallery
 	if o.AutoloadGalleries { // experimental
-		modelNames, err := galleryop.ListModels(cl, loader, nil, galleryop.SKIP_ALWAYS)
-		if err != nil {
-			return nil, err
-		}
 		modelName := c.Name
 		if modelName == "" {
 			modelName = c.Model
 		}
-		if !slices.Contains(modelNames, modelName) {
+		listed, err := modelListed(cl, loader, modelName)
+		if err != nil {
+			return nil, err
+		}
+		if !listed {
 			utils.ResetDownloadTimers()
 			// if we failed to load the model, we try to download it
 			err := gallery.InstallModelFromGallery(ctx, o.Galleries, o.BackendGalleries, o.SystemState, loader, modelName, gallery.GalleryModel{}, utils.DisplayDownloadFunction, o.EnforcePredownloadScans, o.AutoloadBackendGalleries, o.RequireBackendIntegrity, gallery.WithArtifactMaterializer(o.ModelArtifactMaterializer))
@@ -148,7 +186,7 @@ func ModelInference(ctx context.Context, s string, messages schema.Messages, ima
 	// re-probes MediaMarker even when a previous process's marker is cached on
 	// the config (#12246). Load itself may cache-hit; the flag must reflect the
 	// pre-Load state.
-	modelAlreadyLoaded := loader.CheckIsLoaded(c.ModelID()) != nil
+	loaded := loader.CheckIsLoaded(c.ModelID())
 	inferenceModel, err := loader.Load(opts...)
 	if err != nil {
 		recordModelLoadFailure(o, c.Name, c.Backend, err, map[string]any{"model_file": modelFile})
@@ -161,9 +199,7 @@ func ModelInference(ctx context.Context, s string, messages schema.Messages, ima
 	// by custom chat templates so markers line up with what mtmd expects).
 	// Thinking slots are probed only while empty; the media marker is also
 	// re-probed after a cold Load because llama.cpp randomizes it per process.
-	shouldProbeThinking := needsThinkingProbe(c)
-	needsMarkerProbe := needsMediaMarkerProbe(c.MediaMarker, modelAlreadyLoaded)
-	if shouldProbeThinking || needsMarkerProbe {
+	if metadataProbeDue(c, loaded) {
 		modelOpts := grpcModelOpts(*c, o.SystemState.Model.ModelsPath)
 		// DetectThinkingSupportFromBackend only fills reasoning slots that are
 		// still nil, so a slot that already carries a value here was populated by
@@ -175,7 +211,9 @@ func ModelInference(ctx context.Context, s string, messages schema.Messages, ima
 		// fill.
 		persistDisableReasoning := c.ReasoningConfig.DisableReasoning == nil
 		persistDisableTagPrefill := c.ReasoningConfig.DisableReasoningTagPrefill == nil
-		config.DetectThinkingSupportFromBackend(ctx, c, inferenceModel, modelOpts)
+		if config.DetectThinkingSupportFromBackend(ctx, c, inferenceModel, modelOpts) && loaded != nil {
+			loaded.MarkMetadataProbed()
+		}
 		// Update the config in the loader so it persists for future requests
 		persistProbedReasoning(cl, c.Name, c, persistDisableReasoning, persistDisableTagPrefill)
 	}
@@ -193,6 +231,8 @@ func ModelInference(ctx context.Context, s string, messages schema.Messages, ima
 		defer hideOutputFor(ctx, loader, *c)()
 		opts := gRPCPredictOpts(*c, loader.ModelPath)
 		withRequestPrivacy(ctx, opts)
+		withRequestPriority(ctx, opts)
+		withPromptCacheSalt(ctx, opts, *c, o)
 		// Merge request-level metadata (overrides config defaults)
 		for k, v := range metadata {
 			opts.Metadata[k] = v
@@ -259,14 +299,13 @@ func ModelInference(ctx context.Context, s string, messages schema.Messages, ima
 				tokenCallback(c.TemplateConfig.ReplyPrefix, tokenUsage)
 			}
 
-			ss := ""
+			var ss strings.Builder
 			var logprobs *schema.Logprobs
 			var allChatDeltas []*proto.ChatDelta
 
-			var partialRune []byte
+			var runes runeAssembler
 			err := inferenceModel.PredictStream(ctx, opts, func(reply *proto.Reply) {
 				msg := reply.Message
-				partialRune = append(partialRune, msg...)
 
 				tokenUsage.Prompt = int(reply.PromptTokens)
 				tokenUsage.Completion = int(reply.Tokens)
@@ -289,22 +328,10 @@ func ModelInference(ctx context.Context, s string, messages schema.Messages, ima
 					}
 				}
 
-				// Process complete runes and accumulate them
-				var completeRunes []byte
-				for len(partialRune) > 0 {
-					r, size := utf8.DecodeRune(partialRune)
-					if r == utf8.RuneError {
-						// incomplete rune, wait for more bytes
-						break
-					}
-					completeRunes = append(completeRunes, partialRune[:size]...)
-					partialRune = partialRune[size:]
-				}
-
-				// If we have complete runes, send them as a single token
-				if len(completeRunes) > 0 {
-					tokenCallback(string(completeRunes), tokenUsage)
-					ss += string(completeRunes)
+				// Send the complete runes as a single token
+				if token := runes.write(msg); token != "" {
+					tokenCallback(token, tokenUsage)
+					ss.WriteString(token)
 				}
 
 				if len(msg) == 0 {
@@ -318,7 +345,7 @@ func ModelInference(ctx context.Context, s string, messages schema.Messages, ima
 				xlog.Debug("[ChatDeltas] streaming completed, accumulated deltas from C++ autoparser", "total_deltas", len(allChatDeltas))
 			}
 			return LLMResponse{
-				Response:   ss,
+				Response:   ss.String(),
 				Usage:      tokenUsage,
 				Logprobs:   logprobs,
 				ChatDeltas: allChatDeltas,
@@ -483,6 +510,33 @@ func ModelInference(ctx context.Context, s string, messages schema.Messages, ima
 	}
 
 	return fn, nil
+}
+
+// runeAssembler holds the bytes of a rune that a reply split, so that each
+// token passed on holds only complete runes.
+type runeAssembler struct {
+	pending []byte
+}
+
+// write adds msg and returns the complete runes at the start of what is
+// pending, up to the first byte that does not decode (an incomplete rune
+// waits for more bytes).
+func (a *runeAssembler) write(msg []byte) string {
+	a.pending = append(a.pending, msg...)
+	n := 0
+	for n < len(a.pending) {
+		r, size := utf8.DecodeRune(a.pending[n:])
+		if r == utf8.RuneError {
+			break
+		}
+		n += size
+	}
+	if n == 0 {
+		return ""
+	}
+	token := string(a.pending[:n])
+	a.pending = append(a.pending[:0], a.pending[n:]...)
+	return token
 }
 
 var cutstrings map[string]*regexp.Regexp = make(map[string]*regexp.Regexp)

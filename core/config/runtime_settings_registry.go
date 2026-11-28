@@ -248,6 +248,10 @@ var runtimeSettingsFields = []fieldSpec{
 		func(s *RuntimeSettings) **string { return &s.LRUEvictionRetryInterval },
 		func(o *ApplicationConfig) *time.Duration { return &o.LRUEvictionRetryInterval },
 		"1s"),
+	field("model_swap",
+		func(s *RuntimeSettings) **bool { return &s.ModelSwap },
+		func(o *ApplicationConfig) bool { return !o.DisableModelSwap },
+		func(o *ApplicationConfig, v bool) { o.DisableModelSwap = !v }),
 
 	// Performance.
 	field("threads",
@@ -438,6 +442,82 @@ var runtimeSettingsFields = []fieldSpec{
 		func(s *RuntimeSettings) **bool { return &s.VRAMPersistentCache },
 		func(o *ApplicationConfig) bool { return o.VRAMPersistentCache },
 		func(o *ApplicationConfig, v bool) { o.VRAMPersistentCache = v }),
+	// Disk tier of the llama.cpp prompt cache. No restart: the janitor reads
+	// the values at each sweep, a backend gets them at its next start, and
+	// the namespace is decided per request.
+	field("prompt_cache_disk",
+		func(s *RuntimeSettings) **bool { return &s.PromptCacheDisk },
+		func(o *ApplicationConfig) bool { return !o.PromptCache.DiskDisabled },
+		func(o *ApplicationConfig, v bool) { o.PromptCache.DiskDisabled = !v }),
+	withApply(field("prompt_cache_disk_max_size_mib",
+		func(s *RuntimeSettings) **int { return &s.PromptCacheDiskMaxSizeMiB },
+		func(o *ApplicationConfig) int { return o.PromptCache.MaxSizeMiB },
+		func(o *ApplicationConfig, v int) { o.PromptCache.MaxSizeMiB = v }),
+		func(o *ApplicationConfig, s *RuntimeSettings) bool {
+			if v := *s.PromptCacheDiskMaxSizeMiB; v >= 0 {
+				o.PromptCache.MaxSizeMiB = v
+				return true
+			}
+			xlog.Warn("invalid prompt_cache_disk_max_size_mib in runtime settings", "value", *s.PromptCacheDiskMaxSizeMiB)
+			return false
+		}),
+	withApply(durationField("prompt_cache_disk_ttl",
+		func(s *RuntimeSettings) **string { return &s.PromptCacheDiskTTL },
+		func(o *ApplicationConfig) *time.Duration { return &o.PromptCache.TTL },
+		DefaultPromptCacheTTL.String()),
+		func(o *ApplicationConfig, s *RuntimeSettings) bool {
+			d, err := time.ParseDuration(*s.PromptCacheDiskTTL)
+			if err != nil || d <= 0 {
+				xlog.Warn("invalid prompt_cache_disk_ttl in runtime settings", "value", *s.PromptCacheDiskTTL)
+				return false
+			}
+			o.PromptCache.TTL = d
+			return true
+		}),
+	field("prompt_cache_disk_user_quota_mib",
+		func(s *RuntimeSettings) **int { return &s.PromptCacheDiskUserQuotaMiB },
+		func(o *ApplicationConfig) int { return o.PromptCache.UserQuotaMiB },
+		func(o *ApplicationConfig, v int) { o.PromptCache.UserQuotaMiB = v }),
+	withApply(field("prompt_cache_disk_min_tokens",
+		func(s *RuntimeSettings) **int { return &s.PromptCacheDiskMinTokens },
+		func(o *ApplicationConfig) int { return o.PromptCache.MinTokens },
+		func(o *ApplicationConfig, v int) { o.PromptCache.MinTokens = v }),
+		func(o *ApplicationConfig, s *RuntimeSettings) bool {
+			if v := *s.PromptCacheDiskMinTokens; v > 0 {
+				o.PromptCache.MinTokens = v
+				return true
+			}
+			xlog.Warn("invalid prompt_cache_disk_min_tokens in runtime settings", "value", *s.PromptCacheDiskMinTokens)
+			return false
+		}),
+	field("prompt_cache_disk_shared",
+		func(s *RuntimeSettings) **bool { return &s.PromptCacheDiskShared },
+		func(o *ApplicationConfig) bool { return o.PromptCache.Shared },
+		func(o *ApplicationConfig, v bool) { o.PromptCache.Shared = v }),
+	withApply(field("prompt_cache_disk_low_free_mib",
+		func(s *RuntimeSettings) **int { return &s.PromptCacheDiskLowFreeMiB },
+		func(o *ApplicationConfig) int { return o.PromptCache.LowFreeMiB },
+		func(o *ApplicationConfig, v int) { o.PromptCache.LowFreeMiB = v }),
+		func(o *ApplicationConfig, s *RuntimeSettings) bool {
+			if v := *s.PromptCacheDiskLowFreeMiB; v >= 0 {
+				o.PromptCache.LowFreeMiB = v
+				return true
+			}
+			xlog.Warn("invalid prompt_cache_disk_low_free_mib in runtime settings", "value", *s.PromptCacheDiskLowFreeMiB)
+			return false
+		}),
+	withApply(field("prompt_cache_disk_critical_free_mib",
+		func(s *RuntimeSettings) **int { return &s.PromptCacheDiskCriticalFreeMiB },
+		func(o *ApplicationConfig) int { return o.PromptCache.CriticalFreeMiB },
+		func(o *ApplicationConfig, v int) { o.PromptCache.CriticalFreeMiB = v }),
+		func(o *ApplicationConfig, s *RuntimeSettings) bool {
+			if v := *s.PromptCacheDiskCriticalFreeMiB; v >= 0 {
+				o.PromptCache.CriticalFreeMiB = v
+				return true
+			}
+			xlog.Warn("invalid prompt_cache_disk_critical_free_mib in runtime settings", "value", *s.PromptCacheDiskCriticalFreeMiB)
+			return false
+		}),
 
 	// API keys: echoed for the UI, but the apply loops never touch them.
 	// The settings endpoint and the file watcher own the env+runtime merge
@@ -624,6 +704,51 @@ var runtimeSettingsFields = []fieldSpec{
 		func(s *RuntimeSettings) **bool { return &s.ChatsWorkFolder },
 		func(o *ApplicationConfig) bool { return !o.DisableChatsWorkFolder },
 		func(o *ApplicationConfig, v bool) { o.DisableChatsWorkFolder = !v }),
+	// Plugins in the Claude Code plugin format: read by the Plugins service
+	// at each request, so no restart.
+	field("plugins_user_installs",
+		func(s *RuntimeSettings) **bool { return &s.PluginsUserInstalls },
+		func(o *ApplicationConfig) bool { return !o.Plugins.DisableUserInstalls },
+		func(o *ApplicationConfig, v bool) { o.Plugins.DisableUserInstalls = !v }),
+	withApply(fieldEq("plugins_model_tiers",
+		func(s *RuntimeSettings) **map[string]string { return &s.PluginsModelTiers },
+		func(o *ApplicationConfig) map[string]string { return o.PluginModelTiers() },
+		func(o *ApplicationConfig, v map[string]string) { o.Plugins.ModelTiers = maps.Clone(v) },
+		func(a, b map[string]string) bool { return maps.Equal(a, b) }),
+		func(o *ApplicationConfig, s *RuntimeSettings) bool {
+			for k, v := range *s.PluginsModelTiers {
+				if !slices.Contains(PluginModelTierNames, k) || strings.TrimSpace(v) == "" {
+					xlog.Warn("invalid plugins_model_tiers in runtime settings", "tier", k)
+					return false
+				}
+			}
+			o.Plugins.ModelTiers = maps.Clone(*s.PluginsModelTiers)
+			return true
+		}),
+	withApply(field("plugins_hook_timeout_seconds",
+		func(s *RuntimeSettings) **int { return &s.PluginsHookTimeoutSeconds },
+		func(o *ApplicationConfig) int { return o.EffectivePluginHookTimeoutSeconds() },
+		func(o *ApplicationConfig, v int) { o.Plugins.HookTimeoutSeconds = v }),
+		func(o *ApplicationConfig, s *RuntimeSettings) bool {
+			if v := *s.PluginsHookTimeoutSeconds; v < 1 || v > MaxPluginHookTimeoutSeconds {
+				xlog.Warn("invalid plugins_hook_timeout_seconds in runtime settings", "value", v)
+				return false
+			}
+			o.Plugins.HookTimeoutSeconds = *s.PluginsHookTimeoutSeconds
+			return true
+		}),
+	withApply(field("plugins_max_bytes",
+		func(s *RuntimeSettings) **int64 { return &s.PluginsMaxBytes },
+		func(o *ApplicationConfig) int64 { return o.EffectivePluginMaxBytes() },
+		func(o *ApplicationConfig, v int64) { o.Plugins.MaxBytes = v }),
+		func(o *ApplicationConfig, s *RuntimeSettings) bool {
+			if v := *s.PluginsMaxBytes; v < MinPluginMaxBytes || v > MaxPluginMaxBytes {
+				xlog.Warn("invalid plugins_max_bytes in runtime settings", "value", v)
+				return false
+			}
+			o.Plugins.MaxBytes = *s.PluginsMaxBytes
+			return true
+		}),
 	// The text index of the documents in the chats' files: read at each pass
 	// of the indexer, so no restart. The switch is stored as the negation, so
 	// it is on by default; the snapshot of the cap is the cap that applies.

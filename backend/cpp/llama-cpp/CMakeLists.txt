@@ -143,6 +143,11 @@ if(LLAMA_GRPC_BUILD_TESTS)
     target_compile_features(backend_sampling_test PRIVATE cxx_std_17)
     add_test(NAME backend_sampling_test COMMAND backend_sampling_test)
 
+    add_executable(grammar_engine_test grammar_engine_test.cpp grammar_engine.h)
+    target_include_directories(grammar_engine_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_features(grammar_engine_test PRIVATE cxx_std_17)
+    add_test(NAME grammar_engine_test COMMAND grammar_engine_test)
+
     add_executable(moe_cache_option_test moe_cache_option_test.cpp moe_cache_option.h)
     target_include_directories(moe_cache_option_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_compile_features(moe_cache_option_test PRIVATE cxx_std_17)
@@ -157,6 +162,16 @@ if(LLAMA_GRPC_BUILD_TESTS)
     target_include_directories(parallel_params_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_compile_features(parallel_params_test PRIVATE cxx_std_17)
     add_test(NAME parallel_params_test COMMAND parallel_params_test)
+
+    add_executable(serving_policy_test serving_policy_test.cpp serving_policy.h)
+    target_include_directories(serving_policy_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_features(serving_policy_test PRIVATE cxx_std_17)
+    add_test(NAME serving_policy_test COMMAND serving_policy_test)
+
+    add_executable(prompt_cache_policy_test prompt_cache_policy_test.cpp prompt_cache_policy.h)
+    target_include_directories(prompt_cache_policy_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_features(prompt_cache_policy_test PRIVATE cxx_std_17)
+    add_test(NAME prompt_cache_policy_test COMMAND prompt_cache_policy_test)
 
     add_executable(slot_cache_test slot_cache_test.cpp slot_cache.h)
     target_include_directories(slot_cache_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -189,5 +204,19 @@ if(LLAMA_GRPC_BUILD_TESTS)
         target_link_libraries(realtime_chat_check PRIVATE ${_LLAMA_COMMON_TARGET})
         target_compile_features(realtime_chat_check PRIVATE cxx_std_17)
         add_test(NAME realtime_chat_check COMMAND realtime_chat_check "${CMAKE_SOURCE_DIR}/models/templates/LFM3.jinja")
+    endif()
+
+    # patches/0008: the tool grammar of every chat template of the tree, translated to llguidance,
+    # compiled and replayed against GBNF, with the vocab files of the tree. Catches drift on a bump.
+    if(LLAMA_LLGUIDANCE AND EXISTS "${CMAKE_SOURCE_DIR}/common/gbnf-to-lark.h")
+        add_executable(llg_template_grammars_check llg_template_grammars_check.cpp)
+        target_include_directories(llg_template_grammars_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+        target_link_libraries(llg_template_grammars_check PRIVATE ${_LLAMA_COMMON_TARGET} llama)
+        target_compile_features(llg_template_grammars_check PRIVATE cxx_std_17)
+        add_test(NAME llg_template_grammars_check COMMAND llg_template_grammars_check
+                 "${CMAKE_SOURCE_DIR}/models/templates"
+                 "${CMAKE_SOURCE_DIR}/models/ggml-vocab-qwen35.gguf"
+                 "${CMAKE_SOURCE_DIR}/models/ggml-vocab-llama-bpe.gguf"
+                 "${CMAKE_SOURCE_DIR}/models/ggml-vocab-gemma-4.gguf")
     endif()
 endif()

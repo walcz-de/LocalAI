@@ -48,6 +48,8 @@ func fail(c echo.Context, err error) error {
 		code, msg = http.StatusGone, ErrInviteInvalid.Error()
 	case errors.Is(err, ErrRateLimited):
 		code, msg = http.StatusTooManyRequests, ErrRateLimited.Error()
+	case errors.Is(err, ErrSignInRefused):
+		code, msg, typ = http.StatusForbidden, ErrSignInRefused.Error(), "authorization_error"
 	case errors.Is(err, ErrNotFound):
 		code, msg = http.StatusNotFound, ErrNotFound.Error()
 	case errors.Is(err, ErrForbidden):
@@ -56,6 +58,10 @@ func fail(c echo.Context, err error) error {
 		code, msg = http.StatusBadRequest, err.Error()
 	case errors.Is(err, ErrConflict):
 		code, msg = http.StatusConflict, err.Error()
+	case errors.Is(err, ErrLimitReached):
+		code, msg, typ = http.StatusTooManyRequests, err.Error(), "limit_reached"
+	case errors.Is(err, ErrPairNeedsAccount):
+		code, msg, typ = http.StatusConflict, ErrPairNeedsAccount.Error(), "needs_account"
 	case errors.Is(err, ErrNeedsAccount):
 		// The type lets a client tell this refusal from a wrong mode.
 		code, msg, typ = http.StatusConflict, ErrNeedsAccount.Error(), "needs_account"
@@ -170,15 +176,16 @@ func CancelInviteEndpoint(svc Service) echo.HandlerFunc {
 // ListDevicesEndpoint lists the paired devices.
 //
 //	@Summary	List P2P devices
-//	@Description	Lists the paired devices, revoked ones included, with how each one reaches the server now (path kind direct, hole_punched or relayed, the relay and its limits). Needs P2P mode share. Admin only.
+//	@Description	Lists the paired devices, revoked ones included, with how each one reaches the server now (path kind direct, hole_punched or relayed, the relay and its limits), the owner (owner_id, owner_name) and whether the device signs in as its owner (sign_in). owner keeps the devices of one user. Needs P2P mode share. Admin only.
 //	@Tags		p2p
 //	@Produce	json
+//	@Param		owner	query		string	false	"Keep the devices of this user ID"
 //	@Success	200	{object}	DeviceList
 //	@Failure	409	{object}	schema.ErrorResponse
 //	@Router		/api/p2p/devices [get]
 func ListDevicesEndpoint(svc Service) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		devs, err := svc.ListDevices(c.Request().Context())
+		devs, err := svc.ListDevices(c.Request().Context(), strings.TrimSpace(c.QueryParam("owner")))
 		if err != nil {
 			return fail(c, err)
 		}
@@ -520,4 +527,52 @@ func RoutesEndpoint(svc Service) echo.HandlerFunc {
 		c.Response().Header().Set("Cache-Control", "no-store")
 		return c.JSON(http.StatusOK, res)
 	}
+}
+
+// DeviceSessionEndpoint exchanges the credential of a paired sign-in device
+// for a web session of its owner. Like the redeem route it is served only over
+// P2P, so the caller is the peer the connection authenticated; a request that
+// did not arrive over P2P gets 404.
+//
+//	@Summary	Sign in with a device credential (over P2P only)
+//	@Description	Served only on the P2P protocol /localai/http/1, and only to a paired device; the normal HTTP listener answers 404. The body carries the credential that the redeem of a sign-in invite returned, as JSON or as the form field "credential". The credential works only from the peer that redeemed the invite. When the device is an active sign-in device, the credential matches, the owner is active and still has the feature p2p_pair (admins always do), the answer sets the session cookie: a form post gets 303 to /, JSON gets 200 with the user. Every other case gets the same 403. After 5 wrong credentials from one peer in an hour the answer is 429.
+//	@Tags		p2p
+//	@Accept		json
+//	@Produce	json
+//	@Param		request	body		DeviceSessionRequest	true	"Device credential"
+//	@Success	200		{object}	SessionUser
+//	@Success	303		"Redirect to / for a form post"
+//	@Failure	403		{object}	schema.ErrorResponse
+//	@Failure	404		{object}	schema.ErrorResponse
+//	@Failure	409		{object}	schema.ErrorResponse
+//	@Failure	429		{object}	schema.ErrorResponse
+//	@Router		/api/p2p/device/session [post]
+func DeviceSessionEndpoint(svc UserService) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		from, ok := PeerFrom(c.Request().Context())
+		if !ok {
+			return fail(c, ErrNotFound)
+		}
+		var req DeviceSessionRequest
+		if err := bind(c, &req); err != nil {
+			return err
+		}
+		res, err := svc.DeviceSession(c.Request().Context(), from, strings.TrimSpace(req.Credential))
+		if err != nil {
+			return fail(c, err)
+		}
+		auth.SetSessionCookie(c, res.Token)
+		c.Response().Header().Set("Cache-Control", "no-store")
+		if isFormPost(c) {
+			return c.Redirect(http.StatusSeeOther, "/")
+		}
+		return c.JSON(http.StatusOK, res.User)
+	}
+}
+
+// isFormPost reports whether the request body is an HTML form: the web view
+// of the app posts one, and gets a redirect to the start page.
+func isFormPost(c echo.Context) bool {
+	ct := c.Request().Header.Get(echo.HeaderContentType)
+	return strings.HasPrefix(ct, echo.MIMEApplicationForm) || strings.HasPrefix(ct, echo.MIMEMultipartForm)
 }

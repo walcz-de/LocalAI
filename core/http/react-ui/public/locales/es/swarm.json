@@ -133,7 +133,9 @@
     "run": {}
   },
   "inspector": {
-    "peer": "ID de par"
+    "peer": "ID de par",
+    "leaving": "Modelos que siguen aquí",
+    "drainDeadline": "Plazo del vaciado"
   },
   "splitServer": {
     "label": "Servidor de división",
@@ -191,5 +193,43 @@
   },
   "failover": {
     "lostConnection": "Conexión:"
+  },
+  "limits": {
+    "title": "Límites",
+    "sub": "Ajustes de memoria de este nodo. Un valor definido aquí tiene prioridad sobre el entorno del worker y los ajustes del clúster (Ajustes, Modelos en memoria).",
+    "maxActive": "Modelos mantenidos cargados",
+    "vramBudget": "Presupuesto de memoria GPU",
+    "vramBudgetPlaceholder": "p. ej. 80% o 12GB",
+    "threshold": "Umbral de memoria",
+    "thresholdOff": "Desactivado ({{pct}}% cuando está activo)",
+    "swap": "Cambiar modelos cuando la memoria esté llena",
+    "noLimit": "Sin límite",
+    "none": "Ninguno",
+    "on": "Activado",
+    "off": "Desactivado",
+    "edit": "Editar",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "reset": "Restablecer todo",
+    "saved": "Límites guardados en {{name}}",
+    "resetDone": "Valores propios eliminados en {{name}}",
+    "failed": "No se pudieron cambiar los límites: {{error}}",
+    "loadFailed": "No se pudieron leer los límites de este nodo",
+    "source": {
+      "override": "Definido aquí",
+      "worker": "Entorno del worker",
+      "cluster": "Clúster",
+      "default": "Predeterminado"
+    }
+  },
+  "detail": {
+    "vramBudgetOf": "Presupuesto, {{detected}} detectados",
+    "drainingLeaving": "Modelos que siguen aquí: {{count}}. Lo que quede a las {{time}} se elimina.",
+    "drainingEmpty": "Ya no queda nada en él. Ya puede detener el worker."
+  },
+  "leave": {
+    "reloadDrain": "se carga en otro nodo sano que encaje mientras este lo sigue sirviendo, y luego deja este nodo. Si no tiene regla y está inactivo (no fijado, sin uso reciente), se elimina en su lugar. Aquí no se compara la memoria libre.",
+    "reloadNoneDrain": "no tiene otro nodo sano al que pasar, así que sigue sirviendo aquí hasta el plazo del vaciado y luego se detiene. Si no tiene regla y está inactivo (no fijado, sin uso reciente), se elimina en su lugar.",
+    "blockedDrain": "sigue sirviendo aquí hasta el plazo del vaciado y luego se detiene: su regla solo permite {{selector}} y ningún otro nodo sano tiene esas etiquetas."
   }
 }

@@ -1,10 +1,14 @@
 package openai
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/mudler/LocalAI/core/backend"
+	"github.com/mudler/LocalAI/core/privacy"
 	"github.com/mudler/LocalAI/core/schema"
 	"github.com/mudler/LocalAI/pkg/functions"
 )
@@ -49,21 +53,23 @@ func streamUsageFromTokenUsage(usage backend.TokenUsage, extraUsage bool) schema
 // SDK and Continue's openai-adapter look for to recognise this as the usage
 // chunk rather than a content chunk. schema.OpenAIResponse has `omitempty`
 // on Choices, so we cannot reuse it for the trailer.
-func streamUsageTrailerJSON(id, model string, created int, usage schema.OpenAIUsage) []byte {
+func streamUsageTrailerJSON(id, model string, created int, usage schema.OpenAIUsage, serviceTier string) []byte {
 	trailer := struct {
-		ID      string             `json:"id"`
-		Created int                `json:"created"`
-		Model   string             `json:"model"`
-		Object  string             `json:"object"`
-		Choices []schema.Choice    `json:"choices"`
-		Usage   schema.OpenAIUsage `json:"usage"`
+		ID          string             `json:"id"`
+		Created     int                `json:"created"`
+		Model       string             `json:"model"`
+		Object      string             `json:"object"`
+		Choices     []schema.Choice    `json:"choices"`
+		Usage       schema.OpenAIUsage `json:"usage"`
+		ServiceTier string             `json:"service_tier,omitempty"`
 	}{
-		ID:      id,
-		Created: created,
-		Model:   model,
-		Object:  "chat.completion.chunk",
-		Choices: []schema.Choice{},
-		Usage:   usage,
+		ID:          id,
+		Created:     created,
+		Model:       model,
+		Object:      "chat.completion.chunk",
+		Choices:     []schema.Choice{},
+		Usage:       usage,
+		ServiceTier: serviceTier,
 	}
 	b, _ := json.Marshal(trailer)
 	return b
@@ -296,3 +302,47 @@ func buildDeferredToolCallChunks(
 
 	return out
 }
+
+// sseChunkWriter encodes the chunks of a stream as SSE data lines into one
+// reused buffer. The bytes are those of fmt.Fprintf(w, "data: %s\n\n",
+// json.Marshal(v)): json.Encoder writes what Marshal returns, then a newline.
+type sseChunkWriter struct {
+	buf bytes.Buffer
+	enc *json.Encoder
+}
+
+// encode returns the data line of v. The slice is valid until the next call.
+func (w *sseChunkWriter) encode(v any) ([]byte, error) {
+	if w.enc == nil {
+		w.enc = json.NewEncoder(&w.buf)
+	}
+	w.buf.Reset()
+	w.buf.WriteString("data: ")
+	if err := w.enc.Encode(v); err != nil {
+		return nil, err
+	}
+	w.buf.WriteByte('\n')
+	return w.buf.Bytes(), nil
+}
+
+// payload returns the JSON of the last encoded line.
+func (w *sseChunkWriter) payload() []byte {
+	b := w.buf.Bytes()
+	return b[len("data: ") : len(b)-len("\n\n")]
+}
+
+// redactedJSON logs a JSON payload through privacy.Redact. The handler
+// resolves it only when the level is enabled, so a stream does not copy and
+// check every chunk for a debug line nobody prints.
+type redactedJSON struct {
+	ctx  context.Context
+	data []byte
+}
+
+func (r redactedJSON) LogValue() slog.Value {
+	return slog.StringValue(privacy.Redact(r.ctx, string(r.data)))
+}
+
+// maxChunksPerFlush caps how many ready chunks the chat stream writes before
+// it flushes them to the client.
+const maxChunksPerFlush = 32

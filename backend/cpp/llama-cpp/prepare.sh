@@ -5,15 +5,27 @@ set -e
 
 ## Patches
 
-## Apply patches from the `patches` directory. Runs under set -e so a
-## rejected patch aborts the build here, loudly, instead of surfacing later
-## as a confusing compile error. A missing or empty patches dir is a no-op.
+## Apply the `*.patch` files of the `patches` directory, in name order. Runs
+## under set -e so a rejected patch aborts the build here, loudly, instead of
+## surfacing later as a confusing compile error. A missing or empty patches
+## dir is a no-op. Other files in the directory are not applied. See PATCHES.md.
 if [ -d "patches" ]; then
-    for patch in $(ls patches); do
+    for patch in patches/*.patch; do
+        [ -e "$patch" ] || continue
         echo "Applying patch $patch"
-        patch -d llama.cpp/ -p1 < patches/$patch
+        patch -d llama.cpp/ -p1 < "$patch"
     done
 fi
+
+## Paged serving policy (serving_policy.h). patches/0002-paged-serving.patch
+## includes it from tools/server/server-context.cpp, so it goes next to that
+## file before the copy below. Forks that drop the patches still get the
+## header: grpc-server.cpp includes it for the option checks.
+cp -r serving_policy.h llama.cpp/tools/server/
+## Disk prompt cache policy (prompt_cache_policy.h). patches/0007 includes it
+## from tools/server/server-slot-sched.cpp; grpc-server.cpp includes it for the
+## option checks.
+cp -r prompt_cache_policy.h llama.cpp/tools/server/
 
 ## Apple RDMA link fixup.
 
@@ -77,6 +89,12 @@ cp -r parallel_params_test.cpp llama.cpp/tools/grpc-server/
 # regression test.
 cp -r backend_sampling.h llama.cpp/tools/grpc-server/
 cp -r backend_sampling_test.cpp llama.cpp/tools/grpc-server/
+# grammar_engine option parsing and the grammar choice, and their standalone
+# regression test.
+cp -r grammar_engine.h llama.cpp/tools/grpc-server/
+cp -r grammar_engine_test.cpp llama.cpp/tools/grpc-server/
+# Check of patches/0008 against every chat template of the tree (ctest only, see CMakeLists.txt).
+cp -r llg_template_grammars_check.cpp llama.cpp/tools/grpc-server/
 # moe_cache_mib option parsing and its standalone regression test.
 cp -r moe_cache_option.h llama.cpp/tools/grpc-server/
 # Value parsers for the reasoning, n_cpu_ffn and speculative draft options, and their test.
@@ -100,6 +118,10 @@ cp -r realtime_chat_check.cpp llama.cpp/tools/grpc-server/
 # Slot cache save/restore helpers (included by grpc-server.cpp) and their
 # unit test (compiled only when -DLLAMA_GRPC_BUILD_TESTS=ON).
 cp -r slot_cache.h llama.cpp/tools/grpc-server/
+# Paged serving policy and its standalone unit test (run-unit-tests.sh).
+cp -r serving_policy_test.cpp llama.cpp/tools/grpc-server/
+# Disk prompt cache policy test (run-unit-tests.sh).
+cp -r prompt_cache_policy_test.cpp llama.cpp/tools/grpc-server/
 cp -r slot_cache_test.cpp llama.cpp/tools/grpc-server/
 cp -rfv llama.cpp/vendor/nlohmann/json.hpp llama.cpp/tools/grpc-server/
 cp -rfv llama.cpp/vendor/cpp-httplib/httplib.h llama.cpp/tools/grpc-server/
@@ -253,6 +275,50 @@ if grep -q "bool *reasoning_control" llama.cpp/common/common.h; then
 else
     HAS_REASONING_CONTROL=0
 fi
+# Disk prompt cache (patches/0006 backports ggml-org/llama.cpp#32303, patches/0007
+# adds the LocalAI hooks: cache namespaces, retention, the writer thread).
+if grep -q "cache_disk_ns_quota_mib" llama.cpp/common/common.h; then
+    HAS_PROMPT_CACHE_DISK=1
+else
+    HAS_PROMPT_CACHE_DISK=0
+fi
+# The policy numbers of the disk tier as parameters (0007): the reuse count,
+# checkpoints per file and the load overhead.
+if grep -q "cache_disk_min_reuse" llama.cpp/common/common.h; then
+    HAS_PROMPT_CACHE_POLICY_ENV=1
+else
+    HAS_PROMPT_CACHE_POLICY_ENV=0
+fi
+# The disk prompt cache directory changes with the llama.cpp commit and the
+# patches, whose state format can change: a new build starts cold.
+LLAMA_PIN=$( (git -C llama.cpp rev-parse HEAD 2>/dev/null || echo unknown; cat patches/*.patch prompt_cache_policy.h 2>/dev/null) | sha256sum | cut -c1-16)
+# Paged serving hooks (patches/0002-paged-serving.patch adds
+# common_params::paged_serving). Forks that drop the patches build without
+# them and only warn when a model asks for paged_kv or prefill_budget.
+if grep -q "paged_serving" llama.cpp/common/common.h; then
+    HAS_SERVING_POLICY=1
+else
+    HAS_SERVING_POLICY=0
+fi
+# Request priority (patches/0003, upstream #32219) and admission ordering (patches/0004).
+if grep -q "int priority" llama.cpp/tools/server/server-task.h; then
+    HAS_TASK_PRIORITY=1
+else
+    HAS_TASK_PRIORITY=0
+fi
+if grep -q "paged_order" llama.cpp/common/common.h; then
+    HAS_ADMISSION_ORDER=1
+else
+    HAS_ADMISSION_ORDER=0
+fi
+# Template tool grammars on llguidance (patches/0008 adds
+# common_params_sampling::grammar_llguidance). Forks that drop the patches
+# keep those grammars on GBNF.
+if grep -q "grammar_llguidance" llama.cpp/common/common.h; then
+    HAS_LLG_TEMPLATE_GRAMMARS=1
+else
+    HAS_LLG_TEMPLATE_GRAMMARS=0
+fi
 cat > llama.cpp/tools/grpc-server/llama_compat.h <<EOF
 // Generated by backend/cpp/llama-cpp/prepare.sh. Do not edit.
 #pragma once
@@ -279,6 +345,13 @@ cat > llama.cpp/tools/grpc-server/llama_compat.h <<EOF
 #define LOCALAI_HAS_BACKEND_SAMPLING ${HAS_BACKEND_SAMPLING}
 #define LOCALAI_HAS_GRAMMAR_VALUE ${HAS_GRAMMAR_VALUE}
 #define LOCALAI_HAS_REASONING_CONTROL ${HAS_REASONING_CONTROL}
+#define LOCALAI_HAS_SERVING_POLICY ${HAS_SERVING_POLICY}
+#define LOCALAI_HAS_TASK_PRIORITY ${HAS_TASK_PRIORITY}
+#define LOCALAI_HAS_ADMISSION_ORDER ${HAS_ADMISSION_ORDER}
+#define LOCALAI_HAS_PROMPT_CACHE_DISK ${HAS_PROMPT_CACHE_DISK}
+#define LOCALAI_HAS_PROMPT_CACHE_POLICY_ENV ${HAS_PROMPT_CACHE_POLICY_ENV}
+#define LOCALAI_LLAMA_PIN "${LLAMA_PIN}"
+#define LOCALAI_HAS_LLG_TEMPLATE_GRAMMARS ${HAS_LLG_TEMPLATE_GRAMMARS}
 EOF
 
 set +e

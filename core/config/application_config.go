@@ -105,6 +105,10 @@ type ApplicationConfig struct {
 
 	Addons AddonConfig `json:"-" yaml:"-"`
 
+	// Plugins holds the settings of the plugins in the Claude Code plugin
+	// format.
+	Plugins PluginsConfig `json:"-" yaml:"-"`
+
 	// AddonHostOps maps an add-on ID to the host operation prefixes it may
 	// call. It is startup-only. Nil or empty means no add-on gets a host
 	// operation endpoint.
@@ -273,6 +277,16 @@ type ApplicationConfig struct {
 	AutoUpgradeAddons                           bool
 	PreferDevelopmentBackends                   bool
 
+	// PromptCache is the disk tier of the llama.cpp prompt cache.
+	PromptCache PromptCacheConfig
+	// PromptCachePath is the root of the disk tier of this node when the
+	// operator sets it; it wins over <DataPath>/prompt-cache.
+	PromptCachePath string
+	// PromptCacheAutoQuota returns the automatic per-user quota of the disk
+	// tier in bytes (0 = none), so a backend enforces it on each write and
+	// not only at the next janitor sweep. Set when the tier starts.
+	PromptCacheAutoQuota func() int64
+
 	// UpgradeRunKeep is the most finished upgrade runs kept. Zero means 200
 	// (upgraderun.DefaultRetention), a negative value keeps any number.
 	UpgradeRunKeep int
@@ -310,6 +324,10 @@ type ApplicationConfig struct {
 	SizeAwareEviction        bool          // Evict largest models first rather than least-recently-used (default: false)
 	LRUEvictionMaxRetries    int           // Maximum number of retries when waiting for busy models to become idle (default: 30)
 	LRUEvictionRetryInterval time.Duration // Interval between retries when waiting for busy models (default: 1s)
+	// DisableModelSwap stops a load from unloading another model to make
+	// room. The load waits for the LRU retry window, then fails with a
+	// retryable 503. Stored negated so the zero value keeps swap on.
+	DisableModelSwap bool
 
 	// ModelLoadFailureCooldown is the base cooldown applied after a model load
 	// fails: new load attempts for that model are refused (HTTP 503 + Retry-After)
@@ -673,6 +691,7 @@ func NewApplicationConfig(o ...AppOption) *ApplicationConfig {
 		// loadRuntimeSettingsFromFile).
 		EnableBackendLogging:        true,
 		VRAMPersistentCache:         true,
+		PromptCache:                 DefaultPromptCacheConfig(),
 		ArtifactDownloadConcurrency: modelartifacts.DefaultDownloadConcurrency,
 
 		MaxConcurrentBackendOperations: 2,
@@ -935,6 +954,14 @@ func WithSizeAwareEviction(enabled bool) AppOption {
 		o.SizeAwareEviction = enabled
 	}
 }
+
+// DisableModelSwap turns model swap off (see ApplicationConfig.DisableModelSwap).
+var DisableModelSwap = func(o *ApplicationConfig) {
+	o.DisableModelSwap = true
+}
+
+// ModelSwapEnabled reports whether a load may unload another model to make room.
+func (o *ApplicationConfig) ModelSwapEnabled() bool { return !o.DisableModelSwap }
 
 // WithLRUEvictionMaxRetries sets the maximum number of retries when waiting for busy models to become idle
 func WithLRUEvictionMaxRetries(maxRetries int) AppOption {

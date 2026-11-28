@@ -348,7 +348,8 @@
         "kind": {
           "model": "Model",
           "backend": "Backend",
-          "addon": "Add-on"
+          "addon": "Add-on",
+          "plugin": "Plugin"
         },
         "done": {
           "install": "{{kind}} {{name}} installed",
@@ -1077,6 +1078,13 @@
       "done": "Imported {{count}}. They are switched off: test and turn them on below.",
       "failed": "{{name}} was not imported: {{error}}",
       "left": "The servers that were not imported stay in this browser."
+    },
+    "plugin": {
+      "tag": "Plugin: {{name}}",
+      "switch": "{{name}} is turned on and off with the plugin {{plugin}}",
+      "title": "Managed by the plugin {{name}}",
+      "body": "The plugin made this connector and removes it when you turn the plugin off. You cannot change it here.",
+      "manage": "Open the plugin"
     }
   },
   "proposal": {
@@ -1505,7 +1513,8 @@
       "page": "Page",
       "dashboard": "Dashboard",
       "knowledge": "Knowledge",
-      "voice_profile": "Voice profile"
+      "voice_profile": "Voice profile",
+      "plugin": "Plugin"
     },
     "scope": {
       "user": "All your chats",
@@ -1608,6 +1617,17 @@
       "thisProject": "this project",
       "why": "Share the project with edit access again, then ask for the note again if you still want it.",
       "nameHint": "Project name taken from its folder"
+    },
+    "plugin": {
+      "label": "The plugin action",
+      "help": "The assistant asked for this. It runs as you when you confirm. Check that you want it: the assistant reads text from plugin marketplaces, which anyone can publish.",
+      "action": "Action",
+      "plugin": "Plugin",
+      "scope": "For",
+      "install": "Install",
+      "source": "Source",
+      "ref": "Branch or tag",
+      "marketplace": "Marketplace ID"
     }
   },
   "proposalsPage": {

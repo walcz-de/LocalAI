@@ -55,6 +55,7 @@ export const OLD_SECTIONS = {
 
 const AGENT_RESTART = { apply: 'restart' }
 const WATCHDOG_LIVE = { apply: 'live', note: 'The watchdog restarts with the new values.' }
+const PROMPT_CACHE_LIVE = { apply: 'live', note: 'The janitor uses it at its next sweep; a model gets it when it next loads.' }
 
 // One row per real setting. `kind` picks the control:
 //   bool, text, int, duration, percent, select, model, json, lines, hosts, token,
@@ -99,10 +100,43 @@ export const FIELDS = [
     min: 50, max: 100, fallback: 0.8, default: 0.95, ...WATCHDOG_LIVE, needs: 'memory_reclaimer_enabled' },
   { key: 'max_active_backends', group: 'memory', was: 'backends', kind: 'int', label: 'Models kept loaded',
     desc: 'Maximum models to keep loaded at once. 0 means no limit, 1 keeps a single model.',
+    extra: (settings) => (settings.memory_scope === 'cluster' ? 'In distributed mode this is the limit of each worker node.' : null),
     placeholder: '0', default: 0, min: 0, ...WATCHDOG_LIVE },
+  { key: 'model_swap', group: 'memory', was: 'backends', kind: 'bool', label: 'Swap models when memory is full',
+    desc: 'When a node has no room for a model, unload the least recently used idle model to make room. When off, the request waits, then gets a 503 with Retry-After.',
+    default: true, apply: 'live' },
   { key: 'vram_budget', group: 'memory', was: 'performance', kind: 'text', label: 'GPU memory budget',
     desc: 'Cap the VRAM used for model allocation on this node. A percentage (80%) or an amount (12GB). Empty uses all detected VRAM.',
+    extra: (settings) => (settings.memory_scope === 'cluster' ? 'In distributed mode the budget applies on each worker node that sets none of its own.' : null),
     placeholder: 'e.g. 80% or 12GB', default: '', apply: 'live' },
+
+  // Disk tier of the llama.cpp prompt cache (core/config/prompt_cache.go,
+  // defaults from the prompt-cache flags in core/cli/run.go). The status and
+  // the Clear button are PromptCacheStatus, drawn in this group.
+  { key: 'prompt_cache_disk', group: 'memory', block: 'promptCache', kind: 'bool', label: 'Keep long prompts on disk',
+    desc: 'Keep the prompt cache of long llama.cpp prompts on disk, so a model reload does not compute them again. Each user has a separate cache. The files hold prompt text: treat them like stored chats.',
+    default: true, ...PROMPT_CACHE_LIVE },
+  { key: 'prompt_cache_disk_ttl', group: 'memory', block: 'promptCache', kind: 'duration', label: 'Keep entries for',
+    desc: 'How long an entry is kept after its last use, for example 168h (7 days).',
+    placeholder: '168h', default: '168h', ...PROMPT_CACHE_LIVE, needs: 'prompt_cache_disk' },
+  { key: 'prompt_cache_disk_shared', group: 'memory', block: 'promptCache', kind: 'bool', label: 'Share the cache between users',
+    desc: 'All users read and write one cache. Turn on only when every user may see the prompts of the others.',
+    default: false, ...PROMPT_CACHE_LIVE, needs: 'prompt_cache_disk' },
+  { key: 'prompt_cache_disk_max_size_mib', group: 'memory', block: 'promptCache', advanced: true, kind: 'int', label: 'Size cap (MiB)',
+    desc: 'Most disk the cache of this node may use. 0 is automatic: the smaller of 20 GiB and a tenth of the free disk at start.',
+    placeholder: '0', default: 0, min: 0, ...PROMPT_CACHE_LIVE },
+  { key: 'prompt_cache_disk_user_quota_mib', group: 'memory', block: 'promptCache', advanced: true, kind: 'int', label: 'Quota per user (MiB)',
+    desc: 'Most disk one user may use. 0 is automatic: an equal share of the cap when there is more than one user. -1 is no quota.',
+    placeholder: '0', default: 0, min: -1, ...PROMPT_CACHE_LIVE },
+  { key: 'prompt_cache_disk_min_tokens', group: 'memory', block: 'promptCache', advanced: true, kind: 'int', label: 'Shortest prompt kept (tokens)',
+    desc: 'A shorter prompt is never written to disk: it is faster to compute it again.',
+    placeholder: '1024', default: 1024, min: 1, ...PROMPT_CACHE_LIVE },
+  { key: 'prompt_cache_disk_low_free_mib', group: 'memory', block: 'promptCache', advanced: true, kind: 'int', label: 'Low free space (MiB)',
+    desc: 'Under this free disk the cache stops writing and deletes its oldest entries. 0 is automatic: the larger of 15% of the disk and 10 GiB.',
+    placeholder: '0', default: 0, min: 0, ...PROMPT_CACHE_LIVE },
+  { key: 'prompt_cache_disk_critical_free_mib', group: 'memory', block: 'promptCache', advanced: true, kind: 'int', label: 'Critical free space (MiB)',
+    desc: 'Under this free disk the cache turns off until the free space is above the low mark again. 0 is automatic: 5% of the disk.',
+    placeholder: '0', default: 0, min: 0, ...PROMPT_CACHE_LIVE },
 
   // ---- Speed and defaults --------------------------------------------------
   { key: 'threads', group: 'speed', was: 'performance', kind: 'int', label: 'Default threads',
@@ -238,6 +272,14 @@ export const FIELDS = [
     desc: 'Let a chat list the user\'s saved agents and start one as a sub-agent. Each chat must still switch it on in its Tools menu, and the user needs the agents feature.',
     default: true, fallback: true, apply: 'live', custom: 'tools' },
   // The work folder of each chat (read at each turn, so live).
+  // Plugins in the Claude Code plugin format: read by the Plugins service at
+  // each request. The bounds are MinPluginMaxBytes and MaxPluginMaxBytes.
+  { key: 'plugins_user_installs', group: 'tools', was: 'chats', kind: 'bool', label: 'Users install plugins for themselves',
+    desc: 'Let users who have the plugins feature install plugins that run no code for themselves, from the Plugins tab of the Add-ons page. Off, only administrators install plugins. A plugin that runs code is always installed by an administrator, for everyone.',
+    default: true, fallback: true, apply: 'live' },
+  { key: 'plugins_max_bytes', group: 'tools', was: 'chats', kind: 'int', label: 'Largest plugin (bytes)',
+    desc: 'The most bytes the files of one plugin may take, from 1048576 to 209715200. A plugin over it is refused when it is reviewed or installed.',
+    default: 20971520, fallback: 20971520, emptyIsDefault: true, min: 1048576, max: 209715200, unit: 'bytes', apply: 'live' },
   { key: 'chats_work_folder', group: 'tools', was: 'chats', kind: 'bool', label: 'Work folder for helper files',
     desc: 'Tell the chats to put the scripts, logs and drafts they make in a work folder of each chat (Chats/<chat>/work in the user\'s files), so they do not mix with the user\'s own files. The Files pane of a chat lists them apart in either case.',
     default: true, fallback: true, apply: 'live' },
@@ -578,6 +620,7 @@ export function systemLoopRuns(maxRuns) {
 // its advanced fields go in a disclosure right after its other fields.
 export const BLOCKS = {
   loops: { label: 'Loops and waits', advanced: 'Advanced loop limits' },
+  promptCache: { label: 'Disk prompt cache', advanced: 'Advanced disk cache limits' },
 }
 
 // The order a group draws its fields in: each field as { field }, and after

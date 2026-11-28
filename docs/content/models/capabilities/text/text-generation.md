@@ -30,7 +30,7 @@ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/jso
 }'
 ```
 
-Available additional parameters: `top_p`, `top_k`, `max_tokens`
+Available additional parameters: `top_p`, `top_k`, `max_tokens`, `service_tier` (see [Request priority](#request-priority))
 
 When a request omits `max_tokens`, the vLLM and SGLang backends do not cap generation at 200 tokens. Generation is bounded only by the context window of the model.
 
@@ -69,7 +69,31 @@ curl http://localhost:8080/v1/completions -H "Content-Type: application/json" -d
 }'
 ```
 
-Available additional parameters: `top_p`, `top_k`, `max_tokens`
+Available additional parameters: `top_p`, `top_k`, `max_tokens`, `service_tier` (see [Request priority](#request-priority))
+
+### Request priority
+
+`/v1/chat/completions`, `/v1/completions` and `/v1/responses` accept the OpenAI `service_tier` field. It sets the priority class of the request. When requests wait for a free slot, a backend that queues requests (llama.cpp) serves a higher class first. Requests of one class are served in the order they arrive.
+
+| `service_tier` | Class | Use it for |
+|----------------|-------|------------|
+| `flex` | batch (-1) | Work that nobody waits on, such as bulk jobs |
+| `auto`, `default` or not set | default (0) | Normal requests |
+| `priority` | interactive (1) | Requests that a person waits on |
+
+Any caller can lower the priority of its own requests with `flex`. Only an administrator can use `priority`. For other callers, LocalAI changes `priority` to `default`. On a server without authentication (no user accounts and no API keys), every caller can use `priority`. An unknown value returns HTTP 400.
+
+The response includes the tier that LocalAI used in `service_tier`, in every chunk of a streamed chat or text completion too.
+
+LocalAI also sets the class of its own requests. A chat in the web UI and a chat from a connector are interactive. Sub-agents, jobs, triggers, pages and the indexing of collections are batch.
+
+```bash
+curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d '{
+  "model": "my-model",
+  "service_tier": "flex",
+  "messages": [{"role": "user", "content": "Summarize this report."}]
+}'
+```
 
 ### List models
 
@@ -359,6 +383,7 @@ the identity that created them.
 | `truncation` | string | No | Truncation mode: "auto" or "disabled" |
 | `text_format` | object | No | Text format configuration |
 | `metadata` | object | No | Custom metadata |
+| `service_tier` | string | No | Priority class: `flex`, `default` or `priority`. See [Request priority](#request-priority) |
 
 #### Input Format
 
@@ -712,12 +737,24 @@ The `llama.cpp` backend supports additional configuration options that can be sp
 | `device` or `devices` | string | Select the llama.cpp backend devices to use. Repeat the option or pass a comma-separated list; unlisted devices are excluded. Use the names reported by `llama-server --list-devices` / `--list-devices`. | `devices:CUDA1,CUDA2,CUDA3` |
 | `kv_unified` or `unified_kv` | boolean | Use a single unified KV buffer shared across all sequences. Default: `true` (LocalAI override; upstream defaults to `false` but auto-enables it when slot count is auto). **Required for `cache_idle_slots` and scoring**: without it the server force-disables idle-slot saving at init, and score-enabled models are rejected at load time. | `kv_unified:false` |
 | `kv_unified_per_slot` | integer | Context limit per parallel slot (upstream `--kv-unified-per-slot`). When `context_size` is not set, the shared KV cache is sized to `parallel` times this value. Default: unset. | `kv_unified_per_slot:8192` |
+| `paged_kv` or `paged_serving` | boolean | Paged serving: the slots share one KV pool, requests start only when the pool has room, and a request is preempted when it runs out. See [Paged serving](#paged-serving). Default: `true`; `paged_kv:false` turns it off. | `paged_kv:false` |
+| `kv_pool_tokens` | integer | Total size of the shared KV pool in tokens. Sets the context size. Default: `context_size`. | `kv_pool_tokens:32768` |
+| `prefill_budget` or `max_prefill_tokens` | integer or `auto` | Prompt tokens read per step while other requests generate, so a long prompt does not stall them. `auto` adapts it to the number of decoding streams. Works with or without `paged_kv`. `0` turns it off. Default: `256`. | `prefill_budget:auto` |
+| `prefill_long` | integer | The prefill budget holds back only prompts longer than this many tokens; shorter prompts are read whole. `0` holds back every prompt. Default: `1024`. | `prefill_long:0` |
+| `kv_output_reserve` | integer | Free cells a request needs beyond its prompt before it starts, capped at its max tokens. Only with `paged_kv`. Default: `256`. | `kv_output_reserve:512` |
+| `paged_preempt` | boolean | With paged serving, preempt a request when the pool runs out, and resume it later. Default: `true`. Not recommended to turn off: with `paged_preempt:false` a pool that overflows fails every in-flight stream with HTTP 500 "Context size has been exceeded". | `paged_preempt:false` |
+| `spec_max_streams` | integer | Speculative drafting pauses while more than this many streams decode, and resumes when the count drops by a quarter (at least one). `0` never pauses. Default: `4`. | `spec_max_streams:8` |
+| `admission_order` | boolean | With paged serving, waiting requests go by priority class (with aging), then fewest prompt tokens not covered by a cache, then arrival, with an overtake cap; `false` keeps first come, first served. Default: `true`. | `admission_order:false` |
+| `prefill_cap` | integer | With paged serving, the most prompt tokens one request reads per step while other requests read prompts too; a request alone gets the whole step. `0` turns it off. Default: `512`. | `prefill_cap:0` |
+| `slot_attach` or `prefix_attach` | boolean | With paged serving, a request whose prompt starts with what another slot holds (busy or idle, at least 256 tokens) shares those KV cells instead of reading them again. Default: `true`. | `slot_attach:false` |
 | `cache_idle_slots` or `idle_slots_cache` | boolean | On a new task, save the previous slot's KV state into the prompt cache (and clear the slot) so a later request with the same prefix can warm-load it. Default: `true`. Auto-disabled by the server if `kv_unified=false` or `cache_ram=0`. | `cache_idle_slots:false` |
 | `n_ctx_checkpoints` or `ctx_checkpoints` | integer | Maximum number of context checkpoints per slot (used for partial-prefix recovery, e.g. SWA). Default: `32`. | `ctx_checkpoints:16` |
 | `checkpoint_min_step` or `checkpoint_min_spacing` (aliases: `checkpoint_every_nt`, `checkpoint_every_n_tokens`) | integer | Minimum spacing in tokens between context checkpoints. `0` disables the minimum-spacing gate. Default: `256`. (Renamed upstream from `checkpoint_every_nt`; semantics shifted from a fixed cadence to a minimum spacing.) | `checkpoint_min_step:1024` |
 | `split_mode` or `sm` | string | How to split the model across multiple GPUs: `none` (single GPU only), `layer` (default - split layers and KV across GPUs), `row` (deprecated upstream; use `tensor`), `tensor` (experimental tensor parallelism: each layer is split across all GPUs for lower token latency). `tensor` needs flash attention (`flash_attention: "on"`, or `"auto"`, which llama.cpp turns on in this mode), `fit_params:false` and a `context_size` you set yourself, and it is not implemented for every architecture. Quantized KV cache (`cache_type_k`/`cache_type_v`) works with it on the bundled llama.cpp ([#23792](https://github.com/ggml-org/llama.cpp/pull/23792)); `f16` is the safe choice. The NVIDIA CUDA backends ship NCCL for the GPU-to-GPU reductions. See the [tensor split configuration]({{%relref "/models/gpu-acceleration#llama-cpp-tensor-split" %}}). | `split_mode:tensor` |
 | `backend_sampling` or `gpu_sampling` | string | Where tokens are sampled: `off` (default, on the CPU), `on` (on the device that holds the output, such as the GPU) or `auto` (decided per request). `true`/`false` and `1`/`0` also work. See [Backend sampling](#backend-sampling) below. | `backend_sampling:auto` |
-| `backend_sampling_min_slots` | integer | With `backend_sampling:auto`, the number of requests that must run at the same time before a request samples on the GPU. Default: `4`. | `backend_sampling_min_slots:8` |
+| `backend_sampling_min_slots` | integer | With `backend_sampling:auto`, the number of requests that must run at the same time before a request samples on the GPU. Default: `16`. | `backend_sampling_min_slots:8` |
+| `grammar_engine` | string | Engine of the grammars that LocalAI builds from a JSON schema (`response_format` and tool calls): `auto` (default), `gbnf` or `llguidance`. See [Grammar engine](#grammar-engine) below. | `grammar_engine:gbnf` |
+| `grammar_max_repetition` | integer | Limit of the GBNF repetition check. llama.cpp stops at 2000, which the grammar of a large tool set exceeds: the request then fails with "number of rules that are going to be repeated ... exceeds sane defaults". Default: `100000`. The `LLAMA_GRAMMAR_MAX_REPETITION` environment variable sets it for every model when the option is not set. | `grammar_max_repetition:20000` |
 
 **Example configuration with options:**
 
@@ -739,19 +776,64 @@ options:
 
 **Note:** The `parallel` option can also be set via the `LLAMACPP_PARALLEL` environment variable, and `grpc_servers` can be set via the `LLAMACPP_GRPC_SERVERS` environment variable. Options specified in the YAML file take precedence over environment variables.
 
-An explicit `parallel: 1` (or `n_parallel: 1`) in the model options takes precedence over `LLAMACPP_PARALLEL`, like any other value. The environment variable is only used when neither option is set; if it is missing or not a number, the backend uses one slot.
+An explicit `parallel: 1` (or `n_parallel: 1`) in the model options takes precedence over `LLAMACPP_PARALLEL`, like any other value. The environment variable is only used when neither option is set; if it is missing or not a number, the backend uses 8 slots with [paged serving](#paged-serving) (the default) and one slot without it.
 
 ##### Backend sampling
 
 By default llama.cpp copies the logits of every slot to the host after each decode step and samples the slots one after the other on the CPU. With backend sampling (upstream `--backend-sampling`, [ggml-org/llama.cpp#25532](https://github.com/ggml-org/llama.cpp/pull/25532)) the sampler chain runs on the device that holds the output, so the copy goes away and the slots are sampled in parallel. The gain grows with the number of slots that decode together: one stream gains little, many concurrent streams gain the most. The feature is experimental upstream and is off by default.
 
 - `backend_sampling:on` asks for backend sampling on every request.
-- `backend_sampling:auto` decides per request. A request samples on the backend only when all of these hold: the model is offloaded to a GPU (a GPU device is present and `gpu_layers` is not `0`), `split_mode` is not `tensor`, the request has no grammar (no JSON schema, no `response_format` grammar, no tool-call grammar), no reasoning-budget sampler and no `logprobs`, and at least `backend_sampling_min_slots` requests (default `4`) are running, this one included. The decision is made when the request starts and holds for its whole generation.
+- `backend_sampling:auto` decides per request. A request samples on the backend only when all of these hold: the model is offloaded to a GPU (a GPU device is present and `gpu_layers` is not `0`), `split_mode` is not `tensor`, the request has no grammar (no JSON schema, no `response_format` grammar, no tool-call grammar), no reasoning-budget sampler and no `logprobs`, and at least `backend_sampling_min_slots` requests (default `16`) are running, this one included. The decision is made when the request starts and holds for its whole generation.
 - `backend_sampling:off` keeps sampling on the CPU. A raw `--backend-sampling` flag in `options` still turns it on.
+
+Measured on a GB10 (DGX Spark) with Qwen3-8B: `backend_sampling:on` was neutral at 1 and 8 decoding streams and gave 2.5% more throughput at 12, 6.5% at 16 and 10% at 32, with the inter-token latency p99 25 to 40 ms higher. `auto` with 16 slots behind LocalAI was slower than `off`: about 16 requests in flight gave 277 against 300 tok/s and an inter-token latency p99 of 363 against 110 ms, because one batch then mixes requests sampled on the GPU and on the CPU. Use `on` for a model that serves many concurrent requests, and keep `off` (the default) otherwise.
 
 llama.cpp turns backend sampling off for a request by itself when the request uses a grammar, a reasoning budget (thinking models with tool calls) or logprobs taken before sampling, and for text-to-speech; `auto` leaves those requests on the CPU from the start. Only a prefix of the sampler chain made of top-k, top-p, min-p, temperature, penalties, logit bias and the final draw runs on the device; other samplers (typical-p, XTC, mirostat, DRY) run on the CPU.
 
 Known upstream issues at the time of writing: [#32141](https://github.com/ggml-org/llama.cpp/issues/32141) (`min_keep` and `min_p` handling), [#31840](https://github.com/ggml-org/llama.cpp/issues/31840) (pinned host buffers are allocated again each time a request ends) and [#32637](https://github.com/ggml-org/llama.cpp/issues/32637) (an invalid token on Metal with a small vocabulary). Test greedy output against `off` before you turn it on for a model.
+
+##### Grammar engine
+
+LocalAI constrains the output of the model with a grammar for JSON mode (`response_format` with a `json_schema`) and for tool calls when it builds the tool-call grammar itself. llama.cpp has two engines for these grammars:
+
+- **GBNF**: the grammar sampler of llama.cpp. It works in every build. It can be slow on a large schema, such as a big tool set, and llama.cpp rejects a grammar whose repetitions expand too far.
+- **[llguidance](https://github.com/guidance-ai/llguidance)**: a Rust engine that takes the JSON schema directly. It computes the allowed tokens faster on large schemas and supports more of JSON Schema. The llama.cpp backend images for Linux and macOS are built with it.
+
+The `grammar_engine` option selects the engine:
+
+| Value | Behavior |
+|---|---|
+| `auto` (default) | Use llguidance for the grammars LocalAI builds when the backend build has it, GBNF otherwise. The tool-call grammars of the chat template use GBNF. |
+| `gbnf` | Always use GBNF, exactly as upstream llama.cpp. |
+| `llguidance` | Use llguidance, also for the tool-call grammars of the chat template (see below). A build without it logs a warning and uses GBNF. |
+
+```yaml
+options:
+  - grammar_engine:gbnf
+```
+
+These grammars always use GBNF:
+
+- a grammar you write yourself (the `grammar` request field or the `grammar` key of the model config),
+- `response_format` of type `json_object`,
+- function calling with `mixed_mode: true` (free text or JSON) or `schema_type: llama3.1`.
+
+###### Tool-call grammars of the chat template
+
+When llama.cpp parses tool calls itself (`grammar.disable: true` with `use_tokenizer_template: true`), it builds a GBNF grammar from the chat template of the model. With `grammar_engine:llguidance`, the backend translates that grammar to llguidance when the request starts. It is the same grammar, for every template: no format has its own rules.
+
+- **Speed.** On GBNF, the cost of the allowed-token mask grows with the tool set, to tens of milliseconds per token with 48 or 128 tools. On llguidance it stays below about 1 ms. The backend first checks the token the model picked and computes the full mask only when that token is rejected, so text outside a tool call costs almost nothing.
+- **Large tool sets.** GBNF rejects some large schemas, for example an array with `maxItems: 2000` or hundreds of optional properties ("exceeds sane defaults", "chained more than 256 levels deep"). llguidance accepts them.
+- **Fallback.** If the grammar does not translate or llguidance rejects it, the request uses GBNF and the backend logs one warning. If llguidance fails during generation, or rejects a token that GBNF accepts, the request goes on with GBNF from that point. The output is never left without a grammar because of llguidance.
+- **Lazy grammars.** Most templates constrain the output only after a trigger such as `<tool_call>`. The trigger rules are the same as on GBNF.
+
+Under `auto`, these grammars stay on GBNF for now. To go fully stock, set `grammar_engine:gbnf`: every grammar then uses llama.cpp's GBNF sampler, as upstream.
+
+With llguidance (any grammar, also the JSON-schema grammars above), tokens that a model adds to its vocabulary, such as `<tool_call>` in Qwen, count as special tokens: the grammar matches them by token, not by text. As a result, such a token cannot appear inside a JSON string of the output as one token; the model can still write the same characters with ordinary tokens.
+
+With llguidance, an object in the schema that has no `required` list requires all its properties, and an object without `additionalProperties` allows no other property, as with the GBNF grammar of LocalAI. A `required` list and `additionalProperties` that the schema sets are kept, and keywords such as `minLength`, `pattern` and `maxItems`, which the GBNF converter ignores, are enforced. Between two JSON tokens the model may write one space or none, as with the GBNF grammar.
+
+Use `gbnf` when a model must behave exactly as before, for example when a prompt relies on whitespace that the GBNF grammar allows. Other backends ignore the option.
 
 ##### Hardware auto-tuning (and how to override it)
 
@@ -762,6 +844,53 @@ Anything you set explicitly in the model YAML always wins, so to pin a value jus
 ```
 LOCALAI_DISABLE_HARDWARE_DEFAULTS=true
 ```
+
+##### Paged serving
+
+With `parallel` above 1, the slots of a model share one KV cache (`kv_unified`, on by default). Without scheduling, when more requests arrive than that cache holds, the server runs out of cells mid-generation and fails every running request with "Context size has been exceeded". Paged serving, on by default, schedules the shared cache as a pool instead:
+
+- **Admission.** A request starts reading its prompt only when the pool has room for the prompt and its output reserve (`kv_output_reserve`), after what the running requests still need. Otherwise it waits in its slot, first come, first served. A waiting request holds no KV cells: its prompt cache entry is loaded when it is admitted.
+- **Preemption.** When the running requests outgrow the pool, one request is preempted: the one holding the fewest cells (the cheapest to recompute), the youngest on a tie. Its cells are freed, it waits ahead of newer requests, and when there is room for it plus some spare (twice `kv_output_reserve`, at least 256 cells) its tokens are computed again and it continues where it stopped. One request is preempted at most twice while another can be preempted instead. Keep preemption on: without it, a pool that overflows fails every in-flight stream with HTTP 500, and in a CPU benchmark with output lengths the clients did not declare, 25% to 67% of the requests failed; with it, all completed. The output does not change, apart from rare near ties in greedy decoding. Hybrid and recurrent models (Qwen3.5, LFM2, Granite-H) and speculative decoding with a draft model or MTP resume the same way: the recompute rebuilds the recurrent state and the draft's cache too. A request that cannot be recomputed (an image or audio prompt, aLoRA) is preempted only when nothing else can be: its state is saved to a RAM stash, capped by `cache_ram`, and restored when there is room. Score requests are never preempted. If the stash is full (or `cache_ram` is 0), such a request fails with the retryable error "KV pool full, preempted; retry the request".
+- **Prefix sharing.** A request whose prompt starts with the prompt of another request (a shared system prompt, the earlier turns of a conversation) starts from that slot's KV cells, even while the other request is still generating: the shared part is neither copied nor computed again. It needs at least 256 shared tokens and is off for sliding-window, hybrid and recurrent models, multimodal prompts and draft models. `slot_attach:false` turns it off.
+- **Drafting.** Speculative drafting is off unless the model asks for it: a draft model, or `spec_type:ngram-mod` to draft from n-grams of the model's own context. N-gram drafting speeds up repetitive output (code edits, lists, quoting the prompt) but on ordinary chat output it rarely finds a match: on a GB10 (DGX Spark) with Qwen3-8B it cost 3% on one stream and 6-7% at 32 streams. When drafting is on, it pauses while more than `spec_max_streams` streams decode, where batching pays more than drafting, and resumes when the count drops by a quarter.
+- **Order of waiting requests.** Requests that wait for a slot or for room in the pool go by priority class first (interactive chats before default API calls before batch work such as sub-agents, jobs and collection indexing; see `service_tier`), then by the prompt tokens no cache covers (cache hits and short prompts first), then by arrival. A request gains a class for every 20 s it waits, and goes by arrival once 8 later requests went first or it waited 30 s, so nothing starves. `admission_order:false` keeps first come, first served.
+- **Idle slots.** When the pool needs cells held by idle slots, the least recently used idle slot is saved to the RAM prompt cache and trimmed from the tail, only as much as needed (at least 256 cells). With `lazy_idle_save:true`, idle slots also skip the save-and-clear that happens after each new request and keep their cells until the pool needs them; it is off by default because in the GPU A/B it served fewer repeated prompts from the cache.
+- **Prefill budget.** `prefill_budget` (default 256) limits how many prompt tokens a step reads while other requests generate. A long prompt then no longer stops the other streams for seconds. Only prompts longer than `prefill_long` (default 1024 tokens) are held back: a burst of short prompts is read whole, as without a budget, because spreading it over budget-sized steps cost 4 to 5% of throughput and doubled the inter-token latency p99 in bursts of 16 and 32 requests, with no long prompt to protect the other streams from. `prefill_long:0` applies the budget to every prompt. It also works when paged serving is off. With `prefill_budget:auto` the budget follows the load: the whole batch while at most one stream decodes, then 2048 divided by the number of decoding streams, never below 128. A number sets a fixed budget.
+
+To turn it off for one model:
+
+```yaml
+options:
+  - paged_kv:false      # no admission control or preemption
+  - prefill_budget:0    # no prefill budget
+```
+
+A model that sets the pool and the slots explicitly:
+
+```yaml
+name: qwen3-8b
+backend: llama-cpp
+context_size: 32768   # the shared pool; or set kv_pool_tokens
+parameters:
+  model: Qwen3-8B-Q4_K_M.gguf
+options:
+  - parallel:16
+  - prefill_budget:512
+```
+
+Notes:
+
+- When `parallel` is not set in the options or in `LLAMACPP_PARALLEL`, paged serving uses 8 slots and logs it. The KV cache does not grow with the slots: they share `context_size`. On a GPU, LocalAI's hardware defaults set `parallel` from the VRAM, and set `parallel:1` on a GPU without room for more slots, so a tight fit keeps one slot.
+- Each slot keeps a little state of its own: the sampler, and for hybrid and recurrent models (Qwen3.5, Granite-H, Nemotron-H, LFM2) a recurrent state and up to `n_ctx_checkpoints` copies of it (context checkpoints, in host memory). For such a model LocalAI reads the state size from the GGUF header and:
+  - sets `n_ctx_checkpoints` so the checkpoints of all slots stay within the smaller of `cache_ram` (8 GiB by default) and a quarter of the host memory: slots x state x checkpoints, between 4 and 32 per slot. For example 6 for Qwen3.8-27B or Granite-4.0-H-Small at 8 slots, 20 for Qwen3.5-9B, and the default 32 for small models;
+  - on a GPU, counts one state per slot in the headroom check that picks the default `parallel`, so a tight fit gets fewer slots.
+  An explicit `n_ctx_checkpoints` or `parallel` always wins.
+- A model that sets `kv_unified:false`, `context_shift:true` or `cont_batching:false` runs without paged serving, with one info line in the log. Only `paged_kv:true` set explicitly together with one of those options fails the load, with an error that names the option.
+- A purely recurrent model (Mamba, RWKV) has no KV pool to share, so paged serving turns itself off for it at load, with one info line. Hybrid models (attention plus recurrent layers) keep it.
+- Embedding and rerank models run with paged serving too: their requests need no output reserve, and admission only waits when the pool is full.
+- `parallel` is the limit of requests in flight, waiting or running. Each slot can use the whole pool unless `kv_unified_per_slot` caps it.
+- The backend logs every admission wait (`waits = N`), every preemption (`preemptions = N`), how long a preempted request waited (`resuming after waiting`), and every last-resort abort (`aborts = N`).
+- Builds of the forks that do not carry LocalAI's llama.cpp patches (for example turboquant) run without paged serving; they warn only when a model sets `paged_kv:true` or `prefill_budget`.
 
 ##### Server-side prompt cache (repeated system prompts)
 
@@ -829,6 +958,10 @@ Keep these points in mind:
 - A saved state holds the prompt state for the model and quantisation it came from. Do not restore it into a different model, quantisation or context size. The restore call fails if the state does not fit, but a state from another model is not always detected.
 - A slot that is busy with a request is served after that request ends.
 - The API is for `llama-cpp` only. Other backends return `501`.
+
+##### Disk prompt cache
+
+The RAM prompt cache is lost when the model unloads. The disk prompt cache keeps the state of long prompts (1,024 tokens or more, seen in at least two requests) on disk, per user, so a reload does not compute them again. It is on by default; `prompt_cache_disk:false` in `options:` turns it off for one model. See [Disk Prompt Cache]({{%relref "/models/disk-prompt-cache" %}}) for the options, the sizes and the retention.
 
 #### Reference
 

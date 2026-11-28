@@ -127,6 +127,49 @@ describe('P2P in the client core', () => {
     expect(core.servers.serversView().rows.map((r) => r.id)).toEqual([b.id])
   })
 
+  it('removing a server deletes its stored sign-in, and only its own', async () => {
+    const p = withP2P()
+    const { core } = await start(p)
+    const { a } = await pairTwo(p, core)
+    expect(called(p, 'forgetCredential')).toEqual([])
+    await core.servers.removeServer(a.id)
+    await flush()
+    expect(called(p, 'forgetCredential').map((c) => c.args[0])).toEqual([{ peer: PEER }])
+  })
+
+  it('a new invite of a saved server keeps its sign-in', async () => {
+    const p = withP2P()
+    const { core } = await start(p)
+    await pairTwo(p, core)
+    const r = await core.servers.addServerByInvite({ link: `${invite(PEER)}&r=/ip4/192.0.2.9/tcp/4001/p2p/12D3KooWRelay` })
+    await flush()
+    expect(r.ok).toBe(true)
+    expect(called(p, 'forgetCredential')).toEqual([])
+  })
+
+  it('keeps only the sign-ins of saved servers when it starts', async () => {
+    const p = withP2P()
+    const first = await start(p)
+    await pairTwo(p, first.core)
+    await first.core.shutdown()
+    open = open.filter((c) => c !== first.core)
+    expect(called(p, 'forgetCredential')).toEqual([])
+    p.p2p.calls.length = 0
+    await start(p)
+    const retained = called(p, 'retainCredentials').map((c) => (c.args[0] as { peers: string[] }).peers)
+    expect(retained).toHaveLength(1)
+    expect([...retained[0]].sort()).toEqual([PEER, PEER2].sort())
+  })
+
+  it('passes the sign-in fields of a pairing through and still pairs', async () => {
+    const p = withP2P()
+    const { core } = await start(p)
+    const json = JSON.stringify({ ...JSON.parse(pairJson(PEER)), sign_in: true, owner_name: 'Ada' })
+    p.p2p.pairAnswers = [{ ok: true, json }]
+    const r = await core.servers.addServerByInvite({ link: invite(PEER) })
+    expect(r.ok).toBe(true)
+  })
+
   it('maps the state lines onto the row and publishes a fresh view for each', async () => {
     const p = withP2P()
     const { core, events } = await start(p)
@@ -232,8 +275,8 @@ describe('P2P in the client core', () => {
     expect(lists[lists.length - 1]?.[0]?.hints).toEqual([hint])
   })
 
-  it('works with a library of the previous API revision', async () => {
-    const p = fakePlatform({ p2pVersion: 'p2pmobile/2' })
+  it.each(['p2pmobile/3', 'p2pmobile/2'])('works with a library of an earlier API revision (%s)', async (version) => {
+    const p = fakePlatform({ p2pVersion: version })
     const { core } = await start(p)
     p.p2p.pairAnswers = [{ ok: true, json: pairJson(PEER) }]
     expect((await core.servers.addServerByInvite({ link: invite(PEER) })).ok).toBe(true)
@@ -486,5 +529,98 @@ describe('the WebUI view of a server over P2P (loopback squatting)', () => {
     line(p, '{"state":"ready"}')
     await flush()
     expect(webuiCalls(p, 'show')).toHaveLength(2)
+  })
+})
+
+// A sign-out in the WebUI stops the automatic sign-in of a server (Kotlin
+// keeps the flag); only an open from the server list turns it on again.
+describe('automatic sign-in after a sign-out', () => {
+  const urlA = 'http://127.0.0.2:41001'
+  const urlB = 'http://127.0.0.3:41001'
+  const files = {
+    [CONFIG_FILE]: JSON.stringify({
+      remotes: [
+        { id: 'srv_00000001', name: 'Studio', url: urlA, p2p: { peer: PEER, port: 41001, addrs: [], relays: [], host: '127.0.0.2' } },
+        { id: 'srv_00000002', name: 'Office', url: urlB, p2p: { peer: PEER2, port: 41001, addrs: [], relays: [], host: '127.0.0.3' } },
+      ],
+      default_target: 'srv_00000001',
+    }),
+  }
+  const webuiCalls = (p: FakePlatform, name: string) => p.webui.calls.filter((c) => c.name === name)
+  const listening = () => {
+    const p = withP2P({ files, answers: { [urlA]: 'ok', [urlB]: 'ok' } })
+    p.p2p.lines = [
+      { id: 'srv_00000001', line: '{"state":"up","path":"direct"}' },
+      { id: 'srv_00000002', line: '{"state":"up","path":"direct"}' },
+    ]
+    return p
+  }
+
+  it('a cold start opens the default server without turning the sign-in on again', async () => {
+    const p = listening()
+    p.p2p.signedOut.add(PEER)
+    await start(p)
+    expect(webuiCalls(p, 'show')).toHaveLength(1)
+    expect(called(p, 'allowAutoSignIn')).toEqual([])
+    expect(p.p2p.signedOut.has(PEER)).toBe(true)
+  })
+
+  it('an open from the list turns it on before the server opens', async () => {
+    const p = listening()
+    p.p2p.signedOut.add(PEER2)
+    const { core } = await start(p)
+    p.webui.emit('loaded')
+    await flush()
+    const allow = p.p2p.allowAutoSignIn.bind(p.p2p)
+    let showsBefore = -1
+    p.p2p.allowAutoSignIn = async (o) => {
+      showsBefore = webuiCalls(p, 'show').length
+      return allow(o)
+    }
+    const r = await core.openServer('srv_00000002')
+    await flush()
+    expect(r.ok).toBe(true)
+    expect(called(p, 'allowAutoSignIn').map((c) => c.args[0])).toEqual([{ peer: PEER2 }])
+    expect(p.p2p.signedOut.has(PEER2)).toBe(false)
+    // Only the start's show of the default came before it.
+    expect(showsBefore).toBe(1)
+    expect(webuiCalls(p, 'show').map((c) => (c.args[0] as { origin: string }).origin)).toEqual([urlA, urlB])
+    // A new page loads: no reload on top of it.
+    expect(webuiCalls(p, 'reload')).toEqual([])
+  })
+
+  it('reloads the page on show when it was signed out, so the sign-in runs', async () => {
+    const p = listening()
+    p.p2p.signedOut.add(PEER)
+    const { core } = await start(p)
+    p.webui.emit('loaded')
+    await flush()
+    await core.openServer('srv_00000001')
+    await flush()
+    expect(called(p, 'allowAutoSignIn').map((c) => c.args[0])).toEqual([{ peer: PEER }])
+    expect(webuiCalls(p, 'reload')).toHaveLength(1)
+  })
+
+  it('does not reload the page on show when it was not signed out', async () => {
+    const p = listening()
+    const { core } = await start(p)
+    p.webui.emit('loaded')
+    await flush()
+    await core.openServer('srv_00000001')
+    await flush()
+    expect(called(p, 'allowAutoSignIn')).toHaveLength(1)
+    expect(webuiCalls(p, 'reload')).toEqual([])
+  })
+
+  it('still opens the server when the plugin fails', async () => {
+    const p = listening()
+    const { core } = await start(p)
+    p.webui.emit('loaded')
+    await flush()
+    p.p2p.allowAutoSignIn = async () => Promise.reject(new Error('boom'))
+    const r = await core.openServer('srv_00000002')
+    await flush()
+    expect(r.ok).toBe(true)
+    expect(webuiCalls(p, 'show').map((c) => (c.args[0] as { origin: string }).origin)).toEqual([urlA, urlB])
   })
 })

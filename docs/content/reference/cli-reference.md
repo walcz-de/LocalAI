@@ -80,6 +80,7 @@ Application shutdown has no context parameter; work that ignores cancellation ca
 | `--addons-official-library` | `true` | Register the official add-on library on the first start | `$LOCALAI_ADDONS_OFFICIAL_LIBRARY` |
 | `--addons-backend-library` | `true` | Register the backend library on the first start | `$LOCALAI_ADDONS_BACKEND_LIBRARY` |
 | `--addons-backend-max-bytes` | `8589934592` | Largest compressed size, in bytes, of a backend image installed from a library | `$LOCALAI_ADDONS_BACKEND_MAX_BYTES` |
+| `--plugin-marketplaces` | | Marketplaces of plugins in the Claude Code plugin format that a fresh server gets instead of the curated LocalAI marketplace: comma-separated `owner/repo`, `https` git URLs or `https` `marketplace.json` URLs, each optionally `id=source`. Read at the first start only. See [Plugins]({{% relref "/features/plugins" %}}) | `$LOCALAI_PLUGIN_MARKETPLACES` |
 | `--addons-wsl-distro` | | Windows only: the WSL 2 distribution that runs the add-ons whose package runs in WSL 2 (osSettings.windows.execution wsl2). Empty uses the default distribution of WSL | `$LOCALAI_ADDONS_WSL_DISTRO` |
 | `--max-concurrent-model-operations` | `2` | How many model install, upgrade and delete operations run at once. `1` runs them one after the other. Operations on the same model never overlap. See [Runtime Settings]({{% relref "/administration/runtime-settings" %}}) | `$LOCALAI_MAX_CONCURRENT_MODEL_OPERATIONS` |
 | `--max-concurrent-backend-operations` | `2` | How many backend install, upgrade and delete operations run at once. `1` runs them one after the other. Operations on the same backend never overlap. In distributed mode it also bounds how many nodes one operation is sent to at the same time. See [Runtime Settings]({{% relref "/administration/runtime-settings" %}}) | `$LOCALAI_MAX_CONCURRENT_BACKEND_OPERATIONS` |
@@ -112,9 +113,12 @@ appends `localai-UID/backend-runtime`; the default base is `TMPDIR`.
 | `--force-eviction-when-busy` | `false` | Force eviction even when models have active API calls (default: false for safety). **Warning:** Enabling this can interrupt active requests | `$LOCALAI_FORCE_EVICTION_WHEN_BUSY`, `$FORCE_EVICTION_WHEN_BUSY` |
 | `--lru-eviction-max-retries` | `30` | Maximum number of retries when waiting for busy models to become idle before eviction | `$LOCALAI_LRU_EVICTION_MAX_RETRIES`, `$LRU_EVICTION_MAX_RETRIES` |
 | `--lru-eviction-retry-interval` | `1s` | Interval between retries when waiting for busy models to become idle (e.g., `1s`, `2s`) | `$LOCALAI_LRU_EVICTION_RETRY_INTERVAL`, `$LRU_EVICTION_RETRY_INTERVAL` |
+| `--model-swap` | `true` | Unload the least recently used idle model to make room for another. With `--no-model-swap` the request waits for the LRU retry window, then gets 503 with Retry-After | `$LOCALAI_MODEL_SWAP`, `$MODEL_SWAP` |
 | `--upgrade-run-keep` | `200` | Most finished [upgrade runs]({{% relref "/models/upgrade-runs#retention" %}}) kept; the oldest beyond it are removed. `-1` keeps any number | `$LOCALAI_UPGRADE_RUN_KEEP` |
 | `--upgrade-run-retention-days` | `30` | Days to keep finished upgrade runs. `-1` keeps them forever | `$LOCALAI_UPGRADE_RUN_RETENTION_DAYS` |
 | `--model-load-failure-cooldown` | `10s` | After a model load fails, refuse new load attempts for that model for this long (HTTP 503 + `Retry-After`) so a client polling a broken model doesn't respawn a crashing backend every request. Doubles per consecutive failure up to 5m; reset on success. `0` disables | `$LOCALAI_MODEL_LOAD_FAILURE_COOLDOWN`, `$MODEL_LOAD_FAILURE_COOLDOWN` |
+| `--vram-budget` | | Cap the VRAM LocalAI may use for model allocation, as a percentage (`80%`) or an absolute amount (`12GB`). Empty uses all detected VRAM | `$LOCALAI_VRAM_BUDGET` |
+| `--vram-total` | | Total VRAM of this node as an absolute amount (`40GB`, `48GiB`). Replaces GPU detection; use it when the detected VRAM is wrong. `--vram-budget` is then a share of this total. Empty uses detection | `$LOCALAI_VRAM_TOTAL` |
 
 For more information on VRAM management, see [VRAM and Memory Management]({{%relref "/models/vram-management" %}}).
 
@@ -125,6 +129,15 @@ For more information on VRAM management, see [VRAM and Memory Management]({{%rel
 | `--galleries` | | JSON list of galleries | `$LOCALAI_GALLERIES`, `$GALLERIES` |
 | `--autoload-galleries` | `true` | Automatically load galleries on startup | `$LOCALAI_AUTOLOAD_GALLERIES`, `$AUTOLOAD_GALLERIES` |
 | `--vram-persistent-cache` | `true` | Persist successful remote VRAM metadata probes across restarts | `$LOCALAI_VRAM_PERSISTENT_CACHE`, `$VRAM_PERSISTENT_CACHE` |
+| `--prompt-cache-disk` | `true` | Keep the prompt cache of long llama.cpp prompts on disk under `--prompt-cache-path`, else `<data-path>/prompt-cache`, per user. See [Disk Prompt Cache]({{%relref "/models/disk-prompt-cache" %}}) | `$LOCALAI_PROMPT_CACHE_DISK` |
+| `--prompt-cache-path` | *(empty)* | Directory of the disk prompt cache. Give a directory on a local disk. Empty: `<data-path>/prompt-cache`. On a network disk, or when it is not writable, the cache is off | `$LOCALAI_PROMPT_CACHE_PATH` |
+| `--prompt-cache-disk-max-size-mib` | `0` | Size cap of the disk prompt cache of this node. `0` is the smaller of 20 GiB and a tenth of the free disk at start | `$LOCALAI_PROMPT_CACHE_DISK_MAX_SIZE_MIB` |
+| `--prompt-cache-disk-ttl` | `168h` | Time to keep an entry after its last use | `$LOCALAI_PROMPT_CACHE_DISK_TTL` |
+| `--prompt-cache-disk-user-quota-mib` | `0` | Most MiB one user may keep. `0` is an equal share of the cap when there is more than one user, `-1` is no quota | `$LOCALAI_PROMPT_CACHE_DISK_USER_QUOTA_MIB` |
+| `--prompt-cache-disk-min-tokens` | `1024` | Shortest prompt that is written to disk | `$LOCALAI_PROMPT_CACHE_DISK_MIN_TOKENS` |
+| `--prompt-cache-disk-shared` | `false` | One disk prompt cache for all users | `$LOCALAI_PROMPT_CACHE_DISK_SHARED` |
+| `--prompt-cache-disk-low-free-mib` | `0` | Free disk under which the cache pauses and shrinks. `0` is the larger of 15% of the disk and 10 GiB | `$LOCALAI_PROMPT_CACHE_DISK_LOW_FREE_MIB` |
+| `--prompt-cache-disk-critical-free-mib` | `0` | Free disk under which the cache is disabled. `0` is 5% of the disk | `$LOCALAI_PROMPT_CACHE_DISK_CRITICAL_FREE_MIB` |
 | `--preload-models` | | A list of models to apply in JSON at start | `$LOCALAI_PRELOAD_MODELS`, `$PRELOAD_MODELS` |
 | `--models` | | A list of model configuration URLs to load | `$LOCALAI_MODELS`, `$MODELS` |
 | `--preload-models-config` | | A list of models to apply at startup. Path to a YAML config file | `$LOCALAI_PRELOAD_MODELS_CONFIG`, `$PRELOAD_MODELS_CONFIG` |
@@ -360,6 +373,29 @@ All `local-ai library` commands accept `--official-libraries` (`LOCALAI_OFFICIAL
 
 When two enabled sources list the same entry (same kind and id), your own source wins over a shipped default. If two of your own sources list it, the entry is refused and the message names both sources: disable or remove one of them. The `--galleries` and `--backend-galleries` flags keep working: each gallery they name is added as a source of your own (kind `model` or `backend`, format `gallery`) at startup, unless it is already a source.
 
+## Plugins
+
+`local-ai plugins` manages the [plugins]({{% relref "/features/plugins" %}}) of a running server: plugins in the Claude Code plugin format, from marketplaces. It talks to the server's REST API with `--target` (`LOCALAI_TARGET`, default `http://localhost:8080`) and `--api-key` (`LOCALAI_API_KEY`). `validate` is the exception: it works offline. `local-ai chat plugin` is another command: it manages the plugins of the terminal agent on this machine.
+
+| Command | What it does |
+|---------|--------------|
+| `local-ai plugins marketplace list` | List the marketplaces with their state, commit and last refresh |
+| `local-ai plugins marketplace add <owner/repo \| git URL \| JSON URL> [--ref REF] [--id ID]` | Add a marketplace and read it (administrators) |
+| `local-ai plugins marketplace remove <id>` | Remove a marketplace (administrators). The installs from it stay |
+| `local-ai plugins marketplace refresh [<id>]` | Read one marketplace, or every active one, now (administrators). A refresh installs nothing |
+| `local-ai plugins browse [QUERY] [--marketplace ID] [--category C] [--text-only] [--limit N]` | Search the catalog. `search` is the same command |
+| `local-ai plugins info <name@marketplace>` | Show one entry and its installs |
+| `local-ai plugins install <name@marketplace> [--scope user\|instance] [--yes]` | Show the commit, the digest, what the plugin adds and whether it runs code, ask, install, and show the progress. Ctrl-C cancels the job |
+| `local-ai plugins list [--all]` | List the installs and whether each one is on for you. `--all` lists every user's installs (administrators) |
+| `local-ai plugins update [<plugin>] [--check] [--yes]` | Without a plugin, list the installs with an update. With one, show the files that change and apply the update |
+| `local-ai plugins remove <plugin> [--yes]` | Remove an install |
+| `local-ai plugins enable <plugin> [--accept-code]`, `disable <plugin>` | Turn an install on or off for you |
+| `local-ai plugins validate <dir>`, `validate --marketplace <file> [--strict] [--max-bytes N]` | Run the checks of an install on a plugin folder, or on every plugin of a `marketplace.json`, with no server. An entry that declares `metadata.localai.runsCode` fails when the checks find otherwise. Exits `1` when a plugin fails |
+
+A `<plugin>` is an install ID or `name@marketplace`. For a plugin that runs code, `install` prints the page of the web UI where an administrator reviews the code files and installs it, and exits `0`: only the administrator's browser session installs such a plugin. `update` does the same when the code of a plugin changes. When an install for everyone already exists, `install` prints its ID; turn it on with `enable`. An install that gained code needs `enable --accept-code`.
+
+`validate --marketplace` reads the relative sources from the files next to the `marketplace.json`, and fetches the other sources with git over `https`, into a scratch folder under `TMPDIR` that it removes. A skipped component is a warning; `--strict` makes it a failure.
+
 ## Other Commands
 
 LocalAI supports several subcommands beyond `run`:
@@ -369,6 +405,7 @@ LocalAI supports several subcommands beyond `run`:
 - `local-ai chat` - Run the built-in terminal agent against a LocalAI server
 - `local-ai addons` - Check an add-on zip file and upload it to a running server to install it
 - `local-ai library` - Manage the library sources (see [Library sources](#library-sources))
+- `local-ai plugins` - Manage the plugins of a running server (see [Plugins](#plugins))
 - `local-ai benchmark` - Benchmark configured text models against a running LocalAI server
 - `local-ai tts` - Convert text to speech
 - `local-ai sound-generation` - Generate audio files from text or audio

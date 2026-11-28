@@ -15,6 +15,7 @@ import (
 	"github.com/mudler/xlog"
 
 	"github.com/mudler/LocalAI/core/config"
+	"github.com/mudler/LocalAI/core/http/auth"
 	p2papi "github.com/mudler/LocalAI/core/http/endpoints/p2p"
 	"github.com/mudler/LocalAI/core/services/messaging"
 	"github.com/mudler/LocalAI/core/services/p2pnet"
@@ -102,6 +103,11 @@ type p2pRuntime struct {
 	srv    *http.Server
 	sub    messaging.Subscription
 	limit  *globalLimiter
+	// signInLimit counts wrong device credentials per peer only. A paired
+	// peer's identity is proven by the connection, so a source bucket
+	// (shared by every peer behind one relay or NAT) would only let one
+	// peer lock the others out of sign-in and redeem.
+	signInLimit p2ppair.Limiter
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -112,6 +118,9 @@ type p2pRuntime struct {
 	peers   map[p2pnet.ID]struct{}
 	// workers are the paired peers that redeemed a worker invite.
 	workers map[p2pnet.ID]struct{}
+	// reservers are the paired peers that may reserve on the in-process
+	// relay (see reservesOnRelay).
+	reservers map[p2pnet.ID]struct{}
 	// nodeRelays is the relay admission of the backend nodes that serve
 	// split workers, by node ID, as last loaded (see splitRelayCandidates).
 	nodeRelays map[string]splitRelayCandidate
@@ -184,7 +193,8 @@ func (a *Application) IsWorkerPeer(_ context.Context, peer string) bool {
 // ServeP2PHTTP sets the handlers served over P2P in mode share: main is the
 // application's HTTP handler, which only paired peers reach; only serves the
 // routes that exist over P2P alone: POST /api/p2p/redeem, to any admitted
-// peer, and GET /api/p2p/routes, to paired peers. Until it is called,
+// peer, and GET /api/p2p/routes and POST /api/p2p/device/session, to paired
+// peers. Until it is called,
 // requests over P2P get 503.
 func (a *Application) ServeP2PHTTP(main, only http.Handler) {
 	a.p2p().handlers.Store(&p2pHandlers{main: main, only: only})
@@ -345,6 +355,7 @@ func (rt *p2pRuntime) startShare() error {
 		return err
 	}
 	rt.limit = newGlobalLimiter(p2ppair.NewLimiter(nil), redeemGlobalMax, redeemGlobalWindow)
+	rt.signInLimit = p2ppair.NewLimiter(nil)
 	pcfg := p2ppair.Config{
 		ServerPeer: rt.host.ID(),
 		Addrs:      rt.linkAddrs,
@@ -352,9 +363,14 @@ func (rt *p2pRuntime) startShare() error {
 		Hints:      rt.relayHints,
 		Relays:     rt,
 		Limiter:    rt.limit,
+		// The credentials of sign-in devices are hashed with the key of the
+		// codes; see p2pPairStore.
+		HMACSecret: app.ApplicationConfig().Auth.APIKeyHMACSecret,
 	}
 	if db := app.AuthDB(); db != nil {
 		pcfg.Issuer = &clientKeyIssuer{app: app}
+		pcfg.OwnerName = app.p2pOwnerName
+		pcfg.DeviceLimit = app.p2pDeviceLimit
 	}
 	if rt.net.relayFactory != nil {
 		rm, err := rt.net.relayFactory(relayManagerConfig{
@@ -589,10 +605,16 @@ func (rt *p2pRuntime) reload() {
 		xlog.Warn("P2P: could not load the paired devices", "error", err)
 		return
 	}
+	owners, err := rt.net.app.deviceOwners(ctx, devices)
+	if err != nil {
+		xlog.Warn("P2P: could not load the owners of the paired devices", "error", err)
+		return
+	}
 	next := make(map[p2pnet.ID]struct{}, len(devices))
 	workers := map[p2pnet.ID]struct{}{}
+	reservers := map[p2pnet.ID]struct{}{}
 	for _, d := range devices {
-		if d.Status() != p2ppair.DeviceActive {
+		if d.Status() != p2ppair.DeviceActive || !admitDevice(d, owners) {
 			continue
 		}
 		p, err := p2pnet.DecodePeerID(d.PeerID)
@@ -602,6 +624,9 @@ func (rt *p2pRuntime) reload() {
 		next[p] = struct{}{}
 		if d.Kind == p2ppair.KindWorker {
 			workers[p] = struct{}{}
+		}
+		if reservesOnRelay(d, owners) {
+			reservers[p] = struct{}{}
 		}
 	}
 	rt.peersMu.Lock()
@@ -620,6 +645,7 @@ func (rt *p2pRuntime) reload() {
 	}
 	rt.peers = next
 	rt.workers = workers
+	rt.reservers = reservers
 	rt.peersMu.Unlock()
 	for _, p := range gone {
 		rt.host.Revoke(p)
@@ -723,7 +749,7 @@ func (rt *p2pRuntime) changed(op string) {
 
 // httpHandler serves the application over P2P. A peer that is not paired was
 // admitted only because an invite is pending: it may call the redeem route and
-// nothing else. The redeem and routes routes exist only here.
+// nothing else. The redeem, routes and device session routes exist only here.
 func (rt *p2pRuntime) httpHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := rt.net.handlers.Load()
@@ -758,7 +784,15 @@ func (rt *p2pRuntime) httpHandler() http.Handler {
 			h.only.ServeHTTP(w, r)
 			return
 		}
-		h.main.ServeHTTP(w, r)
+		if r.URL.Path == deviceSessionPath {
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			h.only.ServeHTTP(w, r)
+			return
+		}
+		h.main.ServeHTTP(w, r.WithContext(auth.WithDeviceSessionCheck(r.Context(), rt.deviceSessionCheck(p))))
 	})
 }
 
@@ -834,7 +868,12 @@ func (rt *p2pRuntime) updateRelayService(reach p2pnet.Reachability) {
 	}
 	lim := p2prelay.DefaultLimits()
 	lim.RateLimit = rt.cfg.RelayRateLimit
-	c, err := p2prelay.NewInProcess(rt.host.Libp2p(), rt.paired, lim)
+	// Only the paired peers that belong to the instance (see
+	// reservesOnRelay) may hold a reservation or open a circuit. A sign-in
+	// device, or a device of a user who is not an administrator, talks to
+	// the server directly and has no use for either.
+	c, err := p2prelay.NewInProcess(rt.host.Libp2p(), rt.paired, lim,
+		p2prelay.WithReserveAdmit(rt.mayReserve), p2prelay.WithCircuitAdmit(rt.mayReserve))
 	if err != nil {
 		rt.reason = "error"
 		xlog.Warn("P2P: could not relay for paired devices", "error", err)

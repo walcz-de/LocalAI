@@ -37,6 +37,15 @@ var RouteFeatureRegistry = []RouteFeature{
 	{"POST", "/v1/audio/classification", FeatureClientInference},
 	{"GET", "/v1/realtime", FeatureClientInference},
 	{"GET", "/v1/models", FeatureClientInference},
+	// A user pairs their own devices over P2P. These are the only P2P routes
+	// that are not for administrators. No client row: a client key is refused.
+	{"GET", "/api/p2p/me", FeatureP2PPair},
+	{"POST", "/api/p2p/me/invites", FeatureP2PPair},
+	{"GET", "/api/p2p/me/invites", FeatureP2PPair},
+	{"DELETE", "/api/p2p/me/invites/:id", FeatureP2PPair},
+	{"GET", "/api/p2p/me/devices", FeatureP2PPair},
+	{"PATCH", "/api/p2p/me/devices/:id", FeatureP2PPair},
+	{"DELETE", "/api/p2p/me/devices/:id", FeatureP2PPair},
 	{"POST", "/api/chats", FeatureChats},
 	{"GET", "/api/chats", FeatureChats},
 	{"GET", "/api/chats/:id", FeatureChats},
@@ -135,6 +144,9 @@ var RouteFeatureRegistry = []RouteFeature{
 	{"GET", "/api/chats/draft/egress", FeatureChats},
 	{"GET", "/api/chats/:id/addons", FeatureChats},
 	{"PUT", "/api/chats/:id/addons", FeatureChats},
+	// The plugin switches of a chat are part of the chat; the route also
+	// needs the plugins feature (routes/plugins.go).
+	{"PUT", "/api/chats/:id/plugins", FeatureChats},
 	{"PUT", "/api/chats/:id/connections", FeatureChats},
 	{"PUT", "/api/chats/:id/builtins", FeatureChats},
 	{"POST", "/api/chats/:id/host-exec/consent", FeatureChats},
@@ -292,6 +304,27 @@ var RouteFeatureRegistry = []RouteFeature{
 	{"DELETE", "/api/motion/sessions/:id", FeatureMotion},
 	{"GET", "/api/motion/sessions/:id/poses", FeatureMotion},
 	{"POST", "/api/motion/sessions/:id/tickets", FeatureMotion},
+	// Plugins compatible with the Claude Code plugin format. Administrator
+	// routes also need the administrator role (routes/plugins.go).
+	{"GET", "/api/plugins/marketplaces", FeaturePlugins},
+	{"POST", "/api/plugins/marketplaces", FeaturePlugins},
+	{"PUT", "/api/plugins/marketplaces/:id", FeaturePlugins},
+	{"DELETE", "/api/plugins/marketplaces/:id", FeaturePlugins},
+	{"POST", "/api/plugins/marketplaces/:id/refresh", FeaturePlugins},
+	{"GET", "/api/plugins/catalog", FeaturePlugins},
+	{"GET", "/api/plugins/catalog/:marketplace/:name", FeaturePlugins},
+	{"POST", "/api/plugins/inspect", FeaturePlugins},
+	{"GET", "/api/plugins/inspect/:token/files/*", FeaturePlugins},
+	{"GET", "/api/plugins/installs", FeaturePlugins},
+	{"POST", "/api/plugins/installs", FeaturePlugins},
+	{"GET", "/api/plugins/installs/:id", FeaturePlugins},
+	{"DELETE", "/api/plugins/installs/:id", FeaturePlugins},
+	{"GET", "/api/plugins/installs/:id/files/*", FeaturePlugins},
+	{"POST", "/api/plugins/installs/:id/update/preview", FeaturePlugins},
+	{"POST", "/api/plugins/installs/:id/update", FeaturePlugins},
+	{"POST", "/api/plugins/installs/:id/rollback", FeaturePlugins},
+	{"GET", "/api/plugins/installs/:id/me", FeaturePlugins},
+	{"PUT", "/api/plugins/installs/:id/me", FeaturePlugins},
 	{"POST", "/api/addons/dispatch", FeatureAddons},
 	{"POST", "/api/addons/relay", FeatureAddons},
 	{"POST", "/api/addons/proposals", FeatureAddons},
@@ -509,61 +542,69 @@ var RouteFeatureRegistry = []RouteFeature{
 
 // FeatureMeta describes a feature for the admin API/UI.
 type FeatureMeta struct {
-	Key          string `json:"key"`
-	Label        string `json:"label"`
-	DefaultValue bool   `json:"default"`
+	Key   string `json:"key"`
+	Label string `json:"label"`
+	// DefaultValue is the value a user gets when their permission map does
+	// not name the feature. The metas functions give the built-in default;
+	// EffectiveFeatureMetas gives the one in force.
+	DefaultValue bool `json:"default"`
+	// ConfigurableDefault marks a feature whose default an administrator may
+	// change (PUT /api/auth/admin/features/:feature/default).
+	ConfigurableDefault bool `json:"configurable"`
 }
 
 // AgentFeatureMetas returns metadata for agent features.
 func AgentFeatureMetas() []FeatureMeta {
 	return []FeatureMeta{
-		{FeatureCollections, "Collections", false},
-		{FeatureLocalAIAssistant, "LocalAI Assistant", false},
-		{FeatureAgents, "Saved agents", false},
-		{FeatureTriggers, "Scheduled triggers", false},
-		{FeatureConnectors, "Chat connectors", false},
-		{FeatureMCPJobs, "Agent tasks and jobs", false},
-		{FeaturePages, "Pages (HTML pages in the workspace)", false},
+		{FeatureCollections, "Collections", false, false},
+		{FeatureLocalAIAssistant, "LocalAI Assistant", false, false},
+		{FeatureAgents, "Saved agents", false, false},
+		{FeatureTriggers, "Scheduled triggers", false, false},
+		{FeatureConnectors, "Chat connectors", false, false},
+		{FeatureMCPJobs, "Agent tasks and jobs", false, false},
+		{FeaturePages, "Pages (HTML pages in the workspace)", false, false},
 	}
 }
 
 // GeneralFeatureMetas returns metadata for general features.
 func GeneralFeatureMetas() []FeatureMeta {
 	return []FeatureMeta{
-		{FeatureAddons, "Addons", false},
-		{FeatureFineTuning, "Fine-Tuning", false},
-		{FeatureQuantization, "Quantization", false},
+		{FeatureAddons, "Addons", false, false},
+		{FeatureFineTuning, "Fine-Tuning", false, false},
+		{FeatureQuantization, "Quantization", false, false},
+		{Key: FeatureP2PPair, Label: "Pair own devices (P2P)", DefaultValue: false, ConfigurableDefault: true},
+		{FeaturePlugins, "Plugins", true, false},
 	}
 }
 
 // APIFeatureMetas returns metadata for API endpoint features.
 func APIFeatureMetas() []FeatureMeta {
 	return []FeatureMeta{
-		{FeatureChat, "Chat Completions", true},
-		{FeatureImages, "Image Generation", true},
-		{FeatureAudioSpeech, "Audio Speech / TTS", true},
-		{FeatureAudioTranscription, "Audio Transcription", true},
-		{FeatureAudioDiarization, "Audio Diarization", true},
-		{FeatureAudioClassification, "Audio Classification", true},
-		{FeatureVAD, "Voice Activity Detection", true},
-		{FeatureDetection, "Detection", true},
-		{FeatureVideo, "Video Generation", true},
-		{Feature3D, "3D Generation", true},
-		{FeatureMotion, "Motion Capture", true},
-		{FeatureChats, "Chats", true},
-		{FeatureEmbeddings, "Embeddings", true},
-		{FeatureSound, "Sound Generation", true},
-		{FeatureRealtime, "Realtime", true},
-		{FeatureModeration, "Moderation", true},
-		{FeatureRerank, "Rerank", true},
-		{FeatureTokenize, "Tokenize", true},
-		{FeatureMCP, "MCP", true},
-		{FeatureStores, "Stores", true},
-		{FeatureFaceRecognition, "Face Recognition", true},
-		{FeatureVoiceRecognition, "Voice Recognition", true},
-		{FeatureAudioTransform, "Audio Transform", true},
-		{FeaturePIIFilter, "PII Analyze / Redact", true},
-		{FeatureDecisions, "Decisions", true},
-		{FeatureForecast, "Forecast", true},
+		{FeatureChat, "Chat Completions", true, false},
+		{FeatureImages, "Image Generation", true, false},
+		{FeatureAudioSpeech, "Audio Speech / TTS", true, false},
+		{FeatureAudioTranscription, "Audio Transcription", true, false},
+		{FeatureAudioDiarization, "Audio Diarization", true, false},
+		{FeatureAudioClassification, "Audio Classification", true, false},
+		{FeatureVAD, "Voice Activity Detection", true, false},
+		{FeatureDetection, "Detection", true, false},
+		{FeatureVideo, "Video Generation", true, false},
+		{Feature3D, "3D Generation", true, false},
+		{FeatureMotion, "Motion Capture", true, false},
+		{FeatureChats, "Chats", true, false},
+		{FeatureEmbeddings, "Embeddings", true, false},
+		{FeatureSound, "Sound Generation", true, false},
+		{FeatureRealtime, "Realtime", true, false},
+		{FeatureModeration, "Moderation", true, false},
+		{FeatureRerank, "Rerank", true, false},
+		{FeatureTokenize, "Tokenize", true, false},
+		{FeatureMCP, "MCP", true, false},
+		{FeatureStores, "Stores", true, false},
+		{FeatureFaceRecognition, "Face Recognition", true, false},
+		{FeatureVoiceRecognition, "Voice Recognition", true, false},
+		{FeatureAudioTransform, "Audio Transform", true, false},
+		{FeaturePIIFilter, "PII Analyze / Redact", true, false},
+		{FeatureDecisions, "Decisions", true, false},
+		{FeatureForecast, "Forecast", true, false},
 	}
 }

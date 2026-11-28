@@ -4,7 +4,7 @@ import { Link, Navigate, useLocation, useOutletContext, useSearchParams } from '
 import { useTranslation } from 'react-i18next'
 import { settingsApi, resourcesApi, brandingApi } from '../utils/api'
 import { useBranding } from '../contexts/BrandingContext'
-import { Button, EmptyState, LoadError, SearchField, SkeletonRows } from '../components/ui'
+import { Button, Callout, EmptyState, LoadError, SearchField, SkeletonRows } from '../components/ui'
 import { HubHeader } from '../components/hub/HubHeader'
 import UnsavedChangesGuard from '../components/UnsavedChangesGuard'
 import HomeUndoToast from '../components/home/HomeUndoToast'
@@ -14,6 +14,7 @@ import AddonUpgradeSettings from '../components/settings/AddonUpgradeSettings'
 import ConnectorFilesSettings from '../components/settings/ConnectorFilesSettings'
 import OwnerBuiltinToolsSection from '../components/settings/OwnerBuiltinToolsSection'
 import PendingBar from '../components/settings/PendingBar'
+import PromptCacheStatus from '../components/settings/PromptCacheStatus'
 import ClusterSettings from '../components/cluster/ClusterSettings'
 import { useHubAuth } from '../components/hub/useHubAuth'
 import { matchSections } from '../utils/clusterSettings'
@@ -31,7 +32,7 @@ import {
 } from '../utils/settingsSchema'
 import {
   pendingChanges, visibleChanges, runChecks, payloadFor, historyEntries,
-  loadHistory, appendHistory, clearHistory,
+  loadHistory, appendHistory, clearHistory, isMemoryConflict, withMemoryRevision,
 } from '../utils/settingsPending'
 import './settings.css'
 
@@ -244,19 +245,33 @@ export default function Settings() {
     setSaving(true)
     try {
       const body = payloadFor(changes, settings)
-      await settingsApi.save(body)
+      const reply = await settingsApi.save(body)
       const before = initial
-      setInitial(structuredClone(settings))
+      // The next save of a memory setting names the revision this one made.
+      const saved = withMemoryRevision(settings, reply)
+      setSettings(saved)
+      setInitial(structuredClone(saved))
       setHistory(appendHistory(historyEntries(changes)))
       // Name and tagline reach the sidebar, footer and tab title without a reload.
       branding.refresh()
       // The undo toast is the confirmation: a second toast would sit on it.
       setUndo({ changes, before, id: Date.now() })
     } catch (err) {
-      addToast(t('settings.saveFailed', { message: err.message }), 'error')
+      failedSave(err)
     } finally {
       setSaving(false)
     }
+  }
+
+  // A save from a stale read of the cluster memory settings is refused: show
+  // the values in force now and ask to apply again.
+  const failedSave = (err) => {
+    if (isMemoryConflict(err)) {
+      addToast(t('settings.memoryConflict'), 'warning')
+      loadSettings()
+      return
+    }
+    addToast(t('settings.saveFailed', { message: err.message }), 'error')
   }
 
   // Undo is a second save of the values the server held before. It is not a
@@ -275,15 +290,15 @@ export default function Settings() {
     }
     const restoredInitial = restore(initial)
     try {
-      await settingsApi.save(payloadFor(entry.changes, restoredInitial))
-      setInitial(restoredInitial)
-      setSettings(restore)
+      const reply = await settingsApi.save(payloadFor(entry.changes, restoredInitial))
+      setInitial(withMemoryRevision(restoredInitial, reply))
+      setSettings(prev => withMemoryRevision(restore(prev), reply))
       const reverted = entry.changes.map(c => ({ ...c, from: c.to, to: c.from }))
       setHistory(appendHistory(historyEntries(reverted)))
       branding.refresh()
       addToast('Previous values saved again', 'success')
     } catch (err) {
-      addToast(t('settings.saveFailed', { message: err.message }), 'error')
+      failedSave(err)
     }
   }
 
@@ -453,6 +468,9 @@ export default function Settings() {
               <h2 className="st-h2" id="st-group-title">{active.label}<span className="st-sub">{active.hint}</span></h2>
               {group === 'backends' && settings.addon_host_settings_authority && <AddonUpgradeSettings />}
               {group === 'backends' && settings.addon_host_settings_authority && <ConnectorFilesSettings />}
+              {group === 'memory' && settings.memory_scope === 'cluster' && (
+                <Callout testId="settings-memory-cluster">{t('settings.memoryCluster')}</Callout>
+              )}
               {group === 'memory' && <MemoryNow resources={resources} settings={settings} onRefresh={fetchResources} />}
               {group === 'access' && (
                 <p className="st-note">Sign-in, users, invites and per-user API keys are under Access when authentication is on.</p>
@@ -487,6 +505,7 @@ export default function Settings() {
                   )
                 })}
               </div>
+              {group === 'memory' && <PromptCacheStatus addToast={addToast} />}
             </section>
           )}
         </div>

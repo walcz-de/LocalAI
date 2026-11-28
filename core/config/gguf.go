@@ -152,6 +152,7 @@ func guessGGUFFromFile(cfg *ModelConfig, f ggufHeader, defaultCtx int) {
 		cfg.modelTemplate = f.ChatTemplate
 	}
 
+	cfg.recurrentState = f.RecurrentStateBytes
 	// Auto-enable Multi-Token Prediction (ggml-org/llama.cpp#22673) when the
 	// GGUF carries an embedded MTP head. Skipped silently for non-MTP models
 	// and when the user already configured a spec_type.
@@ -198,15 +199,19 @@ func guessGGUFFromFile(cfg *ModelConfig, f ggufHeader, defaultCtx int) {
 // This should be called after the model is loaded.
 // The results are stored in cfg.SupportsThinking and cfg.ThinkingForcedOpen.
 // The backend-reported multimodal marker is also captured into cfg.MediaMarker.
-func DetectThinkingSupportFromBackend(ctx context.Context, cfg *ModelConfig, backendClient grpc.Backend, modelOptions *pb.ModelOptions) {
+//
+// It reports whether the backend answered: true when it returned the metadata,
+// and when it is not a llama.cpp backend, which has none to read. A running
+// backend answers the same way every time.
+func DetectThinkingSupportFromBackend(ctx context.Context, cfg *ModelConfig, backendClient grpc.Backend, modelOptions *pb.ModelOptions) bool {
 	if backendClient == nil {
 		xlog.Debug("[gguf] DetectThinkingSupportFromBackend: backend client is nil, skipping detection")
-		return
+		return false
 	}
 
 	if modelOptions == nil {
 		xlog.Debug("[gguf] DetectThinkingSupportFromBackend: model options is nil, skipping detection")
-		return
+		return false
 	}
 
 	// Only llama-cpp exposes ModelMetadata today. Other backends will either error
@@ -216,13 +221,13 @@ func DetectThinkingSupportFromBackend(ctx context.Context, cfg *ModelConfig, bac
 	// same server and needs the same probe (#10945).
 	if !IsLlamaCppBackend(cfg.Backend) {
 		xlog.Debug("[gguf] DetectThinkingSupportFromBackend: skipping detection", "backend", cfg.Backend)
-		return
+		return true
 	}
 
 	metadata, err := backendClient.ModelMetadata(ctx, modelOptions)
 	if err != nil {
 		xlog.Warn("[gguf] DetectThinkingSupportFromBackend: failed to get model metadata", "error", err)
-		return
+		return false
 	}
 
 	if metadata != nil {
@@ -238,7 +243,7 @@ func DetectThinkingSupportFromBackend(ctx context.Context, cfg *ModelConfig, bac
 		// backend-side tokenizer template — otherwise the rendered-template based
 		// heuristics below aren't meaningful.
 		if !cfg.TemplateConfig.UseTokenizerTemplate {
-			return
+			return true
 		}
 
 		applyDetectedThinkingConfig(cfg, metadata)
@@ -283,6 +288,7 @@ func DetectThinkingSupportFromBackend(ctx context.Context, cfg *ModelConfig, bac
 				"func_name_prefix", tf.FuncNamePrefix)
 		}
 	}
+	return true
 }
 
 func applyDetectedThinkingConfig(cfg *ModelConfig, metadata *pb.ModelMetadataResponse) {

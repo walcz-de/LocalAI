@@ -17,13 +17,15 @@ import type { TunnelStatusView } from '@launcher/shared/types'
 import type { P2PForwardInput, P2PPlugin } from '../plugins/definitions'
 
 /** What `P2P.version()` answers when the native library loaded. */
-export const P2P_LIBRARY_VERSION = 'p2pmobile/3'
+export const P2P_LIBRARY_VERSION = 'p2pmobile/4'
 
 /**
- * The library versions this app works with. p2pmobile/3 adds the routes
- * state line; with p2pmobile/2 the saved routes only change by an invite.
+ * The library versions this app works with. p2pmobile/4 returns the device
+ * credential of a sign-in invite; with p2pmobile/3 such an invite pairs
+ * without sign-in. p2pmobile/3 adds the routes state line; with p2pmobile/2
+ * the saved routes only change by an invite.
  */
-const KNOWN_LIBRARY_VERSIONS = new Set([P2P_LIBRARY_VERSION, 'p2pmobile/2'])
+const KNOWN_LIBRARY_VERSIONS = new Set([P2P_LIBRARY_VERSION, 'p2pmobile/3', 'p2pmobile/2'])
 
 /** The host of a server over P2P saved without one (the desktop's). */
 const DEFAULT_HOST = '127.0.0.1'
@@ -97,10 +99,18 @@ export interface AndroidTunnels extends P2PTunnels {
   refresh(): Promise<void>
   keepInBackground(): boolean
   setKeepInBackground(on: boolean): Promise<void>
+  /**
+   * The person opens the saved server `id` from the server list: turns its
+   * automatic sign-in on again after a sign-out in its WebUI. True when it
+   * was off. Never throws; a server that is not over P2P answers false.
+   */
+  allowAutoSignIn(id: string): Promise<boolean>
   close(): Promise<void>
 }
 
 const INIT_TIMEOUT_MS = 10_000
+/** How long opening a server waits for the plugin to turn its automatic sign-in on again. */
+const ALLOW_SIGN_IN_TIMEOUT_MS = 2_000
 
 function message(e: unknown): string {
   return e instanceof Error ? e.message : typeof e === 'object' && e !== null && 'message' in e ? String((e as { message: unknown }).message) : String(e)
@@ -133,6 +143,8 @@ export function androidP2PTunnels(o: AndroidTunnelsOptions): AndroidTunnels {
   // Routes a start asked for that are not saved: those of an invite of a
   // saved server, dialled until the server gives its own (see the core).
   const trials = new Map<string, P2PTarget>()
+  /** The peer ID of each started server, to delete its credential once the server is removed. */
+  const peers = new Map<string, string>()
   /** Hosts handed out by allocate whose server is not saved yet. */
   const reserved = new Set<string>()
   const waiters = new Set<() => void>()
@@ -211,6 +223,23 @@ export function androidP2PTunnels(o: AndroidTunnelsOptions): AndroidTunnels {
     }
   }
 
+  /** The saved servers over P2P, by peer ID. */
+  const savedPeers = (): string[] => remotes(o.store()).flatMap((r) => (r.p2p ? [r.p2p.peer] : []))
+
+  /**
+   * A stopped server that is no longer saved was removed: its device
+   * credential (of a sign-in invite) is deleted too. Another saved server
+   * with the same peer keeps it.
+   */
+  const forgetIfRemoved = (id: string) => {
+    const peer = peers.get(id)
+    peers.delete(id)
+    if (!peer) return
+    const c = remotes(o.store())
+    if (c.some((r) => r.id === id) || c.some((r) => r.p2p?.peer === peer)) return
+    plugin.forgetCredential({ peer }).catch((e: unknown) => log(`servers: could not delete the sign-in of a removed server: ${message(e)}`, 'warn'))
+  }
+
   const status = (id: string): TunnelStatusView | undefined => (active.has(id) ? states.get(id) : undefined)
 
   const allocate = async (): Promise<{ port: number; host: string }> => {
@@ -264,6 +293,8 @@ export function androidP2PTunnels(o: AndroidTunnelsOptions): AndroidTunnels {
     start(id, _name, target) {
       active.add(id)
       const saved = remotes(o.store()).find((r) => r.id === id)?.p2p
+      const peer = saved?.peer ?? target?.peer
+      if (peer) peers.set(id, peer)
       if (target && saved && !sameRouteLists(target, saved)) trials.set(id, target)
       else trials.delete(id)
       const cur = states.get(id)
@@ -273,6 +304,7 @@ export function androidP2PTunnels(o: AndroidTunnelsOptions): AndroidTunnels {
 
     stop(id) {
       trials.delete(id)
+      forgetIfRemoved(id)
       if (!active.delete(id)) return
       states.delete(id)
       sync()
@@ -325,6 +357,12 @@ export function androidP2PTunnels(o: AndroidTunnelsOptions): AndroidTunnels {
         log(`servers: could not listen to the P2P plugin: ${message(e)}`, 'warn')
       }
       await readNative()
+      // Credentials of servers removed while the app could not tell the plugin.
+      try {
+        await plugin.retainCredentials({ peers: savedPeers() })
+      } catch (e) {
+        log(`servers: could not clean up the stored sign-ins: ${message(e)}`, 'warn')
+      }
     },
 
     async refresh() {
@@ -339,6 +377,18 @@ export function androidP2PTunnels(o: AndroidTunnelsOptions): AndroidTunnels {
       if (!available) return
       await plugin.setKeepInBackground({ on })
       setKeep(on)
+    },
+
+    async allowAutoSignIn(id) {
+      if (!available) return false
+      const peer = remotes(o.store()).find((r) => r.id === id)?.p2p?.peer
+      if (!peer) return false
+      try {
+        return (await withTimeout(plugin.allowAutoSignIn({ peer }), ALLOW_SIGN_IN_TIMEOUT_MS)).wasSignedOut === true
+      } catch (e) {
+        log(`servers: could not turn the automatic sign-in on again: ${message(e)}`, 'warn')
+        return false
+      }
     },
 
     async close() {

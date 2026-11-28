@@ -63,4 +63,12 @@ const (
 	// retention (tried, never waited for). Each run is then held by its runner on a key of its own,
 	// KeyFromString("upgrade-run:" + id), for as long as it runs it.
 	KeyUpgradeRuns int64 = 121
+	// KeyPluginsRefresh elects the one frontend that refreshes the plugin
+	// marketplaces and then deletes the plugin packages that no install
+	// uses. It is held for one pass.
+	KeyPluginsRefresh int64 = 122
+	// KeyPromptCacheSync elects the one frontend that brings the workers up
+	// to date with the disk prompt cache: the settings, the purges they
+	// missed, and the pruning of the purge log. It is held for one pass.
+	KeyPromptCacheSync int64 = 123
 )

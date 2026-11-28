@@ -1,12 +1,14 @@
 import { test, expect } from './coverage-fixtures.js'
 import { CONFIGS, MODEL, mockRuntime } from './engine-runtime-fixtures.js'
 
-// The Quick setup of Runtime tuning: the exclusive llama.cpp profiles
-// (Balanced, Long prompts, More concurrent users) and Custom, read back from
+// The Quick setup of Runtime tuning: the exclusive llama.cpp batch profiles
+// (Balanced, Long prompts) and Custom, read back from
 // the file, applied like a preset, and the memory each one costs from the
 // VRAM estimate. The estimate route is a stand-in that sizes the KV cache
 // from the context and cache types and the compute buffers from the batch,
-// so the specs see the directions the real estimator gives.
+// so the specs see the directions the real estimator gives. The host is a
+// discrete 24 GiB GPU unless a spec says otherwise; the concurrency choice
+// has its own spec (model-editor-runtime-concurrency.spec.js).
 
 const field = (page, id) => page.getByTestId(`rt-${id}`)
 const save = page => page.getByTestId('editor-save')
@@ -31,8 +33,11 @@ function runtimeOf(body) {
   }
 }
 
-async function open(page, { name = MODEL, configs = CONFIGS, estimate = 'ok' } = {}) {
+const DISCRETE = { kind: 'discrete', device: 'NVIDIA GeForce RTX 4090', total: 24 * 1024 * MIB * 1024 }
+
+async function open(page, { name = MODEL, configs = CONFIGS, estimate = 'ok', memory = DISCRETE } = {}) {
   const state = await mockRuntime(page, { configs })
+  await page.route('**/api/resources', route => route.fulfill({ json: { type: 'gpu', available: true, gpus: [], aggregate: {}, memory } }))
   state.estimates = []
   // Registered after mockRuntime, so it answers first.
   await page.route('**/api/models/vram-estimate', route => {
@@ -53,60 +58,38 @@ test.describe('Runtime tuning: quick setup', () => {
     const state = await open(page)
     await expect(choice(page, 'balanced')).toHaveAttribute('aria-checked', 'true')
     await expect(page.getByTestId('rt-quick-row-balanced')).toContainText('Balanced')
-    await expect(page.getByTestId('rt-quick-mem-balanced')).toHaveText('Your settings')
+    // The checked option is the current one: it carries no memory figure.
+    await expect(page.getByTestId('rt-quick-mem-balanced')).toHaveCount(0)
     await expect(page.getByTestId('rt-quick-mem-longPrompts')).toContainText('more memory')
-    await expect(page.getByTestId('rt-quick-mem-concurrent')).toContainText('less memory')
+    await expect(page.getByTestId('rt-quick-line')).toContainText('LocalAI picks for your GPU')
+    await expect(page.getByTestId('rt-conc-mem-streams32')).toContainText('less memory')
     await expect(page.getByTestId('rt-quick-mem-custom')).toHaveCount(0)
     await expect(page.getByTestId('rt-quick-now')).toContainText('KV cache')
-    await expect(page.getByTestId('rt-quick-now')).toContainText('estimates')
+    await expect(page.getByTestId('rt-quick-now')).toContainText('Estimate')
     // The current settings ask for the defaults; each profile for its own values.
     await expect.poll(() => state.estimates.length).toBeGreaterThanOrEqual(4)
     expect(state.estimates).toContainEqual(expect.objectContaining({ model: MODEL, context_size: 8192, cache_type_k: 'f16', batch: 0, ubatch: 0 }))
-    expect(state.estimates).toContainEqual(expect.objectContaining({ batch: 2048, ubatch: 2048 }))
+    // Long prompts on a discrete GPU: a micro-batch of 1024.
+    expect(state.estimates).toContainEqual(expect.objectContaining({ batch: 2048, ubatch: 1024 }))
     expect(state.estimates).toContainEqual(expect.objectContaining({ cache_type_k: 'q8_0', cache_type_v: 'q8_0' }))
     // Nothing is applied until a profile is picked.
     await expect(save(page)).toBeDisabled()
   })
 
-  test('Long prompts writes the batch sizes and keeps the other options', async ({ page }) => {
+  test('Long prompts writes the batch sizes for the memory kind and keeps the other options', async ({ page }) => {
     const state = await open(page)
     await choice(page, 'longPrompts').click()
     await expect(choice(page, 'longPrompts')).toHaveAttribute('aria-checked', 'true')
     await expect(page.getByTestId('rt-applied')).toContainText('Long prompts')
     await expect(field(page, 'parameters-batch')).toHaveValue('2048')
-    await expect(field(page, 'options-ubatch')).toHaveValue('2048')
-    await expect(page.getByTestId('rt-quick-mem-longPrompts')).toHaveText('Your settings')
+    await expect(field(page, 'options-ubatch')).toHaveValue('1024')
+    await expect(page.getByTestId('rt-quick-kind-longPrompts')).toContainText('compute buffer must fit one card')
+    await expect(page.getByTestId('rt-quick-mem-longPrompts')).toHaveCount(0)
     await expect(page.getByTestId('rt-quick-mem-balanced')).toContainText('less memory')
     await save(page).click()
     await expect.poll(() => state.patches.length).toBe(1)
     expect(lastPatch(state)).toMatchObject({ parameters: { batch: 2048 } })
-    expect(lastPatch(state).options).toEqual(['keep_me:true', 'ubatch:2048'])
-  })
-
-  test('More concurrent users writes the 8-bit cache and paged serving, and Balanced takes it back', async ({ page }) => {
-    const state = await open(page)
-    await choice(page, 'concurrent').click()
-    await expect(choice(page, 'concurrent')).toHaveAttribute('aria-checked', 'true')
-    await expect(field(page, 'cache_type_k')).toHaveValue('q8_0')
-    await expect(field(page, 'cache_type_v')).toHaveValue('q8_0')
-    await expect(field(page, 'flash_attention-on')).toHaveAttribute('aria-checked', 'true')
-    await expect(field(page, 'options-paged_kv-true')).toHaveAttribute('aria-checked', 'true')
-    await expect(field(page, 'options-parallel')).toHaveValue('8')
-    // The paged serving fields have no llama-server flag to show.
-    await expect(field(page, 'options-paged_kv-flag')).toHaveCount(0)
-    await expect(page.getByTestId('rt-quick-note')).toContainText('quantized KV cache can be slower')
-
-    await choice(page, 'balanced').click()
-    await expect(choice(page, 'balanced')).toHaveAttribute('aria-checked', 'true')
-    await expect(field(page, 'cache_type_k')).toHaveValue('')
-    await expect(field(page, 'options-parallel')).toHaveValue('')
-    await expect(page.getByTestId('rt-quick-note')).toHaveCount(0)
-
-    await choice(page, 'concurrent').click()
-    await save(page).click()
-    await expect.poll(() => state.patches.length).toBe(1)
-    expect(lastPatch(state)).toMatchObject({ cache_type_k: 'q8_0', cache_type_v: 'q8_0', flash_attention: 'on' })
-    expect(lastPatch(state).options).toEqual(['keep_me:true', 'paged_kv:true', 'parallel:8'])
+    expect(lastPatch(state).options).toEqual(['keep_me:true', 'ubatch:1024'])
   })
 
   test('a file saved with a profile opens on it, and an edit off the profile is Custom', async ({ page }) => {
@@ -114,14 +97,13 @@ test.describe('Runtime tuning: quick setup', () => {
       ...CONFIGS,
       'long-lab': 'name: long-lab\nbackend: llama-cpp\nparameters:\n  model: long.gguf\n  batch: 2048\noptions:\n  - ubatch:2048\n  - max_prefill_tokens:512\n',
     }
-    await open(page, { name: 'long-lab', configs })
+    // A micro-batch of 2048 is Long prompts on unified memory.
+    await open(page, { name: 'long-lab', configs, memory: { kind: 'unified', device: 'NVIDIA GB10', total: 128 * 1024 * MIB * 1024 } })
     await expect(choice(page, 'longPrompts')).toHaveAttribute('aria-checked', 'true')
     // max_prefill_tokens is an alias the backend also reads; the field shows it.
     await expect(field(page, 'options-prefill_budget')).toHaveValue('512')
-    // paged_kv is a profile setting: turning it off leaves the profile.
+    // paged_kv is not a batch setting: turning it off keeps the profile.
     await field(page, 'options-paged_kv-false').click()
-    await expect(choice(page, 'custom')).toHaveAttribute('aria-checked', 'true')
-    await field(page, 'options-paged_kv-').click()
     await expect(choice(page, 'longPrompts')).toHaveAttribute('aria-checked', 'true')
     await field(page, 'options-ubatch').fill('1024')
     await expect(choice(page, 'custom')).toHaveAttribute('aria-checked', 'true')
@@ -138,7 +120,10 @@ test.describe('Runtime tuning: quick setup', () => {
     await select.selectOption('auto')
     await expect(page.getByTestId('rt-backend-sampling-choice-hint')).toContainText('Use GPU sampling when the model runs on a GPU')
     await select.selectOption('on')
-    await expect(page.getByTestId('rt-backend-sampling-choice-hint')).toContainText('Sample tokens on the GPU. Faster with many parallel requests.')
+    // The hint shows its first sentence; "More" folds the rest.
+    const onHint = page.getByTestId('rt-backend-sampling-choice-hint')
+    await expect(onHint).toContainText('Sample tokens on the GPU.')
+    await expect(onHint).toContainText('Faster with many parallel requests.')
     // Not part of any profile.
     await expect(choice(page, 'balanced')).toHaveAttribute('aria-checked', 'true')
     await save(page).click()
@@ -164,7 +149,7 @@ test.describe('Runtime tuning: quick setup', () => {
     await expect(page.getByTestId('rt-quick')).toHaveCount(0)
   })
 
-  test('Balanced keeps a flash attention the person set, and drops the one More concurrent users set', async ({ page }) => {
+  test('Balanced keeps a flash attention the person set, and Default drops the one 32+ streams set', async ({ page }) => {
     await open(page)
     await field(page, 'flash_attention-off').click()
     await expect(choice(page, 'balanced')).toHaveAttribute('aria-checked', 'true')
@@ -172,14 +157,15 @@ test.describe('Runtime tuning: quick setup', () => {
     await choice(page, 'balanced').click()
     await expect(field(page, 'flash_attention-off')).toHaveAttribute('aria-checked', 'true')
 
-    await choice(page, 'concurrent').click()
+    await field(page, 'flash_attention-').click()
+    await page.getByTestId('rt-conc-streams32').click()
     await expect(field(page, 'flash_attention-on')).toHaveAttribute('aria-checked', 'true')
-    await choice(page, 'balanced').click()
+    await page.getByTestId('rt-conc-concurrencyDefault').click()
     await expect(field(page, 'flash_attention-')).toHaveAttribute('aria-checked', 'true')
     await expect(save(page)).toBeDisabled()
   })
 
-  test('the advanced and speculative groups start closed and hold every other backend option', async ({ page }) => {
+  test('the advanced group starts closed and holds every other backend option', async ({ page }) => {
     const configs = {
       ...CONFIGS,
       'alias-lab': 'name: alias-lab\nbackend: llama-cpp\nparameters:\n  model: a.gguf\noptions:\n  - unified_kv:false\n  - paged_serving:true\n  - max_prefill_tokens:auto\n  - draft_max:8\n',
@@ -187,16 +173,16 @@ test.describe('Runtime tuning: quick setup', () => {
     const state = await open(page, { name: 'alias-lab', configs })
     const advanced = page.getByTestId('rt-group-engine_advanced')
     await expect(advanced).not.toHaveAttribute('open', '')
-    await expect(page.getByTestId('rt-group-speculative')).not.toHaveAttribute('open', '')
+    // Speculative decoding is the Drafting section: a draft window with no
+    // kind and no draft model drafts nothing, so it reads as Off.
+    await expect(page.getByTestId('rt-draft-mode-off')).toHaveAttribute('aria-checked', 'true')
     await expect(field(page, 'options-kv_unified-field')).toBeHidden()
     await expect(page.getByTestId('rt-group-engine_advanced-toggle')).toContainText('Advanced llama.cpp options')
     await page.getByTestId('rt-group-engine_advanced-toggle').click()
     // An alias in the file shows in the field of its canonical option.
     await expect(field(page, 'options-kv_unified-false')).toHaveAttribute('aria-checked', 'true')
     await expect(field(page, 'options-context_shift-field')).toBeVisible()
-    await expect(field(page, 'options-backend_sampling_min_slots')).toHaveAttribute('placeholder', 'Default (4)')
-    await page.getByTestId('rt-group-speculative-toggle').click()
-    await expect(field(page, 'options-spec_n_max')).toHaveValue('8')
+    await expect(field(page, 'options-backend_sampling_min_slots')).toHaveAttribute('placeholder', 'Default (16)')
     // Paged serving and its new fields.
     await expect(field(page, 'options-paged_kv-true')).toHaveAttribute('aria-checked', 'true')
     await expect(field(page, 'options-prefill_budget')).toHaveValue('auto')
@@ -219,7 +205,7 @@ test.describe('Runtime tuning: quick setup', () => {
 
   test('an estimate with no runtime part shows no memory figure', async ({ page }) => {
     await open(page, { estimate: 'none' })
-    await expect(page.getByTestId('rt-quick-mem-longPrompts')).toHaveText('No estimate')
+    await expect(page.getByTestId('rt-quick-mem-longPrompts')).toHaveCount(0)
     await expect(page.getByTestId('rt-quick-now')).toHaveCount(0)
   })
 

@@ -8,6 +8,7 @@
     "subtitle": "配置 LocalAI 运行时设置",
     "saved": "设置保存成功",
     "saveFailed": "保存失败：{{message}}",
+    "memoryConflict": "自本页面加载以来，内存设置已在其他地方被更改。页面现在显示当前生效的值。请重新应用您的更改。",
     "loadFailed": "加载设置失败：{{message}}",
     "sections": {
       "branding": "品牌",
@@ -101,7 +102,8 @@
       "retry": "重试同一操作",
       "policy": "所有者策略 · 修订 {{revision}}",
       "apply": "应用更新设置"
-    }
+    },
+    "memoryCluster": "适用于每个工作节点。如需为某个节点设置不同的值，请在“节点”页面中设置。"
   },
   "backends": {
     "lifecycle": {
@@ -281,7 +283,13 @@
     "sheet": {
       "account": "账户",
       "activity": "活动",
-      "apiKeys": "API 密钥"
+      "apiKeys": "API 密钥",
+      "defaultOn": "默认为用户开启",
+      "defaultOnHint": "立即保存。适用于访问权限未设置此功能的所有用户。",
+      "followsDefault": "此用户遵循默认值。",
+      "explicit": "已为此用户单独设置：更改默认值不会生效。",
+      "useDefault": "使用默认值",
+      "useDefaultFor": "为 {{feature}} 使用默认值"
     },
     "empty": {
       "title": "还没有用户",
@@ -310,7 +318,10 @@
       "deleted": "用户已删除",
       "deleteFailed": "删除用户失败：{{message}}",
       "passwordReset": "已重置 {{name}} 的密码",
-      "resetFailed": "重置密码失败：{{message}}"
+      "resetFailed": "重置密码失败：{{message}}",
+      "defaultOn": "此功能现已默认为用户开启。",
+      "defaultOff": "此功能现已默认为用户关闭。",
+      "defaultFailed": "无法更改默认值：{{message}}"
     },
     "reset": {
       "title": "重置密码",

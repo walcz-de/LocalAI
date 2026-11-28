@@ -3,6 +3,7 @@ package auth
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -22,6 +23,44 @@ const (
 // plaintext token (64-char hex string). The stored session ID is the
 // HMAC-SHA256 hash of the token.
 func CreateSession(db *gorm.DB, userID, hmacSecret string) (string, error) {
+	return createSession(db, userID, nil, hmacSecret)
+}
+
+// CreateDeviceSession creates a session for userID that a paired P2P device
+// obtained with its credential. The session carries the device ID, so that
+// DeleteDeviceSessions ends it when the device is revoked. A device keeps one
+// live session: the new one replaces the earlier sessions of the device, in
+// one transaction, so an app that signs in again and again does not fill the
+// table.
+func CreateDeviceSession(db *gorm.DB, userID, deviceID, hmacSecret string) (string, error) {
+	if deviceID == "" {
+		return "", errors.New("a device session needs a device ID")
+	}
+	var token string
+	err := db.Transaction(func(tx *gorm.DB) error {
+		if err := DeleteDeviceSessions(tx, deviceID); err != nil {
+			return fmt.Errorf("failed to end the earlier sessions of the device: %w", err)
+		}
+		var err error
+		token, err = createSession(tx, userID, &deviceID, hmacSecret)
+		return err
+	})
+	if err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+// DeleteDeviceSessions removes the sessions that a device obtained with its
+// credential. An empty device ID removes nothing.
+func DeleteDeviceSessions(db *gorm.DB, deviceID string) error {
+	if deviceID == "" {
+		return nil
+	}
+	return db.Where("device_id = ?", deviceID).Delete(&Session{}).Error
+}
+
+func createSession(db *gorm.DB, userID string, deviceID *string, hmacSecret string) (string, error) {
 	b := make([]byte, sessionIDBytes)
 	if _, err := rand.Read(b); err != nil {
 		return "", fmt.Errorf("failed to generate session ID: %w", err)
@@ -36,6 +75,7 @@ func CreateSession(db *gorm.DB, userID, hmacSecret string) (string, error) {
 		UserID:    userID,
 		ExpiresAt: now.Add(sessionDuration),
 		RotatedAt: now,
+		DeviceID:  deviceID,
 	}
 
 	if err := db.Create(&session).Error; err != nil {
@@ -47,6 +87,8 @@ func CreateSession(db *gorm.DB, userID, hmacSecret string) (string, error) {
 
 // ValidateSession hashes the plaintext token and looks up the session.
 // Returns the associated user and session, or (nil, nil) if not found/expired.
+// It does not check the binding of a device session to its device: a request
+// path must use ValidateRequestSession.
 func ValidateSession(db *gorm.DB, token, hmacSecret string) (*User, *Session) {
 	hash := HashAPIKey(token, hmacSecret)
 
@@ -76,8 +118,13 @@ func DeleteUserSessions(db *gorm.DB, userID string) error {
 	return db.Where("user_id = ?", userID).Delete(&Session{}).Error
 }
 
-// RotateSession creates a new session for the same user, deletes the old one,
-// and returns the new plaintext token.
+// errSessionGone is returned by RotateSession when the old session no longer
+// exists.
+var errSessionGone = errors.New("the session no longer exists")
+
+// RotateSession deletes the old session, creates a new one for the same user
+// in the same transaction, and returns the new plaintext token. When the old
+// session is already gone it creates nothing and returns an error.
 func RotateSession(db *gorm.DB, oldSession *Session, hmacSecret string) (string, error) {
 	b := make([]byte, sessionIDBytes)
 	if _, err := rand.Read(b); err != nil {
@@ -93,13 +140,22 @@ func RotateSession(db *gorm.DB, oldSession *Session, hmacSecret string) (string,
 		UserID:    oldSession.UserID,
 		ExpiresAt: oldSession.ExpiresAt,
 		RotatedAt: now,
+		// The new session keeps the device, so a revoke still finds it.
+		DeviceID: oldSession.DeviceID,
 	}
 
+	// Delete first and create only when the old row was still there: a
+	// session that a revoke or a logout deleted after the middleware loaded
+	// it must not come back as a new row.
 	err := db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&newSession).Error; err != nil {
-			return err
+		res := tx.Where("id = ?", oldSession.ID).Delete(&Session{})
+		if res.Error != nil {
+			return res.Error
 		}
-		return tx.Where("id = ?", oldSession.ID).Delete(&Session{}).Error
+		if res.RowsAffected != 1 {
+			return errSessionGone
+		}
+		return tx.Create(&newSession).Error
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to rotate session: %w", err)

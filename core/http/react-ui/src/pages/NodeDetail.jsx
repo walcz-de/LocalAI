@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { nodesApi } from '../utils/api'
-import { capacityReading, nodeLifecycleAction } from '../utils/nodeFleet'
+import { capacityReading, nodeLifecycleAction, vramReading } from '../utils/nodeFleet'
 import { isDown, leavePreview } from '../utils/swarm'
 import { cssVars } from '../utils/modelLedger'
 import { usePolling } from '../hooks/usePolling'
@@ -15,6 +15,7 @@ import { Tabs } from '../components/ui'
 import ConfirmDialog from '../components/ConfirmDialog'
 import ActionMenu from '../components/ActionMenu'
 import CapacityEditor from '../components/nodes/CapacityEditor'
+import NodeLimitsPane from '../components/nodes/NodeLimitsPane'
 import KeyValueChips from '../components/nodes/KeyValueChips'
 import { formatVRAM, timeAgo } from '../components/nodes/nodeStatus'
 import NodeState from '../components/swarm/NodeState'
@@ -197,7 +198,7 @@ export default function NodeDetail() {
   const addLabel = async (k, v) => { try { await nodesApi.mergeLabels(id, { [k]: v }); refresh({ quiet: true }) } catch (e) { addToast(e.message, 'error') } }
   const delLabel = async k => { try { await nodesApi.deleteLabel(id, k); refresh({ quiet: true }) } catch (e) { addToast(e.message, 'error') } }
 
-  const vram = capacityReading(node.total_vram, node.available_vram)
+  const vram = vramReading(node)
   const ram = capacityReading(node.total_ram, node.available_ram)
   const disk = capacityReading(node.total_disk, node.available_disk)
   const cpuPercent = node.cpu_logical_cores > 0 && Number.isFinite(node.cpu_usage_percent) ? node.cpu_usage_percent : null
@@ -254,11 +255,16 @@ export default function NodeDetail() {
       {draining && (
         <section className="sw-banner" data-level="warn" role="status" data-testid="draining-banner">
           <p><strong>{t('detail.draining')}</strong> {t('detail.drainingSub')}</p>
+          <p className="sw-banner__more" data-testid="draining-leaving">
+            {node.leaving_replicas > 0
+              ? t('detail.drainingLeaving', { count: node.leaving_replicas, time: node.drain_deadline ? new Date(node.drain_deadline).toLocaleTimeString() : '—' })
+              : t('detail.drainingEmpty')}
+          </p>
         </section>
       )}
 
       <section className="sw-vitals" aria-label={t('detail.resources')}>
-        <Vital label="VRAM" value={fmt(vram)} reading={vram} />
+        <Vital label="VRAM" value={fmt(vram)} reading={vram} note={vram?.detected ? t('detail.vramBudgetOf', { detected: formatVRAM(vram.detected) }) : null} />
         <Vital label="RAM" value={fmt(ram)} reading={ram} />
         {/* Free space on the worker's MODELS filesystem. A node can look
             healthy on VRAM while having nowhere to put the weights, which is
@@ -442,6 +448,13 @@ export default function NodeDetail() {
                 <h2 className="sw-h2">{t('detail.replicaCap')}</h2>
                 <p className="sw-note">{t('detail.replicaCapSub')}</p>
                 <CapacityEditor node={node} loadedModelCounts={loadedCounts} confirmShrink={confirmShrink} addToast={addToast} onUpdate={() => refresh({ quiet: true })} />
+              </section>
+            )}
+            {!isAgent && (
+              <section>
+                <h2 className="sw-h2">{t('limits.title')}</h2>
+                <p className="sw-note">{t('limits.sub')}</p>
+                <NodeLimitsPane node={node} addToast={addToast} />
               </section>
             )}
             <section>

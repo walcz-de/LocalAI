@@ -13,13 +13,14 @@ import (
 // application the handlers it serves over P2P: e itself, which only paired
 // peers reach, and a handler of its own for the routes that exist over P2P
 // alone: POST /api/p2p/redeem, the one route an unpaired peer may call, and
-// GET /api/p2p/routes, for paired devices. Neither is registered on e, so the
-// normal HTTP listener answers 404 for them.
+// GET /api/p2p/routes and POST /api/p2p/device/session, for paired devices.
+// None is registered on e, so the normal HTTP listener answers 404 for them.
 func RegisterP2PRoutes(e *echo.Echo, app *application.Application, adminMw echo.MiddlewareFunc) {
 	svc := app.P2P()
 	registerP2PAdminRoutes(e, svc, adminMw)
+	registerP2PUserRoutes(e, app.P2PUsers())
 	registerP2PSplitRoutes(e, app.P2PSplit(), adminMw)
-	app.ServeP2PHTTP(e, P2POnlyHandler(svc))
+	app.ServeP2PHTTP(e, P2POnlyHandler(svc, app.P2PUsers()))
 }
 
 func registerP2PAdminRoutes(e *echo.Echo, svc p2papi.Service, adminMw echo.MiddlewareFunc) {
@@ -39,6 +40,22 @@ func registerP2PAdminRoutes(e *echo.Echo, svc p2papi.Service, adminMw echo.Middl
 	e.GET("/api/p2p/relays/:id/limits", p2papi.RelayLimitsEndpoint(svc), adminMw)
 	e.PUT("/api/p2p/relays/:id/limits", p2papi.SetRelayLimitsEndpoint(svc), adminMw)
 	e.POST("/api/p2p/identity/regenerate", p2papi.RegenerateIdentityEndpoint(svc), adminMw)
+	e.GET("/api/p2p/user-pairing", p2papi.UserPairingEndpoint(svc), adminMw)
+	e.PUT("/api/p2p/user-pairing", p2papi.SetUserPairingEndpoint(svc), adminMw)
+}
+
+// registerP2PUserRoutes registers the routes of a user who pairs their own
+// devices. They are the only P2P routes without the admin middleware: the
+// route feature registry gives each one the feature p2p_pair, and no client
+// feature, so a client key is refused.
+func registerP2PUserRoutes(e *echo.Echo, svc p2papi.UserService) {
+	e.GET("/api/p2p/me", p2papi.MyPairingEndpoint(svc))
+	e.POST("/api/p2p/me/invites", p2papi.MintMyInviteEndpoint(svc))
+	e.GET("/api/p2p/me/invites", p2papi.ListMyInvitesEndpoint(svc))
+	e.DELETE("/api/p2p/me/invites/:id", p2papi.CancelMyInviteEndpoint(svc))
+	e.GET("/api/p2p/me/devices", p2papi.ListMyDevicesEndpoint(svc))
+	e.PATCH("/api/p2p/me/devices/:id", p2papi.RenameMyDeviceEndpoint(svc))
+	e.DELETE("/api/p2p/me/devices/:id", p2papi.RevokeMyDeviceEndpoint(svc))
 }
 
 func registerP2PSplitRoutes(e *echo.Echo, svc p2papi.SplitService, adminMw echo.MiddlewareFunc) {
@@ -46,16 +63,18 @@ func registerP2PSplitRoutes(e *echo.Echo, svc p2papi.SplitService, adminMw echo.
 	e.PATCH("/api/p2p/split-workers/:id", p2papi.SetSplitWorkerEndpoint(svc), adminMw)
 }
 
-// P2POnlyHandler serves POST /api/p2p/redeem and GET /api/p2p/routes for
-// requests that arrived over P2P. It has no session, CSRF or API key
-// middleware: a redeeming caller has no account yet, a device asking for
-// routes may have none, and the connection already authenticated its peer
-// ID. The application lets only paired peers reach the routes route.
-func P2POnlyHandler(svc p2papi.Service) http.Handler {
+// P2POnlyHandler serves POST /api/p2p/redeem, GET /api/p2p/routes and POST
+// /api/p2p/device/session for requests that arrived over P2P. It has no
+// session, CSRF or API key middleware: a redeeming caller has no account yet,
+// a device asking for routes may have none, a device signing in proves itself
+// with its credential, and the connection already authenticated its peer ID.
+// The application lets only paired peers reach the routes and session routes.
+func P2POnlyHandler(svc p2papi.Service, users p2papi.UserService) http.Handler {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
 	e.POST("/api/p2p/redeem", p2papi.RedeemEndpoint(svc))
 	e.GET("/api/p2p/routes", p2papi.RoutesEndpoint(svc))
+	e.POST("/api/p2p/device/session", p2papi.DeviceSessionEndpoint(users))
 	return e
 }

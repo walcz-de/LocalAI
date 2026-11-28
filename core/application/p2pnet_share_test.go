@@ -29,15 +29,23 @@ import (
 // shareServer is an application in mode share with an auth database, serving
 // a main handler that answers "main" and the real redeem handler over P2P.
 func shareServer() (*Application, *p2pRuntime) {
+	return shareServerWith(func(*Application) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = io.WriteString(w, "main")
+		})
+	})
+}
+
+// shareServerWith is shareServer with the main handler that main returns.
+func shareServerWith(main func(*Application) http.Handler) (*Application, *p2pRuntime) {
 	db, err := auth.InitDB(filepath.Join(GinkgoT().TempDir(), "auth.db"))
 	Expect(err).ToNot(HaveOccurred())
 	a := newP2PTestApp("share", GinkgoT().TempDir(), db)
 	only := echo.New()
 	only.POST(redeemPath, p2papi.RedeemEndpoint(a.P2P()))
 	only.GET(routesPath, p2papi.RoutesEndpoint(a.P2P()))
-	a.ServeP2PHTTP(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, "main")
-	}), only)
+	only.POST(deviceSessionPath, p2papi.DeviceSessionEndpoint(a.P2PUsers()))
+	a.ServeP2PHTTP(main(a), only)
 	Expect(a.StartP2PNet()).To(Succeed())
 	rt, _ := a.p2p().runtime()
 	Expect(rt).ToNot(BeNil())
@@ -126,7 +134,7 @@ var _ = Describe("P2P layer in mode share", func() {
 		Expect(body).To(Equal("main"))
 
 		By("listing the device with its path")
-		devs, err := svc.ListDevices(ctx)
+		devs, err := svc.ListDevices(ctx, "")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(devs).To(HaveLen(1))
 		Expect(devs[0].Online).To(BeTrue())
@@ -260,7 +268,7 @@ var _ = Describe("P2P layer in mode share", func() {
 		Expect(key.Models).To(BeEmpty())
 		Expect(key.AllowsModel("added-later")).To(BeTrue())
 
-		devs, err := svc.ListDevices(ctx)
+		devs, err := svc.ListDevices(ctx, "")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(svc.RevokeDevice(ctx, devs[0].ID, owner.ID)).To(Succeed())
 		Expect(auth.ClientKeyActive(a.AuthDB(), keyID, owner.ID)).To(BeFalse())
@@ -344,7 +352,7 @@ var _ = Describe("P2P layer in mode share", func() {
 		Expect(byID[dev.ID].Models).To(BeEmpty())
 
 		By("listing the device of the redeemed invite with the same grant")
-		devs, err := svc.ListDevices(ctx)
+		devs, err := svc.ListDevices(ctx, "")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(devs).To(HaveLen(1))
 		Expect(devs[0].AllModels).To(BeTrue())
@@ -508,7 +516,7 @@ var _ = Describe("P2P layer with a relay manager", func() {
 		added, _ := relays.seen()
 		Expect(added).To(Equal([]string{h.ID().String()}))
 
-		devs, err := a.P2P().ListDevices(ctx)
+		devs, err := a.P2P().ListDevices(ctx, "")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(a.P2P().RevokeDevice(ctx, devs[0].ID, "admin")).To(Succeed())
 		_, removed := relays.seen()

@@ -17,7 +17,8 @@
   },
   "capabilities": [
     "command-line",
-    "tensor-placement"
+    "tensor-placement",
+    "drafting"
   ],
   "example": "llama-server -m model.gguf --ctx-size 8192 -ngl 99 -fa on",
   "flags": [
@@ -93,7 +94,7 @@
         "auto"
       ],
       "default": "auto",
-      "doc": "Flash attention. A bare flag means on.",
+      "doc": "Faster attention that needs less compute memory. A quantized V cache requires it. Auto turns it on when the device supports it.",
       "group": "speed"
     },
     {
@@ -234,6 +235,9 @@
       "target": "option",
       "path": "options",
       "option": "backend_sampling",
+      "option_aliases": [
+        "gpu_sampling"
+      ],
       "type": "enum",
       "enum": [
         "off",
@@ -255,7 +259,7 @@
       ],
       "type": "bool",
       "default": "on in builds with paged serving",
-      "doc": "Paged serving: start a request only when the shared KV cache has room for it, and pause the newest one when it runs out, so many users share the cache without failing. It needs more than one slot. Default: on in builds with paged serving.",
+      "doc": "Paged serving: start a request only when the shared KV cache has room for it, and pause the newest one when it runs out, so many users share the cache without failing. It needs more than one slot.",
       "group": "serving",
       "localai_only": true
     },
@@ -266,7 +270,7 @@
       "option": "paged_preempt",
       "type": "bool",
       "default": "on",
-      "doc": "With paged serving: pause the newest request when the KV cache is full and resume it later. Off makes new requests wait instead.",
+      "doc": "With paged serving: pause the request that is cheapest to recompute when the KV cache is full, and resume it later. Keep it on: with it off, a full cache fails every running request.",
       "group": "serving",
       "localai_only": true
     },
@@ -280,7 +284,19 @@
       ],
       "type": "string",
       "default": "256 in builds with paged serving",
-      "doc": "Prompt tokens read per step while other requests generate, so a long prompt does not stall them. A number, 0 to turn it off, or auto to follow the load in builds that have it.",
+      "doc": "Prompt tokens read per step while other requests generate, so a long prompt does not stall them. A number, 0 to turn it off, or auto to follow the load.",
+      "group": "serving",
+      "localai_only": true
+    },
+    {
+      "key": "prefill_long",
+      "target": "option",
+      "path": "options",
+      "option": "prefill_long",
+      "type": "int",
+      "min": 0,
+      "default": "1024",
+      "doc": "With paged serving: the prefill budget applies only to prompts longer than this many tokens; shorter prompts are read whole. 0 applies it to every prompt.",
       "group": "serving",
       "localai_only": true
     },
@@ -305,6 +321,57 @@
       "min": 0,
       "default": "256",
       "doc": "With paged serving: free tokens a request needs beyond its prompt before it starts, capped at its max tokens.",
+      "group": "serving",
+      "localai_only": true
+    },
+    {
+      "key": "slot_attach",
+      "target": "option",
+      "path": "options",
+      "option": "slot_attach",
+      "option_aliases": [
+        "prefix_attach"
+      ],
+      "type": "bool",
+      "default": "on",
+      "doc": "With paged serving: a request whose prompt starts like one another request holds starts from that request's KV cache instead of reading the prompt again.",
+      "group": "serving",
+      "localai_only": true
+    },
+    {
+      "key": "admission_order",
+      "target": "option",
+      "path": "options",
+      "option": "admission_order",
+      "option_aliases": [
+        "paged_order"
+      ],
+      "type": "bool",
+      "default": "on",
+      "doc": "With paged serving: waiting requests go by priority class, then by the fewest prompt tokens not in a cache, then by arrival. Off serves them first come, first served.",
+      "group": "serving",
+      "localai_only": true
+    },
+    {
+      "key": "prefill_cap",
+      "target": "option",
+      "path": "options",
+      "option": "prefill_cap",
+      "type": "int",
+      "min": 0,
+      "default": "512",
+      "doc": "With paged serving: the most prompt tokens one request reads per step while other requests read prompts too. 0 turns it off.",
+      "group": "serving",
+      "localai_only": true
+    },
+    {
+      "key": "lazy_idle_save",
+      "target": "option",
+      "path": "options",
+      "option": "lazy_idle_save",
+      "type": "bool",
+      "default": "off",
+      "doc": "With paged serving: idle slots keep their KV cache until the cache needs room, instead of saving it to the RAM prompt cache after each new request.",
       "group": "serving",
       "localai_only": true
     },
@@ -468,6 +535,100 @@
       "group": "memory"
     },
     {
+      "key": "prompt_cache_disk",
+      "target": "option",
+      "path": "options",
+      "option": "prompt_cache_disk",
+      "type": "bool",
+      "default": "the server setting (on)",
+      "doc": "Keep the prompt cache of long prompts on disk, so it survives a model reload. Off keeps it in RAM only.",
+      "group": "memory",
+      "localai_only": true
+    },
+    {
+      "key": "prompt_cache_disk_ttl_hours",
+      "target": "option",
+      "path": "options",
+      "option": "prompt_cache_disk_ttl_hours",
+      "type": "int",
+      "min": 1,
+      "default": "the server setting (168)",
+      "doc": "Hours a disk prompt cache entry is kept after its last use.",
+      "group": "memory",
+      "localai_only": true
+    },
+    {
+      "key": "prompt_cache_disk_min_tokens",
+      "target": "option",
+      "path": "options",
+      "option": "prompt_cache_disk_min_tokens",
+      "type": "int",
+      "min": 1,
+      "default": "the server setting (1024)",
+      "doc": "Shortest prompt, in tokens, that is written to disk.",
+      "group": "memory",
+      "localai_only": true
+    },
+    {
+      "key": "prompt_cache_disk_quota_mib",
+      "target": "option",
+      "path": "options",
+      "option": "prompt_cache_disk_quota_mib",
+      "type": "int",
+      "min": 0,
+      "default": "0",
+      "doc": "Most MiB one user may keep on disk for this model. 0: no limit for the model; the server quota still applies.",
+      "group": "memory",
+      "localai_only": true
+    },
+    {
+      "key": "prompt_cache_disk_max_size_mib",
+      "target": "option",
+      "path": "options",
+      "option": "prompt_cache_disk_max_size_mib",
+      "type": "int",
+      "min": 0,
+      "default": "0",
+      "doc": "Most MiB this model may keep on disk. 0: no limit for the model; the server cap still applies.",
+      "group": "memory",
+      "localai_only": true
+    },
+    {
+      "key": "prompt_cache_disk_shared",
+      "target": "option",
+      "path": "options",
+      "option": "prompt_cache_disk_shared",
+      "type": "bool",
+      "default": "the server setting (off)",
+      "doc": "Let all users share the disk prompt cache of this model. Turn on only when every user may see the prompts of the others.",
+      "group": "memory",
+      "localai_only": true
+    },
+    {
+      "key": "prompt_cache_disk_low_free_mib",
+      "target": "option",
+      "path": "options",
+      "option": "prompt_cache_disk_low_free_mib",
+      "type": "int",
+      "min": 0,
+      "default": "the server setting (0)",
+      "doc": "Free disk, in MiB, under which the disk prompt cache stops writing and shrinks. 0: the larger of 15% of the disk and 10 GiB.",
+      "group": "memory",
+      "localai_only": true
+    },
+    {
+      "key": "prompt_cache_disk_critical_free_mib",
+      "target": "option",
+      "path": "options",
+      "option": "prompt_cache_disk_critical_free_mib",
+      "type": "int",
+      "min": 0,
+      "default": "the server setting (0)",
+      "doc": "Free disk, in MiB, under which the disk prompt cache turns off until the free space is back above the low mark. 0: 5% of the disk.",
+      "group": "memory",
+      "localai_only": true
+    },
+    {
       "key": "mmproj_use_gpu",
       "target": "option",
       "path": "options",
@@ -493,7 +654,7 @@
       "option": "backend_sampling_min_slots",
       "type": "int",
       "min": 1,
-      "default": "4",
+      "default": "16",
       "doc": "With GPU sampling on Auto: the fewest parallel requests that turn GPU sampling on.",
       "group": "engine_advanced",
       "localai_only": true
@@ -975,6 +1136,20 @@
       "group": "template"
     },
     {
+      "key": "draft_model",
+      "target": "config",
+      "path": "draft_model",
+      "cli": [
+        "-md",
+        "--model-draft",
+        "--spec-draft-model"
+      ],
+      "type": "string",
+      "default": "none",
+      "doc": "File of the draft model in the models directory: a small model with the same vocabulary that proposes tokens.",
+      "group": "speculative"
+    },
+    {
       "key": "spec_type",
       "target": "option",
       "path": "options",
@@ -989,6 +1164,18 @@
       "default": "none, or draft-simple with a draft model",
       "doc": "Kind of speculative decoding, or several comma-separated: draft-simple, draft-mtp, draft-eagle3, ngram-simple, ngram-mod and others.",
       "group": "speculative"
+    },
+    {
+      "key": "spec_max_streams",
+      "target": "option",
+      "path": "options",
+      "option": "spec_max_streams",
+      "type": "int",
+      "min": 0,
+      "default": "4",
+      "doc": "Drafting pauses while more than this many requests generate, and resumes when the count drops by a quarter. 0 never pauses.",
+      "group": "speculative",
+      "localai_only": true
     },
     {
       "key": "spec_n_max",
@@ -1006,7 +1193,7 @@
       ],
       "type": "int",
       "min": 0,
-      "default": "16",
+      "default": "3",
       "doc": "Most tokens drafted per step.",
       "group": "speculative"
     },
@@ -1044,7 +1231,7 @@
       "type": "float",
       "min": 0,
       "max": 1,
-      "default": "0.75",
+      "default": "0",
       "doc": "Lowest draft probability to keep drafting.",
       "group": "speculative"
     },
@@ -1549,6 +1736,34 @@
       "group": "sampling"
     },
     {
+      "key": "grammar_engine",
+      "target": "option",
+      "path": "options",
+      "option": "grammar_engine",
+      "type": "enum",
+      "enum": [
+        "auto",
+        "gbnf",
+        "llguidance"
+      ],
+      "default": "auto",
+      "doc": "Engine of the grammars LocalAI builds from a JSON schema (response_format and tool calls). auto: llguidance when the backend build has it, GBNF otherwise. gbnf: always llama.cpp's GBNF sampler, as upstream. llguidance: also the tool-call grammars of the chat template, with a fallback to GBNF. A grammar you write yourself always uses GBNF.",
+      "group": "sampling",
+      "localai_only": true
+    },
+    {
+      "key": "grammar_max_repetition",
+      "target": "option",
+      "path": "options",
+      "option": "grammar_max_repetition",
+      "type": "int",
+      "min": 1,
+      "default": "100000",
+      "doc": "Limit of the GBNF repetition check (llama.cpp's is 2000). The grammar of a large tool set goes over 2000 and the request fails with \"exceeds sane defaults\"; a lower value bounds the work a grammar can ask for.",
+      "group": "sampling",
+      "localai_only": true
+    },
+    {
       "key": "override_tensor",
       "target": "option",
       "path": "options",
@@ -1580,7 +1795,6 @@
     "engine_advanced"
   ],
   "collapsed_groups": [
-    "speculative",
     "engine_advanced"
   ],
   "combined": [
@@ -1602,12 +1816,13 @@
       "choices": [
         {
           "value": "default",
-          "label": "Default (memory-mapped)",
+          "label": "Default (auto)",
           "set": {
             "direct_io": null,
             "mmap": null,
             "mmlock": null
-          }
+          },
+          "doc": "llama.cpp picks: memory-mapped, except on integrated GPUs that would hold the model twice."
         },
         {
           "value": "none",
@@ -1659,7 +1874,7 @@
     {
       "id": "backend_sampling",
       "group": "speed",
-      "doc": "Where tokens are sampled. A backend without GPU sampling ignores the setting.",
+      "doc": "Where the next token is picked: on the CPU or on the GPU.",
       "keys": [
         "backend_sampling"
       ],
@@ -1698,13 +1913,9 @@
     {
       "id": "balanced",
       "name": "Balanced",
-      "description": "The defaults: LocalAI picks the batch and the slots for the GPU, with an f16 KV cache.",
+      "description": "The default batch sizes: LocalAI picks them for the GPU.",
       "settings": {
         "batch": null,
-        "cache_type_k": null,
-        "cache_type_v": null,
-        "paged_kv": null,
-        "parallel": null,
         "ubatch": null
       },
       "profile": true
@@ -1712,31 +1923,152 @@
     {
       "id": "longPrompts",
       "name": "Long prompts",
-      "description": "Batch and micro-batch of 2048: long prompts are read much faster, and the compute buffers grow.",
+      "description": "A batch of 2048: long prompts are read much faster, and the compute buffers grow.",
       "settings": {
-        "batch": 2048,
-        "cache_type_k": null,
-        "cache_type_v": null,
-        "paged_kv": null,
-        "parallel": null,
-        "ubatch": 2048
+        "batch": 2048
       },
-      "profile": true
+      "profile": true,
+      "memory": {
+        "discrete": {
+          "settings": {
+            "ubatch": 1024
+          },
+          "note": "The micro-batch is 1024 on a discrete GPU: its compute buffer must fit one card."
+        },
+        "system": {
+          "settings": {
+            "ubatch": 512
+          }
+        },
+        "unified": {
+          "settings": {
+            "ubatch": 2048
+          }
+        }
+      }
     },
     {
-      "id": "concurrent",
-      "name": "More concurrent users",
-      "description": "8-bit KV cache, paged serving and 8 slots: about twice the tokens fit, shared by more users, at a small cost in quality.",
+      "id": "concurrencyDefault",
+      "name": "Default",
+      "description": "LocalAI picks the slots for the GPU and the backend its serving defaults.",
       "settings": {
-        "batch": null,
-        "cache_type_k": "q8_0",
-        "cache_type_v": "q8_0",
-        "flash_attention": "on",
-        "paged_kv": true,
-        "parallel": 8,
-        "ubatch": null
+        "paged_kv": null,
+        "paged_preempt": null,
+        "parallel": null
       },
-      "profile": true
+      "profile": true,
+      "set": "concurrency",
+      "best_for": "One person, or a few."
+    },
+    {
+      "id": "streams8",
+      "name": "8 streams",
+      "description": "8 slots with paged serving: requests share the KV cache and wait instead of failing when it is full.",
+      "settings": {
+        "paged_kv": true,
+        "paged_preempt": true,
+        "parallel": 8
+      },
+      "profile": true,
+      "set": "concurrency",
+      "streams": 8,
+      "best_for": "A team chatting with one model.",
+      "memory": {
+        "discrete": {
+          "min_memory": 8589934592
+        },
+        "system": {
+          "settings": {
+            "cache_ram": 4096
+          },
+          "min_memory": 17179869184
+        },
+        "unified": {
+          "settings": {
+            "cache_ram": 4096
+          },
+          "min_memory": 17179869184
+        }
+      }
+    },
+    {
+      "id": "streams16",
+      "name": "16 streams",
+      "description": "16 slots with GPU sampling on and no drafting.",
+      "settings": {
+        "backend_sampling": "on",
+        "draft_model": null,
+        "paged_kv": true,
+        "paged_preempt": true,
+        "parallel": 16,
+        "spec_type": "none"
+      },
+      "profile": true,
+      "set": "concurrency",
+      "streams": 16,
+      "best_for": "Agents and tools that send requests in parallel.",
+      "memory": {
+        "discrete": {
+          "min_memory": 8589934592
+        },
+        "system": {
+          "settings": {
+            "backend_sampling": null,
+            "cache_ram": 4096
+          },
+          "min_memory": 17179869184,
+          "note": "No GPU: tokens are sampled on the CPU."
+        },
+        "unified": {
+          "settings": {
+            "cache_ram": 4096
+          },
+          "min_memory": 17179869184
+        }
+      }
+    },
+    {
+      "id": "streams32",
+      "name": "32+ streams",
+      "description": "32 slots with GPU sampling always on and no drafting: the most tokens per second in total, each stream slower.",
+      "settings": {
+        "backend_sampling": "on",
+        "draft_model": null,
+        "paged_kv": true,
+        "paged_preempt": true,
+        "parallel": 32,
+        "spec_type": "none"
+      },
+      "profile": true,
+      "set": "concurrency",
+      "streams": 32,
+      "best_for": "Batch jobs and many users at once.",
+      "memory": {
+        "discrete": {
+          "settings": {
+            "cache_type_k": "q8_0",
+            "cache_type_v": "q8_0",
+            "flash_attention": "on"
+          },
+          "min_memory": 8589934592,
+          "note": "8-bit KV cache: about twice the tokens fit, at a small cost in quality and speed."
+        },
+        "system": {
+          "unsupported": true,
+          "note": "Not offered without a GPU: a CPU shared by 32 streams makes each one too slow."
+        },
+        "unified": {
+          "settings": {
+            "cache_ram": 4096
+          },
+          "tight": {
+            "cache_type_k": "q8_0",
+            "cache_type_v": "q8_0",
+            "flash_attention": "on"
+          },
+          "min_memory": 17179869184
+        }
+      }
     },
     {
       "id": "bigMoe",
@@ -1806,5 +2138,105 @@
     "context_size": "context_size",
     "gpu_layers": "gpu_layers",
     "ubatch": "ubatch"
+  },
+  "drafting": {
+    "group": "speculative",
+    "type_key": "spec_type",
+    "model_key": "draft_model",
+    "off_type": "none",
+    "streams": {
+      "option": "spec_max_streams",
+      "default": "4 in builds with paged serving",
+      "doc": "Pause drafting while more than this many requests generate, and resume when the load drops. 0 never pauses."
+    },
+    "modes": [
+      {
+        "id": "off",
+        "label": "Off",
+        "doc": "No drafting. Every token comes from the model alone."
+      },
+      {
+        "id": "ngram",
+        "label": "N-gram",
+        "doc": "Propose the tokens that followed the same words earlier in the context. No extra model and no extra memory.",
+        "note": "Best for output that repeats its input, such as code edits or long quotes. On normal chat it gains little and can cost a few percent.",
+        "types": [
+          "ngram-mod",
+          "ngram-simple",
+          "ngram-map-k",
+          "ngram-map-k4v",
+          "ngram-cache"
+        ],
+        "fields": [
+          "spec_ngram_mod_n_min",
+          "spec_ngram_mod_n_max",
+          "spec_ngram_mod_n_match"
+        ]
+      },
+      {
+        "id": "model",
+        "label": "Draft model",
+        "doc": "A small model with the same vocabulary proposes tokens, and the model checks them in one step.",
+        "note": "The draft model is loaded beside the model and uses its own memory.",
+        "model": true,
+        "fields": [
+          "spec_n_min",
+          "spec_n_max",
+          "spec_p_min"
+        ]
+      },
+      {
+        "id": "mtp",
+        "label": "MTP",
+        "doc": "The model's own multi-token prediction head proposes the next tokens. No second model to load.",
+        "types": [
+          "draft-mtp"
+        ],
+        "needs": "mtp_head",
+        "auto": true,
+        "set": {
+          "spec_n_max": 6,
+          "spec_p_min": 0.75
+        },
+        "fields": [
+          "spec_n_max",
+          "spec_p_min"
+        ]
+      }
+    ]
+  },
+  "memory": {
+    "fallback": "discrete",
+    "fit_fraction": 0.9,
+    "kinds": [
+      {
+        "kind": "unified",
+        "label": "Unified memory",
+        "doc": "The GPU shares the system memory (DGX Spark, Jetson, Apple silicon, AMD APUs). More slots fit; the prompt cache and checkpoints are kept small because they use the same memory."
+      },
+      {
+        "kind": "discrete",
+        "label": "Discrete GPU",
+        "doc": "The GPU has its own memory. Slots are capped by the VRAM estimate, 32 streams use an 8-bit KV cache, and the prompt cache stays in system memory."
+      },
+      {
+        "kind": "system",
+        "label": "No GPU",
+        "doc": "The model runs on the CPU in system memory. The caches are kept small, and 32 streams are not offered."
+      }
+    ],
+    "advice": [
+      {
+        "id": "unifiedLoadMode",
+        "control": "load_mode",
+        "kind": "unified",
+        "value": "default",
+        "avoid": [
+          "mmap",
+          "mmap_mlock"
+        ],
+        "doc": "On unified memory, a memory-mapped model is held twice while it is copied to the GPU. Default lets llama.cpp skip mmap on integrated GPUs."
+      }
+    ]
   }
 }

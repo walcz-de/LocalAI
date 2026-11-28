@@ -352,6 +352,9 @@ func New(opts ...config.AppOption) (*Application, error) {
 		// Before failoverManager.Run starts below: the gate and sync must be
 		// in place for its first tick.
 		application.startFailoverDistributed(options.Context)
+		// Before the watchdog starts: in distributed mode the stored memory
+		// settings win over env and the file.
+		application.startClusterSettings(options.Context)
 		// Wire remote model unloader so ShutdownModel works for remote nodes
 		// Uses NATS to tell serve-backend nodes to Free + kill their backend process
 		application.modelLoader.SetRemoteUnloader(distSvc.Unloader)
@@ -466,6 +469,9 @@ func New(opts ...config.AppOption) (*Application, error) {
 		return nil, err
 	}
 	application.initStudioService()
+	if err := application.initPlugins(); err != nil {
+		return nil, err
+	}
 
 	if err := coreStartup.InstallModels(options.Context, application.GalleryService(), options.Galleries, options.BackendGalleries, options.SystemState, application.ModelLoader(), options.EnforcePredownloadScans, options.AutoloadBackendGalleries, options.RequireBackendIntegrity, nil, options.ModelsURL...); err != nil {
 		xlog.Error("error installing models", "error", err)
@@ -625,6 +631,7 @@ func New(opts ...config.AppOption) (*Application, error) {
 	startMITMIfConfigured(application, options)
 
 	application.ModelLoader().SetBackendLoggingEnabled(options.EnableBackendLogging)
+	application.startPromptCache(options)
 
 	// Safety-net cleanup if the application context is cancelled without
 	// the caller invoking Shutdown directly. This is fire-and-forget — it
@@ -641,6 +648,7 @@ func New(opts ...config.AppOption) (*Application, error) {
 
 	// Initialize watchdog with current settings (after loading from file)
 	initializeWatchdog(application, options)
+	application.watchdogReady.Store(true)
 
 	if options.LoadToMemory != nil && !options.SingleBackend {
 		for _, m := range options.LoadToMemory {
@@ -728,6 +736,17 @@ func loadRuntimeSettingsFromFile(options *config.ApplicationConfig) {
 		xlog.Warn("failed to read runtime_settings.json", "error", err)
 		return
 	}
+	if options.Distributed.Enabled {
+		// The cluster store owns the memory settings in distributed mode. A
+		// copy in this frontend's file would make it differ from the others
+		// until the cluster document is applied, and for every setting the
+		// document does not hold.
+		var memory config.RuntimeSettings
+		memory, settings = config.SplitMemorySettings(settings)
+		if keys := memory.SetKeys(); len(keys) > 0 {
+			xlog.Warn("Ignoring the memory settings in runtime_settings.json: in distributed mode they are cluster settings. Change them in Settings.", "keys", keys)
+		}
+	}
 	options.ApplyRuntimeSettingsAtStartup(&settings)
 	xlog.Debug("Runtime settings loaded from runtime_settings.json")
 }
@@ -736,6 +755,7 @@ func loadRuntimeSettingsFromFile(options *config.ApplicationConfig) {
 func initializeWatchdog(application *Application, options *config.ApplicationConfig) {
 	// Get effective max active backends (considers both MaxActiveBackends and deprecated SingleBackend)
 	lruLimit := options.GetEffectiveMaxActiveBackends()
+	application.ModelLoader().SetModelSwap(options.ModelSwapEnabled())
 
 	// Create watchdog if enabled OR if LRU limit is set OR if memory reclaimer is enabled
 	if options.WatchDog || lruLimit > 0 || options.MemoryReclaimerEnabled {

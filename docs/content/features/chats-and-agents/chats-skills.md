@@ -51,6 +51,12 @@ skill's `SKILL.md` before your message, for this turn only; the transcript
 keeps your words and shows the skill as a chip. A regenerate runs the skill
 again.
 
+### Run a plugin command
+
+A [plugin]({{% relref "/features/plugins" %}}) that is on for the chat adds its commands: `/fmt:run src/` runs the command `run` of the plugin `fmt` with the arguments `src/`. A command in a subfolder has a segment for each folder, as `/fmt:db:migrate`. The model gets the command's text for this turn only, with the arguments in it: `$ARGUMENTS` is everything you typed, `$ARGUMENTS[0]` or `$0` the first argument (quotes group words), `$name` the argument at the place of `name` in the command's `arguments`, and `\$1` stays as written. A text with none of these gets a last line `ARGUMENTS: <what you typed>`. `${CLAUDE_PLUGIN_ROOT}` and the other plugin variables are replaced as for plugin skills, and nothing else is: `{{` stays as written. A plugin skill started with `/` takes its arguments the same way. The transcript keeps what you typed and shows the command as a chip. In the web UI, typing `/` lists the commands and the skills of the plugins that are on for the chat under **Plugins**, with the hint of their arguments.
+
+A command whose text runs a shell command (`` !`...` ``) answers that it needs a later version of LocalAI. The `model` of a command is not applied yet: the turn uses the chat's model. A plugin skill with `user-invocable: false` is not offered after `/` and is refused there; the model still uses it. A skill and a command of the same name: the skill runs.
+
 ### Hand a task to a saved agent
 
 `/agent Reviewer check the draft` asks the model to start the saved agent
@@ -71,12 +77,13 @@ skill's `SKILL.md` before your message, for this turn only; the transcript
 keeps your words, and the line has `"invoked":{"kind":"skill","name":"review"}`.
 With an agent, the model is asked to start that saved agent as a sub-agent
 with the task (the chat must have **Saved agents** switched on). A regenerate
-runs the skill again.
+runs the skill again. A plugin command goes in `skill` too, with its arguments as the text; its line has `"invoked":{"kind":"command","name":"fmt:run"}`.
 
 ```bash
 curl -X POST .../api/chats/3f1c.../messages -H 'Content-Type: application/json' -d '{"text":"check the diff","skill":"review"}'
+curl -X POST .../api/chats/3f1c.../messages -H 'Content-Type: application/json' -d '{"text":"src/","skill":"fmt:run"}'
 curl -X POST .../api/chats/3f1c.../messages -H 'Content-Type: application/json' -d '{"text":"check the draft","agent":"rev1"}'
-# An unknown skill: 400 with the names of the skills of the chat. An unknown
+# An unknown skill: 400 with the names of the skills and plugin commands of the chat. An unknown
 # agent, another user's, or saved agents off for this chat: 400.
 ```
 
@@ -105,7 +112,7 @@ sandbox: media
 
 When the folder of a skill holds other files, such as references and scripts, the answer starts with `Base directory for this skill:` and the folder, and names up to 20 of the files, relative to it, so the model reads them with `read_file`. A sub-agent that has no `read_file` gets the instructions only. A skill with `requires: [exec]` in a chat that cannot run commands answers that it cannot be used there. Every chat with at least one skill has `load_skill`, and a sub-agent gets it with its parent's other tools. It has no switch and Settings > Tools does not list it; the Skills menu chooses what it offers. The Sandbox does not see the skill folders (the built-in `bash` does, see [Commands on this machine]({{% relref "/features/chats-and-agents/chats-commands#commands-on-this-machine" %}})). When the model reads a `SKILL.md` with `read_file` at a wrong path, the error names the right path and `load_skill`. When it writes or moves a `SKILL.md` with `write_file` or `move_file` into a folder that is not a skills folder (for example `/workspace/home/skills/<name>/SKILL.md`, without the dot), the file is not loaded as a skill, and the result of the call says so and names `/workspace/home/.skills/<name>/SKILL.md`, so the model moves it there. A `SKILL.md` over 64 KiB is refused.
 
-Skills come from seven places, nearest first, and the nearest wins when two have the same name:
+Skills come from eight places, nearest first, and the nearest wins when two have the same name:
 
 | Layer | Where | Who writes it |
 |---|---|---|
@@ -114,12 +121,15 @@ Skills come from seven places, nearest first, and the nearest wins when two have
 | Agent | `LocalAI/agents/<agent>/skills` in your home folder | the agent proposes, you confirm |
 | Personal | `.skills` in your home folder | you |
 | Shared | for every user | an administrator |
+| Plugin | a plugin you enabled | the plugin's author |
 | Add-on | ships with an installed add-on | the add-on owner |
 | Built-in | ships with the server | the server |
 
 The project layer holds the skills of one project: `Projects/<project>/skills/<name>/SKILL.md`. Every chat and every agent of the project gets them, with no grant and no switch to set first, and a skill you add reaches a chat that already exists on its next turn. They win over your personal and agent skills of the same name; only a skill in a `.skills` folder next to the files you work in is nearer. The project's skills limit (the skills list of its defaults) does not apply to them. Other chats never see them: a `.skills` folder below `Projects/` isn't loaded as a folder skill, and the skills of an older `Projects/<project>/.skills` folder are copied to `skills/` once when the server starts (the old folder is kept). Only you write them: through the project page, or the skills endpoints with `layer=project` and `project=<project id>` (`GET /api/chats/skills?layer=project&project=<id>` lists them, `POST` with `"layer": "project", "project": "<id>"`, and `GET`, `PUT` and `DELETE /api/chats/skills/project/<name>?project=<id>`). The folder is a place LocalAI manages, so it cannot be shared alone. When you share the project folder with **Can edit**, the project's skills are off, because another person could write them: the calls answer 409, and `GET /api/chats/projects/<id>` says `skills_blocked: true`. A switch for a project skill has the id `project:<name>`.
 
 The agent layer holds the skills of one saved agent. Only a chat that runs that agent sees them, and it needs no grant in the agent's skill list. They win over your personal skill of the same name, for that agent only. An agent writes one by a change proposal of kind `skill` with scope `agent` (see [Agents]({{%relref "/features/chats-and-agents/chats-agents" %}})); nothing is written until you confirm, and the write can be undone. An agent skill cannot take the name of a built-in skill or of a document skill such as `xlsx`, and a skill that you locked in your personal layer stays locked against it. The grant `skills.write` shows the built-in `writing-skills` to the agent, led by the line "Do not write files. Call propose_change with kind skill." The **Skills** page lists agent skills with the agent's name and a **Remove** button; a removed skill goes to the Trash. `GET /api/chats/skills?agents=true` adds them to the list with `layer: "agent"`, `agent` and `agent_name` (a chat's own list has the layer of its agent already), and `GET` or `DELETE /api/chats/skills/agent/<name>?agent=<id>` reads or removes one.
+
+The plugin layer holds the skills of the [plugins]({{% relref "/features/plugins" %}}) the chat can use now: installed for everyone or for you, enabled by you, not switched off for the chat, and, in a chat with a saved agent, granted by the agent. A plugin skill has the plugin's name as a prefix, `<plugin>:<skill>` (for example `fmt:lint`), so it never takes the name of a skill of another layer. Its files are in `/workspace/shared-plugins/<digest>/`, read only, where `<digest>` names the plugin's stored copy. `load_skill` replaces `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_SKILL_DIR}`, `${CLAUDE_PROJECT_DIR}` (`/workspace/home`) and `${CLAUDE_SESSION_ID}` (the chat ID) in its text; an option that the plugin marks sensitive shows as `[sensitive option KEY]`, never its value. A skill whose `allowed-tools` names `Bash`, or whose text runs a command, needs a way to run commands, as `requires: [exec]` does. A skill with `disable-model-invocation: true` is not in the model's index and `load_skill` refuses it: you start it with `/<plugin>:<skill>`. A skill with `user-invocable: false` is in the index and not in the `/` menu. The switch id of one plugin skill is `plugin:<plugin>:<skill>`; switching the plugin off for the chat takes all its skills out.
 
 The add-on layer holds the skills of the add-ons that the chat can use now: installed, running, usable by you and on for the chat (see [Add-on tools]({{% relref "/features/chats-and-agents/chats-tools#add-on-tools" %}})). A chat with a saved agent gets them only for the add-ons the agent grants. The model loads one by its name with `load_skill`; its files are in `/workspace/shared-addon-skills/<add-on>/<skill>/`, where the add-on ID says where it comes from. Switching the add-on off for a chat takes its skills out of that chat's index, and the skill list shows each one with `addon` and `addon_title`. Its switch id is `addon:<name>`.
 

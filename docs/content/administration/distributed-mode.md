@@ -142,6 +142,7 @@ The frontend is a standard LocalAI instance with distributed mode enabled. These
 | *(env only)* | `LOCALAI_MODEL_LOAD_WAIT` | `60s` | How long an inference request waits for a model that is still cold-loading onto a worker before it is answered with `503`, a `Retry-After` header and live staging progress. The request is served the moment the model becomes ready, so a model already most of the way staged needs no client retry. Set to `0` to wait as long as the load takes: only safe when no ingress or load balancer with an idle timeout sits in front. See [Requests for a model that is still loading](#requests-for-a-model-that-is-still-loading). |
 | `--node-heartbeat-checkpoint` | `LOCALAI_NODE_HEARTBEAT_CHECKPOINT` | `60s` | Minimum gap between **durable** heartbeat writes for a worker node. A beat that only carries a fresher timestamp is kept in memory until this interval elapses instead of being written to PostgreSQL; every reported field is compared against the value last written rather than merely tested for presence, so a node's first beat, a changed total VRAM / total disk / GPU vendor, and a free VRAM / RAM / disk reading that has moved more than 256 MiB from the written value all still write immediately, and a node that is not active is never suppressed. Set it below the worker's `--heartbeat-interval` to restore a write per beat. See [Heartbeat writes and stale-node detection](#heartbeat-writes-and-stale-node-detection). |
 | `--stale-node-threshold` | `LOCALAI_STALE_NODE_THRESHOLD` | `5m` | How long a node may go without a **durable** heartbeat before the health monitor marks it `offline`. Because `--node-heartbeat-checkpoint` holds back a beat that only carries a fresher timestamp, this has to stay comfortably wider than that interval: raising the checkpoint without raising this marks healthy, beating nodes offline. Neither the per-model gRPC health check nor request-time failure reads `last_heartbeat`, so neither is affected by this knob. See [Heartbeat writes and stale-node detection](#heartbeat-writes-and-stale-node-detection). |
+| `--drain-timeout` | `LOCALAI_DRAIN_TIMEOUT` | `10m` | How long a [drained](#draining-a-node) worker keeps the models it serves while their replacements load on other nodes. After it, what is left on the node is removed. A drain request can set its own deadline with `?timeout=`. |
 | `--model-config-resync-interval` | `LOCALAI_MODEL_CONFIG_RESYNC_INTERVAL` | `30s` | How often each frontend compares its model configs with the shared models directory, to apply a change whose NATS message it missed. A frontend that missed a message serves the old config for at most this long. See [Model configs across frontends](#model-configs-across-frontends). |
 | `--expose-node-header` | `LOCALAI_EXPOSE_NODE_HEADER` | `false` | When enabled, inference responses carry an `X-LocalAI-Node` header with the ID of the worker node that served the request. Coverage spans the OpenAI-compatible endpoints (chat completions, completions, embeddings, audio transcriptions, audio speech / TTS, image generations, image inpainting), the Jina rerank endpoint (`/v1/rerank`), the VAD endpoints (`/v1/vad`, `/vad`), and the Anthropic Messages (`/v1/messages`) and Ollama (`/api/chat`, `/api/generate`, `/api/embed`) shims. Useful for debugging, observability and load-balancer attribution. Off by default: the node ID reveals internal cluster topology and should not be exposed on a public endpoint. Best-effort: under heavy concurrency for the same model across multiple replicas, the header may reflect a recent routing decision rather than this exact request's. Acceptable for observability and debugging. |
 
@@ -495,6 +496,9 @@ This worker holds one route: the WebSocket tunnel to the frontend. Add `--nats-u
 |------|---------|---------|-------------|
 | `--addr` | `LOCALAI_ADDR` | *(empty)* | Address where this worker is reachable (`host:port`). The port is the base for gRPC backends. A worker on the tunnel only with no address binds its backends to loopback. See [Worker profiles](#worker-profiles). |
 | `--grpc-max-port` | `LOCALAI_GRPC_MAX_PORT` | `65535` | Highest port the worker may assign to a backend gRPC process. Each backend gets its own port, allocated upward from the base port, so the width of `[base port, this]` caps how many backends this worker can run at once (see [Backend gRPC port range](#backend-grpc-port-range)) |
+| `--prompt-cache-disk` | `LOCALAI_PROMPT_CACHE_DISK` | `true` | Keep the prompt cache of long llama.cpp prompts on the local disk of this worker, under the root that `--prompt-cache-path` or `--data-path` gives. `false` turns it off on this worker only. The other settings (time to live, cap, quota, marks) and the clears come from the frontends over the control channel; the worker runs the defaults until it gets them. See [Disk Prompt Cache]({{%relref "/models/disk-prompt-cache#distributed-mode" %}}) |
+| `--prompt-cache-path` | `LOCALAI_PROMPT_CACHE_PATH` | *(empty)* | Directory of the disk prompt cache of this worker. It must be on a local disk. On a network disk, or when it is not writable, the cache is off on this worker. See [Worker setup]({{%relref "/models/disk-prompt-cache#worker-setup" %}}) |
+| `--data-path` | `LOCALAI_DATA_PATH` | *(empty)* | Data directory of this worker. The disk prompt cache goes under it, in `prompt-cache`. Empty: the cache uses `<models path>/../data/prompt-cache` when that is on a local disk, else it is off. In a container, mount a local volume here |
 | `--advertise-addr` | `LOCALAI_ADVERTISE_ADDR` | *(auto)* | Address the frontend uses to reach this node (see below) |
 | `--http-addr` | `LOCALAI_HTTP_ADDR` | gRPC port - 1 | HTTP file transfer server bind address |
 | `--advertise-http-addr` | `LOCALAI_ADVERTISE_HTTP_ADDR` | *(auto)* | HTTP address the frontend uses for file transfer |
@@ -513,6 +517,9 @@ This worker holds one route: the WebSocket tunnel to the frontend. Add `--nats-u
 | `--registration-require-auth` | `LOCALAI_REGISTRATION_REQUIRE_AUTH` | `false` | Refuse to start the HTTP file-transfer server when the worker has no data plane token, that is, when it has neither a registration token nor a frontend that hands one over (it would otherwise fail open) |
 | `--distributed-require-auth` | `LOCALAI_DISTRIBUTED_REQUIRE_AUTH` | `false` | Umbrella switch implying both `--registration-require-auth` and `--nats-require-auth` |
 | `--heartbeat-interval` | `LOCALAI_HEARTBEAT_INTERVAL` | `10s` | Interval between heartbeat pings |
+| `--shutdown-abort-wait` | `LOCALAI_SHUTDOWN_ABORT_WAIT` | `30s` | On `SIGTERM`, how long the worker waits for the loads it aborts to end (their processes exit and their downloads stop) before it drains. A load that did not end in this time is released by the frontend after its stop window. See [Worker shutdown](#worker-shutdown) |
+| `--shutdown-request-wait` | `LOCALAI_SHUTDOWN_REQUEST_WAIT` | `30s` | On `SIGTERM`, how long the worker waits for the requests in flight on its models before it deregisters. See [Worker shutdown](#worker-shutdown) |
+| `--shutdown-timeout` | `LOCALAI_SHUTDOWN_TIMEOUT` | `60s` | On `SIGTERM`, the bound of the drain, the wait for requests and the deregistration together. Stopping the backends comes after it |
 | `--routes` | `LOCALAI_WORKER_ROUTES` | *(derived)* | Routes this worker holds, comma separated: `nats`, `tunnel`, or both. When empty: `nats` when `--nats-url` is set (never with `--join`), and always `tunnel`. See [Workers and routes](#workers-and-routes) |
 | `--nats-url` | `LOCALAI_NATS_URL` | *(empty)* | NATS server URL. With it the worker holds the NATS route. With `--routes nats` and no URL, the worker uses the NATS address that the frontend hands over |
 | `--nats-jwt` | `LOCALAI_NATS_JWT` | *(empty)* | Optional override for the `nats_jwt` returned at registration |
@@ -524,6 +531,10 @@ This worker holds one route: the WebSocket tunnel to the frontend. Add `--nats-u
 | `--backends-path` | `LOCALAI_BACKENDS_PATH` | `./backends` | Path to backend binaries |
 | `--models-path` | `LOCALAI_MODELS_PATH` | `./models` | Path to model files |
 | `--vram-budget` | `LOCALAI_VRAM_BUDGET` | *(empty)* | Cap the VRAM this node advertises for model placement, as a percentage (e.g. `80%`) or an absolute amount (e.g. `12GB`). Empty uses all detected VRAM. See [Per-node VRAM budget](#per-node-vram-budget). |
+| `--vram-total` | `LOCALAI_VRAM_TOTAL` | *(empty)* | Total VRAM this node reports, as an absolute amount (e.g. `40GB`). Replaces GPU detection; use it when the detected VRAM is wrong. `LOCALAI_VRAM_BUDGET` is then resolved against this total. Empty uses detection. See [Per-node VRAM budget](#per-node-vram-budget). |
+| `--max-active-backends` | `LOCALAI_MAX_ACTIVE_BACKENDS` | *(empty)* | Models kept loaded on this node (`0` = no limit). Empty uses the cluster setting. See [Per-node memory limits](#per-node-memory-limits). |
+| `--model-swap` | `LOCALAI_MODEL_SWAP` | *(empty)* | `true` or `false`: unload the least recently used idle model on this node to make room for another. Empty uses the cluster setting. |
+| `--memory-reclaimer-threshold` | `LOCALAI_MEMORY_RECLAIMER_THRESHOLD` | *(empty)* | Memory use (0 to 1) above which idle models on this node are unloaded. Setting it turns the memory reclaimer on for this node, even when the cluster setting leaves it off. Empty uses the cluster setting. |
 
 {{% callout style="tip" %}}
 **Advertise address:** The `--addr` flag is the local bind address for gRPC. The `--advertise-addr` is the address the frontend stores and uses to reach the worker via gRPC. If not set, the worker auto-derives it by replacing `0.0.0.0` with the OS hostname (which in Docker is the container ID, resolvable via Docker DNS). Set `--advertise-addr` explicitly when the auto-detected hostname is not routable from the frontend (e.g., in Kubernetes, use the pod's service DNS name).
@@ -828,7 +839,7 @@ Used by workers themselves (registration, heartbeat, etc.), exempt from global a
 |--------|------|-------------|
 | `POST` | `/api/node/register` | Register a new worker |
 | `POST` | `/api/node/:id/heartbeat` | Update heartbeat timestamp |
-| `POST` | `/api/node/:id/drain` | Mark self as draining |
+| `POST` | `/api/node/:id/drain` | Drain self. The worker sends it when it shuts down, with `{"shutdown":true,"loads_ended":true}` once it stopped its loads (see [Worker shutdown](#worker-shutdown)) |
 | `GET` | `/api/node/:id/models` | Query own loaded models |
 | `POST` | `/api/node/:id/split` | Report the P2P host and the [model-split workers]({{% relref "/administration/p2p-model-split" %}}#distributed-mode) of the node; the answer says whether the node is a split server and lists the workers attached to it and the relays that admit it. A node that registered with the token is bound to the first peer it reports; another peer gets `409` until the node registers again |
 | `DELETE` | `/api/node/:id` | Deregister self |
@@ -846,7 +857,8 @@ Used by the WebUI and admin API consumers. Requires admin authentication.
 | `GET` | `/api/nodes/:id/models` | List models loaded on a worker |
 | `GET` | `/api/nodes/models` | List loaded model replicas on healthy workers |
 | `DELETE` | `/api/nodes/:id` | Admin-delete a worker |
-| `POST` | `/api/nodes/:id/drain` | Admin-drain a worker |
+| `POST` | `/api/nodes/:id/drain` | [Drain](#draining-a-node) a worker. `?force=true` removes its models at once; `?timeout=15m` sets the deadline. Answers with `status`, `immediate`, `drain_deadline` and `leaving_replicas` |
+| `POST` | `/api/nodes/:id/resume` | Cancel the drain of a worker: it is `healthy` again and its models stay |
 | `POST` | `/api/nodes/:id/approve` | Approve a pending worker node |
 | `POST` | `/api/nodes/:id/backends/install` | Install a backend on a worker |
 | `POST` | `/api/nodes/:id/backends/upgrade` | Update (force-reinstall) a backend on a worker. Answers 202 with a job ID; the worker stops the running processes of the backend first. Answers 404 `not_installed` or 409 `no_update` at once when there is nothing to do, and 409 `stale` when the optional `expected_to` is no longer the available build (see [Starting an upgrade]({{% relref "/models/backends#checking-for-backend-updates" %}})) |
@@ -855,7 +867,10 @@ Used by the WebUI and admin API consumers. Requires admin authentication.
 | `POST` | `/api/models/:id/load-cancel` | Cancel one load attempt (`{"job_id": "..."}`) |
 | `POST` | `/api/nodes/:id/models/delete` | Delete model files from a worker |
 | `PUT` | `/api/nodes/:id/vram-budget` | Set a VRAM budget for a worker (`{"value":"80%"}`) |
-| `DELETE` | `/api/nodes/:id/vram-budget` | Clear a worker's VRAM budget (revert to all detected VRAM) |
+| `DELETE` | `/api/nodes/:id/vram-budget` | Clear the admin VRAM budget of a worker (the worker's own budget, else the cluster one, applies again) |
+| `GET` | `/api/nodes/:id/limits` | The memory limits a worker runs with, and the source of each (`override`, `worker`, `cluster` or `default`) |
+| `PUT` | `/api/nodes/:id/limits` | Override some memory limits of a worker (`max_active_backends`, `vram_budget`, `memory_reclaimer_threshold`, `model_swap`); a key left out keeps its value |
+| `DELETE` | `/api/nodes/:id/limits` | Clear every memory limit override of a worker |
 | `PUT` | `/api/nodes/:id/split-server` | Declare a worker a [split server]({{% relref "/administration/p2p-model-split" %}}#split-servers) (`{"split_server":true}`), or clear it, which detaches its model-split workers |
 | `DELETE` | `/api/nodes/:id/split-server` | Hand the split server declaration back to the `--split-server` flag of the worker |
 
@@ -976,6 +991,56 @@ Two outcomes are deliberately **not** errors:
 On a mixed fleet, every stop against a worker that predates the reply costs the full 15-second wait before falling back. Upgrading the workers removes the delay.
 {{% /callout %}}
 
+### Memory settings across frontends
+
+The settings of **Settings → Models in memory** (models kept loaded, eviction, **Swap models when memory is full**, the watchdog, the memory reclaimer and the GPU memory budget) are cluster settings in distributed mode. They are stored once in the database and every frontend applies the same values. The keys and names do not change: `POST /api/settings` takes them as in single mode.
+
+- **Where they live.** A save through any frontend stores the memory keys in the `cluster_shared_settings` table and sends them to the other frontends over the bus, so a request served by another frontend sees the new values at once. The other keys of the same request (threads, galleries and so on) stay settings of the frontend that took the request, in its `runtime_settings.json`, as before.
+- **Precedence.** Every frontend runs the same memory settings: the stored value of a key, else its built-in default. A frontend's `runtime_settings.json` is not read for these keys; a frontend that finds them there logs a warning at start and ignores them. A frontend's environment (for example `LOCALAI_MAX_ACTIVE_BACKENDS`) only adds the keys that the store does not hold yet, when the frontend starts: the first frontend that sets a key wins. When a later frontend starts with a different value in its environment, it logs a warning and uses the stored value. Change the values in Settings, not in the environment. Single mode is unchanged: there the environment wins over the file.
+- **Revisions.** `GET /api/settings` returns `memory_scope: "cluster"` and `memory_revision`. A save may send that `memory_revision` back: when another admin saved in between, the answer is `409` and nothing is stored. A save without `memory_revision` merges its keys over the stored ones, so two admins who change different keys at the same time both keep their change. The Settings page sends `memory_revision` with every save of a memory setting. On a `409` it says that the settings changed, loads the values in force and asks you to apply your change again.
+- **Where they act.** The scheduler applies the model limit, model swap, the eviction order, the eviction retries and eviction of busy replicas when it places a model. The replica reconciler applies the idle unload (`watchdog_idle_*`, also to models with no scheduling rule; a rule's `min_replicas`, pinned models and warm failover targets stay) and the memory reclaimer (one idle replica per node and tick while the node's memory use is above its threshold). The sweeps run in the reconciler's pass, under its advisory lock, so one frontend runs them at a time. While a node's reclaimer is on, placement keeps `(1 - threshold)` of its GPU memory free.
+- **Distributed state.** Shared (`syncstate` map `settings.memory` with the database as the store). A frontend re-reads the store every 30 seconds and after a reconnect of the bus, so a missed update is repaired. A frontend that cannot open the store logs an error and keeps its local values, like single mode.
+
+### Disk prompt cache across nodes
+
+The [disk prompt cache]({{%relref "/models/disk-prompt-cache#distributed-mode" %}}) keeps long llama.cpp prompts on disk so that a model reload starts warm. Each part has one owner:
+
+| What | Owner |
+|---|---|
+| Cache files | Each worker, on its own local disk, under `--prompt-cache-path`, else `<data path>/prompt-cache`, else `<models path>/../data/prompt-cache` when that is local (see [Worker setup]({{%relref "/models/disk-prompt-cache#worker-setup" %}})). A worker whose root is on a network disk or not writable runs without the cache, and Settings shows why. Its backends write them and its own cleaner deletes them. Frontends never touch them, and no shared storage is used. |
+| Settings (`prompt_cache_disk*`) | The cluster. They are memory settings (see above): stored once in `cluster_shared_settings`, applied on every frontend, and sent to every worker with the control verb `promptcache.sync`. A worker does not read them from its environment; `LOCALAI_PROMPT_CACHE_DISK=false` on a worker can only turn its tier off. |
+| Clears and the purge of a deleted user or device | The cluster. Written to the purge log (table `prompt_cache_purges`) and sent to every online worker at once. A worker that was offline gets the clears it missed when it is back. The log keeps a clear for 30 days; a worker that missed a clear that the log dropped deletes all its entries older than that clear. |
+| Usage | Each worker answers `promptcache.usage`. `GET /api/prompt-cache` lists every worker and a total. |
+
+Table `prompt_cache_node_sync` records, for each worker, the last clear it applied, the settings it runs and its process. One frontend at a time (advisory lock) checks every 30 seconds, and at once after a change of the settings, which workers are behind, and sends them what they miss. A worker that restarted gets the settings again. A clear of everything or of one model deletes only entries last used before the clear was asked for, so a clear sent twice or late deletes nothing newer. A worker older than the verbs is listed as not answering, and keeps its cache until the time to live.
+
+### Per-node memory limits
+
+Four of the cluster memory settings can differ per worker: **models kept loaded** (`max_active_backends`), the **GPU memory budget** (`vram_budget`), the **memory threshold** (`memory_reclaimer_threshold`) and **model swap** (`model_swap`). For each node the value in force comes from, highest first:
+
+1. an admin override for that node (the **Limits** pane of the node on the **Nodes** page, `PUT /api/nodes/:id/limits`, or the `set_node_limits` assistant tool). It survives worker restarts until it is cleared;
+2. the worker's environment (`LOCALAI_MAX_ACTIVE_BACKENDS`, `LOCALAI_VRAM_BUDGET`, `LOCALAI_MEMORY_RECLAIMER_THRESHOLD`, `LOCALAI_MODEL_SWAP`), reported when the worker registers;
+3. the cluster setting (Settings → Models in memory);
+4. the default.
+
+A memory threshold set for one node (by an admin override or by the worker's environment) also turns the memory reclaimer on for that node, even when the cluster setting leaves it off. To stop the reclaimer on such a node, clear its threshold.
+
+A worker that reports unified memory (a GB10, a Thor, Apple silicon) reclaims memory at a threshold of `0.90` while the cluster settings do not name the memory reclaimer: the GPU and the system share one pool there, and a full pool starves the host.
+
+`GET /api/nodes/:id/limits` returns each value with its source. A worker that sends `"want_limits": true` in its heartbeat gets the same object back as `limits` in the reply.
+
+```bash
+# Keep at most one model loaded on this node, and never swap there
+curl -X PUT http://frontend:8080/api/nodes/<node-id>/limits \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"max_active_backends":1,"model_swap":false}'
+
+# Clear every override of the node
+curl -X DELETE http://frontend:8080/api/nodes/<node-id>/limits \
+  -H "Authorization: Bearer <admin-token>"
+```
+
 ### Per-node VRAM budget
 
 Each worker advertises its detected VRAM, and the SmartRouter uses that number when picking a node with enough free memory. You can cap the VRAM a node offers for placement so it never gets scheduled beyond a chosen limit, leaving headroom for other workloads on that machine.
@@ -1002,7 +1067,13 @@ curl -X DELETE http://frontend:8080/api/nodes/<node-id>/vram-budget \
   -H "Authorization: Bearer <admin-token>"
 ```
 
-The value accepts the same formats as the standalone budget: a percentage (`80%`) or an absolute amount (`12GB`, `12GiB`, `12000MB`, or raw bytes). It is a **hard ceiling**: the node's advertised VRAM becomes `min(detected, budget)`, so a budget can only lower the number, never raise it above the hardware. An admin-set node budget is **sticky across worker restarts**: it is stored in the node registry and reapplied when the worker re-registers, so it wins over whatever the worker reports on reconnect. For the underlying semantics and the standalone equivalent, see [VRAM Budget]({{%relref "/models/vram-management#vram-budget-allocation-ceiling" %}}).
+The value accepts the same formats as the standalone budget: a percentage (`80%`) or an absolute amount (`12GB`, `12GiB`, `12000MB`, or raw bytes). It is a **hard ceiling**: the budget keeps `total - budget` of the node's VRAM out of reach, so the free VRAM the scheduler sees is the reported free VRAM minus that reserve. A node with a `12GB` budget on 24 GB that already uses 4 GB has 8 GB left for new models, not 12. A budget can only lower the number, never raise it above the hardware. When no admin budget and no worker budget is set, the **GPU memory budget** of Settings → Models in memory applies to each worker (see [Per-node memory limits](#per-node-memory-limits)). An admin-set node budget is **sticky across worker restarts**: it is stored in the node registry and reapplied when the worker re-registers, so it wins over whatever the worker reports on reconnect. For the underlying semantics and the standalone equivalent, see [VRAM Budget]({{%relref "/models/vram-management#vram-budget-allocation-ceiling" %}}).
+
+The Nodes page draws the VRAM bar of a node with a budget against the budget, and shows the detected total next to it, so an idle node with a `40GB` budget reads 0 of 40 GB in use, not 148 of 188 GB.
+
+**Budget and total are different settings.** `LOCALAI_VRAM_BUDGET` is the share of the node's VRAM that LocalAI may use. `LOCALAI_VRAM_TOTAL` is how much VRAM the node has, and replaces what GPU detection found. Use the total when detection is wrong (see [Troubleshooting]({{%relref "/administration/troubleshooting#wrong-vram-total-detected" %}})), and the budget to keep headroom. With both set, the budget applies to the total: `LOCALAI_VRAM_TOTAL=40GB` with `LOCALAI_VRAM_BUDGET=80%` offers 32 GB for placement.
+
+Runtime state: none is added. The worker reads the total at start and reports it on registration; the frontend stores it in the node registry with the other node fields, so every frontend sees the same figure.
 
 ### Disk headroom
 
@@ -1064,7 +1135,60 @@ To skip manual approval and let nodes join immediately, set `--auto-approve-node
 | `healthy` | Node is active and responding to heartbeats |
 | `unhealthy` | The HealthMonitor found no live route to the node: it heartbeats, but neither NATS nor its tunnel is live (see [Node health and routes](#node-health-and-routes)), or it missed heartbeats while auto-offline is off. Status only: nothing of the node is deleted, and it becomes `healthy` again when a route is live |
 | `offline` | Node is temporarily offline (graceful shutdown or stale heartbeat). The node row is preserved so re-registration restores the previous approval status without requiring re-approval |
-| `draining` | Node is shutting down gracefully - no new requests are routed to it, existing in-flight requests are allowed to complete |
+| `draining` | Nothing new is placed on the node. Its loaded models keep serving until replacements load on other nodes, then leave. See [Draining a node](#draining-a-node) |
+
+## Draining a node
+
+Drain a node before you take it out of service: maintenance, a GPU lease, a new image. A drain does not drop the models of the node. It replaces them first:
+
+1. The node gets the status `draining` at once. No new model is placed on it, by a request or by the reconciler.
+2. Its loaded models keep serving. A replica on the draining node has the lowest preference: a request goes to it when no healthy node has the model, or when it runs fewer requests than the least busy replica on a healthy node. On a tie, the healthy replica wins.
+3. The reconciler does not count a replica on a draining node. A model with a scheduling rule gets replicas on other matching nodes up to its `min_replicas` (or one per matching node with `spread_all`), with the usual placement rules (node selector, memory fit, model limits). A model with no rule (or a rule with no floor) gets one replacement when the replica on the draining node is its last one and the model is in use: it is pinned, a request runs on it, or it served a request within the idle window. The replacement goes to a healthy node that matches the node selector of the rule; when none matches, nothing is placed and the replica serves until the deadline. A model that is not in use is not replaced.
+4. A replica leaves the draining node, and its backend is stopped, when the model has enough replicas on healthy nodes, once the requests that run on it finish. A replica on an `unhealthy` node does not count, because it takes no requests. An idle replica that no model needs leaves on the next reconciler pass.
+5. At the drain deadline (`--drain-timeout`, default `10m`, or `?timeout=` of the request) whatever is still on the node is removed, also when no replacement could be placed.
+
+A drain is never a window with zero replicas for a model that has a replacement: the old replica serves until the new one is loaded.
+
+Loads that run on the node when the drain starts are cancelled, because a model must not land on a node that leaves.
+
+**Force.** `POST /api/nodes/:id/drain?force=true` takes the models of the node out of routing at once, as drain did before this change. The reconciler then places replacements for the rules on its next pass. Use it when the node must stop serving now.
+
+**A node that does not answer.** An `unhealthy` or `offline` node drains at once: there is nothing on it to wait for. A draining node that stops answering loses its models when the health monitor sees no live route that carries work and a heartbeat older than `--stale-node-threshold` (`5m` by default), so it is not routed to until the drain deadline. Before that, a request that reaches one of its replicas finds the backend dead in the health check before the request is sent, and that replica is removed then.
+
+**Resume.** `POST /api/nodes/:id/resume` (or **Resume** on the Nodes page) cancels the drain. The node is `healthy` again and the models still on it stay. A worker that registers again (it restarted) also ends the drain of its node.
+
+**Status.** `GET /api/nodes` and `GET /api/nodes/:id` show `status: draining`, `drain_deadline` and `leaving_replicas`, the number of loaded models still on the node. The Nodes page shows **Draining**, the count and the deadline. The assistant tool `drain_node` (actions `drain` and `resume`) does the same as the API.
+
+**Recommended sequence for external tools** (a GPU lease tool, a maintenance script, a cluster autoscaler):
+
+1. `POST /api/nodes/:id/drain` (with `?timeout=` if the default does not fit).
+2. Poll `GET /api/nodes/:id` until `leaving_replicas` is `0`.
+3. Stop the worker. A worker that is stopped earlier is safe, but its models are removed when it goes, and a model that had no replacement yet is not served until one loads.
+
+### Worker shutdown
+
+A worker that gets `SIGTERM` (or a `node.stop` from the frontend) shuts down in this order:
+
+1. It refuses new backend installs and upgrades at once. A load sent to it fails with `the worker is shutting down`; the frontend marks the node `draining`, so placement skips it, and answers the request with `503` and `Retry-After`. The next attempt loads the model on another node.
+2. It aborts the loads in progress: it cancels their downloads, kills their backend processes, and waits until the processes exited and the installs returned, for up to `--shutdown-abort-wait` (`30s`) in total. A load that is still downloading has no process yet; it does not start one after this point. A stop the frontend sends for a process that is already being stopped is acknowledged as soon as that process exited, or answered "already stopping" after 5 seconds, before the frontend stops waiting for the reply.
+3. It drains its node through `POST /api/node/:id/drain` with `{"shutdown":true}`, and adds `"loads_ended":true` when every load ended in step 2. The frontend cancels the load jobs of the node and, when the worker vouched that the loads ended, releases them at once instead of holding the model for the 150 second stop window. A request or the reconciler then loads the model on another node within seconds. A load that did not end in the abort wait is released after the stop window, as for a worker that died.
+4. Its loaded models keep serving the requests in flight for up to `--shutdown-request-wait` (`30s`). New requests go to other replicas when there are any. The reconciler starts the replacements of the [drain](#draining-a-node) in this window.
+5. It deregisters (`offline`): the frontend removes its replicas, and the reconciler places what is still missing.
+6. It stops its backends: each gets a bounded `Free()` call and is then stopped.
+
+Step 2 is bounded by `--shutdown-abort-wait` (`30s`), and steps 3 to 5 by `--shutdown-timeout` (`60s`). The total shutdown time is at most the sum of the two bounds (`90s` with the defaults) plus the stop of the backends, which runs one backend after the other: up to 5 seconds of `Free()` for each, plus the time its process takes to exit. Step 2 takes seconds in practice: a killed process group exits at once.
+
+### Kubernetes
+
+LocalAI ships no manifests for the workers; these are the settings that fit the shutdown above.
+
+- **`terminationGracePeriodSeconds`**: cover the abort wait, the shutdown timeout and the stop of the backends. With the defaults (`30s` + `60s`), use at least `120`; with several large backends per worker, `150`. A pod killed before the end loses the acknowledgement of its loads, and the frontend then holds those models for the stop window.
+- **`preStop`**: not needed. The worker handles `SIGTERM` itself (steps 1 to 6). Use a `preStop` hook that calls `POST /api/nodes/<node id>/drain` with an admin key only if you want the drain to start before the pod receives `SIGTERM`, for example to give replacements more time than `--shutdown-request-wait`. The hook time counts against `terminationGracePeriodSeconds`.
+- **Rolling updates** of GPU workers: `maxUnavailable: 1` and `maxSurge: 0`. A surge pod usually cannot get a GPU, and taking down more than one worker at a time can remove every replica of a model.
+- **PodDisruptionBudget**: `maxUnavailable: 1` on the worker pods, so a node drain of the cluster does not take several workers down at once.
+- **Redeploying on every image**: a rollout restarts each worker, and every model that worker held is loaded again somewhere. A load in progress is aborted and starts again on another node. When the CD redeploys workers on every build, a large model can be reloaded many times a day; pin the worker image, or roll out workers on a schedule.
+
+Where the state lives: the drain is the `status` and `drain_deadline` columns of the node in PostgreSQL, and the replica rows. Every frontend reads the same drain, and the reconciler pass that moves the replicas runs on one frontend at a time under its advisory lock. Nothing of a drain is kept in the memory of a frontend.
 
 ### Node health and routes
 

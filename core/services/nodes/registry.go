@@ -123,6 +123,19 @@ type BackendNode struct {
 	// worker's re-registration value does not clobber it (mirrors
 	// MaxReplicasPerModelManuallySet).
 	VRAMBudgetManuallySet bool `gorm:"column:vram_budget_manually_set;default:false" json:"vram_budget_manually_set"`
+	// LimitsWorker are the memory settings the worker's env set (NodeLimits
+	// as JSON), stored at registration. LimitsOverride are the ones an admin
+	// set for this node, sticky across worker restarts. See node_limits.go.
+	LimitsWorker   string `gorm:"column:limits_worker;type:text" json:"limits_worker,omitempty"`
+	LimitsOverride string `gorm:"column:limits_override;type:text" json:"limits_override,omitempty"`
+	// UnifiedMemory is reported by a worker whose GPU shares the system
+	// memory (for example a GB10 or Apple silicon).
+	UnifiedMemory bool `gorm:"column:unified_memory;default:false" json:"unified_memory,omitempty"`
+	// HeadroomVRAM is the GPU memory the memory reclaimer of this node keeps
+	// free when a model is placed: (1 - threshold) of its memory while the
+	// reclaimer is on, else 0. Refreshed on each heartbeat; the placement
+	// queries subtract it from the free VRAM.
+	HeadroomVRAM uint64 `gorm:"column:headroom_vram;default:0" json:"headroom_vram,omitempty"`
 	// Version is the LocalAI build version reported by the worker at
 	// registration. Empty for workers registered before this field existed.
 	Version string `gorm:"column:version;size:64" json:"version,omitempty"`
@@ -162,8 +175,12 @@ type BackendNode struct {
 	APIKeyID        string    `gorm:"size:36" json:"-"` // auto-provisioned API key ID (for cleanup)
 	AuthUserID      string    `gorm:"size:36" json:"-"` // auto-provisioned user ID (for cleanup)
 	LastHeartbeat   time.Time `gorm:"column:last_heartbeat" json:"last_heartbeat"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	// DrainDeadline is set while the node drains: the time at which the
+	// replicas still on it are removed even if no replacement is loaded yet.
+	// Nil when the node does not drain, or drains at once (see DrainNode).
+	DrainDeadline *time.Time `gorm:"column:drain_deadline" json:"drain_deadline,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 const (
@@ -192,6 +209,9 @@ const (
 	ColMaxReplicasPerModel = "max_replicas_per_model"
 	ColVRAMBudget          = "vram_budget"
 	ColVRAMBudgetBytes     = "vram_budget_bytes"
+	ColLimitsWorker        = "limits_worker"
+	ColLimitsOverride      = "limits_override"
+	ColHeadroomVRAM        = "headroom_vram"
 )
 
 var (
@@ -231,9 +251,12 @@ type NodeModel struct {
 	CleanupNextRetryAt   *time.Time `gorm:"column:cleanup_next_retry_at" json:"cleanup_next_retry_at,omitempty"`
 	// LoadGeneration names the load attempt that created this replica row. A row
 	// still staging or loading whose attempt no longer has a job is abandoned.
-	LoadGeneration string    `gorm:"column:load_generation;size:36;not null;default:''" json:"-"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	LoadGeneration string `gorm:"column:load_generation;size:36;not null;default:''" json:"-"`
+	// SizeBytes is the memory estimate the replica was placed with, for the
+	// largest-first eviction order (size_aware_eviction). 0 when unknown.
+	SizeBytes uint64    `gorm:"column:size_bytes;default:0" json:"size_bytes,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // ModelLoadInfo is per-model load metadata kept independently of NodeModel rows
@@ -406,6 +429,18 @@ type NodeWithExtras struct {
 	// tunnel), if it is live: what the health monitor judges the node by. The
 	// registry does not fill it; the node endpoints do, in distributed mode.
 	RouteState []RouteState `json:"route_state,omitempty"`
+	// LeavingReplicas is, on a draining node, the number of loaded replicas
+	// still on it: they serve until a replacement loads elsewhere, the model no
+	// longer needs them, or the drain deadline passes. Zero on any other node.
+	LeavingReplicas int `json:"leaving_replicas,omitempty"`
+}
+
+// leavingReplicas is the LeavingReplicas of a node with loaded replicas.
+func leavingReplicas(status string, loaded int) int {
+	if status == StatusDraining {
+		return loaded
+	}
+	return 0
 }
 
 // PendingBackendOp is a durable intent for a backend lifecycle operation
@@ -550,6 +585,10 @@ type NodeRegistry struct {
 	// startup wiring writes it while request handling reads it.
 	aliasResolver atomic.Pointer[AliasResolver]
 
+	// memoryPolicy reads the cluster memory settings (see node_limits.go);
+	// nil means DefaultMemoryPolicy.
+	memoryPolicy atomic.Pointer[MemoryPolicySource]
+
 	// heartbeatCheckpoint bounds how often a beat that carries only a fresher
 	// timestamp reaches the database. Zero writes every beat.
 	heartbeatCheckpoint time.Duration
@@ -558,6 +597,10 @@ type NodeRegistry struct {
 
 	// loadHist feeds NodeWithExtras.LoadHistory.
 	loadHist loadHistory
+
+	// drainTimeout is the default deadline of a drain that names none. Zero
+	// means DefaultDrainTimeout. See drain.go.
+	drainTimeout atomic.Int64
 }
 
 // AddReplicaRemovedHook registers a callback invoked after a replica row for
@@ -639,6 +682,8 @@ type heartbeatSnapshot struct {
 	// suppressed beat costs no query at all.
 	availableVRAM uint64
 	vramCeiling   uint64
+	// vramTotal is the raw total the ceiling was applied against.
+	vramTotal     uint64
 	availableRAM  uint64
 	availableDisk uint64
 	totalVRAM     uint64
@@ -758,14 +803,24 @@ func (r *NodeRegistry) ResolveVRAMBudgetBytesForTest(budget string, totalVRAM ui
 	return r.resolveVRAMBudgetBytes(budget, totalVRAM)
 }
 
-// capAvailable applies a node's resolved budget ceiling to a reported available
-// figure. ceilingBytes == 0 means no cap; otherwise the result is the smaller
-// of the two so the SQL scheduler never sees more free VRAM than the budget.
-func capAvailable(reported, ceilingBytes uint64) uint64 {
-	if ceilingBytes == 0 || reported <= ceilingBytes {
+// capAvailable applies a node's resolved budget ceiling to a reported free
+// VRAM figure. ceilingBytes == 0 means no cap. The budget keeps
+// total - ceiling of the node's memory out of reach, so the free VRAM the
+// scheduler may use is the reported free minus that reserve: a node with a
+// 12 GB budget on 24 GB that already uses 4 GB has 8 GB left, not 12.
+// Without a known total the ceiling is applied as a plain cap.
+func capAvailable(reported, ceilingBytes, totalBytes uint64) uint64 {
+	if ceilingBytes == 0 {
 		return reported
 	}
-	return ceilingBytes
+	if totalBytes == 0 || ceilingBytes >= totalBytes {
+		return min(reported, ceilingBytes)
+	}
+	reserve := totalBytes - ceilingBytes
+	if reported <= reserve {
+		return 0
+	}
+	return reported - reserve
 }
 
 // Register adds or updates a backend node.
@@ -822,16 +877,18 @@ func (r *NodeRegistry) Register(ctx context.Context, node *BackendNode, autoAppr
 			node.SplitServerManuallySet = true
 		}
 		// Preserve an admin-set VRAM budget across worker re-registration;
-		// otherwise the worker-reported budget (wired in a later task) wins.
+		// otherwise the worker's budget, else the cluster default, applies.
 		if existing.VRAMBudgetManuallySet {
 			node.VRAMBudget = existing.VRAMBudget
 			node.VRAMBudgetManuallySet = true
+		} else {
+			node.VRAMBudget = r.effectiveVRAMBudget(node)
 		}
 		// Resolve the effective budget against the (possibly updated) raw total
 		// VRAM and cap the reported available so the SQL scheduler places against
 		// budgeted capacity. TotalVRAM is written raw.
 		node.VRAMBudgetBytes = r.resolveVRAMBudgetBytes(node.VRAMBudget, node.TotalVRAM)
-		node.AvailableVRAM = capAvailable(node.AvailableVRAM, node.VRAMBudgetBytes)
+		node.AvailableVRAM = capAvailable(node.AvailableVRAM, node.VRAMBudgetBytes, node.TotalVRAM)
 		if err := updateDB.Updates(node).Error; err != nil {
 			return fmt.Errorf("updating node %s: %w", node.Name, err)
 		}
@@ -852,6 +909,15 @@ func (r *NodeRegistry) Register(ctx context.Context, node *BackendNode, autoAppr
 				return fmt.Errorf("clearing worker VRAM budget for node %s: %w", node.Name, err)
 			}
 		}
+		// The worker's limits and its memory kind are the worker's to report:
+		// write them even when empty or false, which Updates(struct) skips.
+		// A worker that registers again ends any drain of its node: it
+		// restarted, so it holds no replica to wait for.
+		if err := r.db.WithContext(ctx).Model(&BackendNode{}).Where("id = ?", node.ID).
+			Updates(map[string]any{ColLimitsWorker: node.LimitsWorker, "unified_memory": node.UnifiedMemory, "drain_deadline": nil}).Error; err != nil {
+			return fmt.Errorf("recording the worker limits of node %s: %w", node.Name, err)
+		}
+		node.LimitsOverride = existing.LimitsOverride
 		// The start flag of the worker decides while the admin has not: write
 		// it even when false, which Updates(struct) above skips.
 		if !existing.SplitServerManuallySet {
@@ -925,10 +991,11 @@ func (r *NodeRegistry) Register(ctx context.Context, node *BackendNode, autoAppr
 		} else {
 			node.Status = StatusPending
 		}
-		// Resolve a worker-reported budget (wired in a later task) against the
+		// Resolve the worker's budget, else the cluster default, against the
 		// node's raw total VRAM and cap the reported available accordingly.
+		node.VRAMBudget = r.effectiveVRAMBudget(node)
 		node.VRAMBudgetBytes = r.resolveVRAMBudgetBytes(node.VRAMBudget, node.TotalVRAM)
-		node.AvailableVRAM = capAvailable(node.AvailableVRAM, node.VRAMBudgetBytes)
+		node.AvailableVRAM = capAvailable(node.AvailableVRAM, node.VRAMBudgetBytes, node.TotalVRAM)
 		if err := r.db.WithContext(ctx).Create(node).Error; err != nil {
 			return fmt.Errorf("creating node %s: %w", node.Name, err)
 		}
@@ -976,8 +1043,13 @@ func (r *NodeRegistry) ApproveNode(ctx context.Context, nodeID string) error {
 
 // setStatus updates a node's status column in the database.
 func (r *NodeRegistry) setStatus(ctx context.Context, nodeID, status string) error {
+	updates := map[string]any{"status": status}
+	if status != StatusDraining {
+		// A node that leaves the draining state is no longer drained.
+		updates["drain_deadline"] = nil
+	}
 	result := r.db.WithContext(ctx).Model(&BackendNode{}).
-		Where("id = ?", nodeID).Update("status", status)
+		Where("id = ?", nodeID).Updates(updates)
 	if result.Error != nil {
 		return fmt.Errorf("setting node %s to %s: %w", nodeID, status, result.Error)
 	}
@@ -1063,7 +1135,7 @@ func (r *NodeRegistry) FindNodeWithVRAM(ctx context.Context, minBytes uint64) (*
 	// Try idle nodes with enough effectively-free VRAM first, prefer the one
 	// with most free VRAM (after deducting the in-tick reservation).
 	var node BackendNode
-	err := db.Where("status = ? AND node_type = ? AND (available_vram - reserved_vram) >= ? AND id NOT IN (?)",
+	err := db.Where("status = ? AND node_type = ? AND (available_vram - reserved_vram - headroom_vram) >= ? AND id NOT IN (?)",
 		StatusHealthy, NodeTypeBackend, minBytes, loadedModels).
 		Scopes(r.weightTail(ctx, "(available_vram - reserved_vram) DESC")).
 		First(&node).Error
@@ -1072,7 +1144,7 @@ func (r *NodeRegistry) FindNodeWithVRAM(ctx context.Context, minBytes uint64) (*
 	}
 
 	// Fall back to least-loaded nodes with enough effectively-free VRAM
-	err = db.Where("status = ? AND node_type = ? AND (available_vram - reserved_vram) >= ?",
+	err = db.Where("status = ? AND node_type = ? AND (available_vram - reserved_vram - headroom_vram) >= ?",
 		StatusHealthy, NodeTypeBackend, minBytes).
 		Joins("LEFT JOIN (?) AS load ON load.node_id = backend_nodes.id", subquery).
 		Scopes(r.weightTail(ctx, "COALESCE(load.total_inflight, 0) ASC, (backend_nodes.available_vram - backend_nodes.reserved_vram) DESC")).
@@ -1247,7 +1319,7 @@ func heartbeatMaterial(prev heartbeatSnapshot, update *HeartbeatUpdate) bool {
 	// while the persisted value never moves, so suppression is defeated on
 	// precisely the nodes that have a budget set.
 	if update.AvailableVRAM != nil &&
-		absDiff(capAvailable(*update.AvailableVRAM, prev.vramCeiling), prev.availableVRAM) > heartbeatMaterialDelta {
+		absDiff(capAvailable(*update.AvailableVRAM, prev.vramCeiling, prev.vramTotal), prev.availableVRAM) > heartbeatMaterialDelta {
 		return true
 	}
 	if update.AvailableRAM != nil && absDiff(*update.AvailableRAM, prev.availableRAM) > heartbeatMaterialDelta {
@@ -1263,7 +1335,7 @@ func heartbeatMaterial(prev heartbeatSnapshot, update *HeartbeatUpdate) bool {
 // beat compares like with like. ceiling is the VRAM budget the write resolved;
 // it is kept so the next beat can cap its own reading without re-reading the
 // column, and free VRAM is stored capped for the same reason the column is.
-func (r *NodeRegistry) recordHeartbeatWrite(nodeID string, update *HeartbeatUpdate, ceiling uint64) {
+func (r *NodeRegistry) recordHeartbeatWrite(nodeID string, update *HeartbeatUpdate, ceiling, total uint64) {
 	r.hbMu.Lock()
 	defer r.hbMu.Unlock()
 
@@ -1274,6 +1346,7 @@ func (r *NodeRegistry) recordHeartbeatWrite(nodeID string, update *HeartbeatUpda
 	next := r.hbLastWrite[nodeID]
 	next.writtenAt = time.Now()
 	next.vramCeiling = ceiling
+	next.vramTotal = total
 	if update != nil {
 		if update.GPUVendor != "" {
 			next.gpuVendor = update.GPUVendor
@@ -1285,7 +1358,7 @@ func (r *NodeRegistry) recordHeartbeatWrite(nodeID string, update *HeartbeatUpda
 			next.totalDisk = *update.TotalDisk
 		}
 		if update.AvailableVRAM != nil {
-			next.availableVRAM = capAvailable(*update.AvailableVRAM, ceiling)
+			next.availableVRAM = capAvailable(*update.AvailableVRAM, ceiling, next.vramTotal)
 		}
 		if update.AvailableRAM != nil {
 			next.availableRAM = *update.AvailableRAM
@@ -1393,15 +1466,19 @@ func (r *NodeRegistry) Heartbeat(ctx context.Context, nodeID string, update *Hea
 		ColLastHeartbeat: time.Now(),
 	}
 
-	var ceiling uint64
+	var ceiling, total uint64
 	if update != nil {
 		if update.AvailableVRAM != nil {
 			// Cap the reported available against the node's resolved budget
 			// ceiling (0 = none) so the SQL scheduler only ever sees budgeted
 			// capacity. TotalVRAM stays raw (written below).
-			db.Model(&BackendNode{}).
-				Select(ColVRAMBudgetBytes).Where("id = ?", nodeID).Scan(&ceiling)
-			updates[ColAvailableVRAM] = capAvailable(*update.AvailableVRAM, ceiling)
+			var headroom uint64
+			ceiling, total, headroom = r.vramCeiling(ctx, nodeID)
+			if update.TotalVRAM != nil {
+				total = *update.TotalVRAM
+			}
+			updates[ColAvailableVRAM] = capAvailable(*update.AvailableVRAM, ceiling, total)
+			updates[ColHeadroomVRAM] = headroom
 			// The worker is the source of truth for actual free VRAM.
 			// Whenever it sends us a fresh reading, the in-tick soft
 			// reservation is no longer needed — clear it. (See ReserveVRAM.)
@@ -1434,7 +1511,7 @@ func (r *NodeRegistry) Heartbeat(ctx context.Context, nodeID string, update *Hea
 
 	// Recorded with the ceiling this write actually resolved, so the snapshot
 	// and the column always measure the same quantity.
-	r.recordHeartbeatWrite(nodeID, update, ceiling)
+	r.recordHeartbeatWrite(nodeID, update, ceiling, total)
 
 	// Only update all fields (including status promotion) for active nodes.
 	// Pending and offline nodes must go through approval or re-registration.
@@ -1546,11 +1623,12 @@ func (r *NodeRegistry) GetWithExtras(ctx context.Context, nodeID string) (*NodeW
 	}
 
 	return &NodeWithExtras{
-		BackendNode:   *node,
-		ModelCount:    int(modelCount),
-		InFlightCount: inFlight.Total,
-		Labels:        labels,
-		LoadHistory:   r.loadHist.snapshot(nodeID),
+		BackendNode:     *node,
+		ModelCount:      int(modelCount),
+		InFlightCount:   inFlight.Total,
+		Labels:          labels,
+		LoadHistory:     r.loadHist.snapshot(nodeID),
+		LeavingReplicas: leavingReplicas(node.Status, int(modelCount)),
 	}, nil
 }
 
@@ -1630,45 +1708,33 @@ func (r *NodeRegistry) GetByName(ctx context.Context, name string) (*BackendNode
 // force a full model reload on every brief NATS hiccup. Stale rows are reaped
 // by the per-model health probe (on by default; see HealthMonitor) and by
 // MarkOffline when the heartbeat really has gone away.
+//
+// A draining node stays draining: the drain is an operator decision that a
+// transient route error must not undo, and the health monitor would otherwise
+// promote the node back to healthy on its next live beat.
 func (r *NodeRegistry) MarkUnhealthy(ctx context.Context, nodeID string) error {
-	return r.setStatus(ctx, nodeID, StatusUnhealthy)
+	result := r.db.WithContext(ctx).Model(&BackendNode{}).
+		Where("id = ? AND status <> ?", nodeID, StatusDraining).
+		Updates(map[string]any{"status": StatusUnhealthy, "drain_deadline": nil})
+	if result.Error != nil {
+		return fmt.Errorf("setting node %s to %s: %w", nodeID, StatusUnhealthy, result.Error)
+	}
+	if result.RowsAffected > 0 {
+		return nil
+	}
+	var n int64
+	if err := r.db.WithContext(ctx).Model(&BackendNode{}).Where("id = ?", nodeID).Count(&n).Error; err != nil {
+		return fmt.Errorf("checking node %s: %w", nodeID, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("node %s not found", nodeID)
+	}
+	return nil
 }
 
 // MarkHealthy sets a node status to healthy.
 func (r *NodeRegistry) MarkHealthy(ctx context.Context, nodeID string) error {
 	return r.setStatus(ctx, nodeID, StatusHealthy)
-}
-
-// MarkDraining sets a node status to draining (no new requests) and clears its
-// model records. Routing already filters out non-healthy nodes, so removing
-// the rows on drain doesn't change new-request behavior — but it does stop the
-// Models UI from showing the node's models as "running" while the box has been
-// taken out of rotation, and it prevents stale rows from being selected if
-// (re)scheduling logic gets relaxed elsewhere. In-flight requests already hold
-// their gRPC client through Route() and will finish normally; the only
-// observable effect is that the per-call IncrementInFlight bookkeeping logs a
-// non-fatal warning, which is acceptable for a drain.
-func (r *NodeRegistry) MarkDraining(ctx context.Context, nodeID string) error {
-	var removedModels []string
-	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := transitionStatus(tx, nodeID, StatusHealthy, StatusDraining); err != nil {
-			return err
-		}
-		removedModels = r.nodeModelNames(ctx, tx, nodeID)
-		return tx.Where("node_id = ?", nodeID).Delete(&NodeModel{}).Error
-	}); err != nil {
-		return err
-	}
-	for _, m := range removedModels {
-		r.fireReplicaRemoved(m, nodeID, -1)
-	}
-	return nil
-}
-
-// ResumeNode transitions a draining node back to healthy without allowing
-// pending approval or a concurrent health-state change to be overwritten.
-func (r *NodeRegistry) ResumeNode(ctx context.Context, nodeID string) error {
-	return transitionStatus(r.db.WithContext(ctx), nodeID, StatusDraining, StatusHealthy)
 }
 
 // FindStaleNodes returns nodes that haven't sent a heartbeat within the given threshold.
@@ -2057,6 +2123,25 @@ func (r *NodeRegistry) RemoveNodeModel(ctx context.Context, nodeID, modelName st
 	return nil
 }
 
+// RemoveIdleNodeModel removes the replica row nm only while it is still the
+// idle replica that a sweep read: loaded, no request in flight, and not used
+// since nm.LastUsed. It reports whether it removed the row. A sweep unloads
+// a replica only after this succeeds, so a request that took the replica
+// after the sweep read it keeps its backend.
+func (r *NodeRegistry) RemoveIdleNodeModel(ctx context.Context, nm NodeModel) (bool, error) {
+	res := r.db.WithContext(ctx).
+		Where("id = ? AND state = ? AND in_flight = 0 AND last_used <= ?", nm.ID, "loaded", nm.LastUsed).
+		Delete(&NodeModel{})
+	if res.Error != nil {
+		return false, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return false, nil
+	}
+	r.fireReplicaRemoved(nm.ModelName, nm.NodeID, nm.ReplicaIndex)
+	return true, nil
+}
+
 // RemoveAllNodeModelReplicas removes every replica of modelName on nodeID.
 // Used by callers (e.g. node deregistration, full backend stop) that genuinely
 // want to clear all replicas, not just one.
@@ -2070,12 +2155,14 @@ func (r *NodeRegistry) RemoveAllNodeModelReplicas(ctx context.Context, nodeID, m
 	return nil
 }
 
-// FindNodesWithModel returns nodes that have the given model loaded.
+// FindNodesWithModel returns nodes that have the given model loaded. A
+// draining node counts: its replicas still run until they leave, so an unload
+// or a file upgrade of the model must reach them too.
 func (r *NodeRegistry) FindNodesWithModel(ctx context.Context, modelName string) ([]BackendNode, error) {
 	var nodes []BackendNode
 	if err := r.db.WithContext(ctx).Joins("JOIN node_models ON node_models.node_id = backend_nodes.id").
-		Where("node_models.model_name = ? AND node_models.state = ? AND backend_nodes.status = ?",
-			modelName, "loaded", StatusHealthy).
+		Where("node_models.model_name = ? AND node_models.state = ? AND backend_nodes.status IN ?",
+			modelName, "loaded", servingNodeStatuses).
 		Where("NOT EXISTS (SELECT 1 FROM model_config_states WHERE model_config_states.model_name = node_models.model_name) OR node_models.config_revision = (SELECT config_revision FROM model_config_states WHERE model_config_states.model_name = node_models.model_name)").
 		Order("node_models.in_flight ASC").
 		Find(&nodes).Error; err != nil {
@@ -2122,6 +2209,21 @@ type RoutePreference struct {
 // matching replica elsewhere — the selector-mismatch fall-through path used to
 // trigger an eviction-busy loop when both sides had the model loaded.
 func (r *NodeRegistry) FindAndLockNodeWithModel(ctx context.Context, modelName string, candidateNodeIDs []string, pref *RoutePreference) (*BackendNode, *NodeModel, error) {
+	return r.findAndLockReplica(ctx, modelName, StatusHealthy, candidateNodeIDs, nil, pref, -1)
+}
+
+// FindAndLockDrainingReplica locks the least busy loaded replica of modelName
+// on a draining node that matches selector. The router uses it when no
+// healthy node has the model, and when the healthy replicas are busier than
+// a draining one (inFlightBelow, the in-flight count of the least busy
+// healthy replica; a negative value takes any replica). A draining node
+// keeps serving the replicas it has until they leave, so a drain never
+// leaves a model with no replica while a request waits.
+func (r *NodeRegistry) FindAndLockDrainingReplica(ctx context.Context, modelName string, selector map[string]string, inFlightBelow int) (*BackendNode, *NodeModel, error) {
+	return r.findAndLockReplica(ctx, modelName, StatusDraining, nil, selector, nil, inFlightBelow)
+}
+
+func (r *NodeRegistry) findAndLockReplica(ctx context.Context, modelName, nodeStatus string, candidateNodeIDs []string, selector map[string]string, pref *RoutePreference, inFlightBelow int) (*BackendNode, *NodeModel, error) {
 	var nm NodeModel
 	var node BackendNode
 
@@ -2163,12 +2265,16 @@ func (r *NodeRegistry) FindAndLockNodeWithModel(ctx context.Context, modelName s
 		base := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Joins("JOIN backend_nodes ON backend_nodes.id = node_models.node_id").
 			Where("node_models.model_name = ? AND node_models.state = ? AND backend_nodes.status = ?",
-				modelName, "loaded", StatusHealthy)
+				modelName, "loaded", nodeStatus).
+			Scopes(onNodesMatching(selector))
 		if hasCurrentRevision {
 			base = base.Where("node_models.config_revision = ?", currentState.ConfigRevision)
 		}
 		if len(candidateNodeIDs) > 0 {
 			base = base.Where("node_models.node_id IN ?", candidateNodeIDs)
+		}
+		if inFlightBelow >= 0 {
+			base = base.Where("node_models.in_flight < ?", inFlightBelow)
 		}
 
 		picked := false
@@ -2199,7 +2305,7 @@ func (r *NodeRegistry) FindAndLockNodeWithModel(ctx context.Context, modelName s
 			return err
 		}
 
-		if err := tx.Where("id = ? AND status = ?", nm.NodeID, StatusHealthy).
+		if err := tx.Where("id = ? AND status = ?", nm.NodeID, nodeStatus).
 			First(&node).Error; err != nil {
 			return err
 		}
@@ -2592,7 +2698,7 @@ func (r *NodeRegistry) FindNodeWithVRAMFromSet(ctx context.Context, minBytes uin
 
 	// Try idle nodes with enough effectively-free VRAM first.
 	var node BackendNode
-	err := db.Where("status = ? AND node_type = ? AND (available_vram - reserved_vram) >= ? AND id NOT IN (?) AND id IN ?",
+	err := db.Where("status = ? AND node_type = ? AND (available_vram - reserved_vram - headroom_vram) >= ? AND id NOT IN (?) AND id IN ?",
 		StatusHealthy, NodeTypeBackend, minBytes, loadedModels, nodeIDs).
 		Scopes(r.weightTail(ctx, "(available_vram - reserved_vram) DESC")).
 		First(&node).Error
@@ -2601,7 +2707,7 @@ func (r *NodeRegistry) FindNodeWithVRAMFromSet(ctx context.Context, minBytes uin
 	}
 
 	// Fall back to least-loaded nodes with enough effectively-free VRAM
-	err = db.Where("status = ? AND node_type = ? AND (available_vram - reserved_vram) >= ? AND backend_nodes.id IN ?",
+	err = db.Where("status = ? AND node_type = ? AND (available_vram - reserved_vram - headroom_vram) >= ? AND backend_nodes.id IN ?",
 		StatusHealthy, NodeTypeBackend, minBytes, nodeIDs).
 		Joins("LEFT JOIN (?) AS load ON load.node_id = backend_nodes.id", subquery).
 		Scopes(r.weightTail(ctx, "COALESCE(load.total_inflight, 0) ASC, (backend_nodes.available_vram - backend_nodes.reserved_vram) DESC")).
@@ -2804,6 +2910,11 @@ func (r *NodeRegistry) FindNodesWithFreeSlot(ctx context.Context, modelName stri
 // current_replicas[n,m]). When candidateNodeIDs is empty all healthy backend
 // nodes are considered.
 //
+// The model limit of a node (max_active_backends of its memory policy) caps
+// what it can take. With model swap off the node can take only its free
+// model slots (CountNodeReplicas); with swap on it can unload other models,
+// so it can take up to the limit minus the replicas of this model it holds.
+//
 // The reconciler uses this to bound MinReplicas at what the cluster can
 // actually host, preventing the "scale-up forever" loop from #9XXX where a
 // MinReplicas=2 with one worker × one slot churned the model every 30s.
@@ -2813,24 +2924,40 @@ func (r *NodeRegistry) ClusterCapacityForModel(ctx context.Context, modelName st
 	if len(candidateNodeIDs) > 0 {
 		q = q.Where("id IN ?", candidateNodeIDs)
 	}
-	subq := currentModelRevision(r.db.Model(&NodeModel{})).
-		Select("node_id, COUNT(*) as cnt").
-		Where("node_models.model_name = ? AND node_models.state <> ?", modelName, "unloading").
-		Group("node_id")
-
-	var nodes []struct {
-		MaxReplicasPerModel int
-		Loaded              int
-	}
-	err := q.Select("backend_nodes.max_replicas_per_model AS max_replicas_per_model, COALESCE(rc.cnt, 0) AS loaded").
-		Joins("LEFT JOIN (?) AS rc ON rc.node_id = backend_nodes.id", subq).
-		Scan(&nodes).Error
-	if err != nil {
+	var nodes []BackendNode
+	if err := q.Find(&nodes).Error; err != nil {
 		return 0, fmt.Errorf("computing cluster capacity for %s: %w", modelName, err)
 	}
+	var counts []struct {
+		NodeID string
+		Cnt    int
+	}
+	if err := currentModelRevision(r.db.WithContext(ctx).Model(&NodeModel{})).
+		Select("node_id, COUNT(*) as cnt").
+		Where("node_models.model_name = ? AND node_models.state <> ?", modelName, "unloading").
+		Group("node_id").
+		Scan(&counts).Error; err != nil {
+		return 0, fmt.Errorf("computing cluster capacity for %s: %w", modelName, err)
+	}
+	held := make(map[string]int, len(counts))
+	for _, c := range counts {
+		held[c.NodeID] = c.Cnt
+	}
 	total := 0
-	for _, n := range nodes {
-		free := n.MaxReplicasPerModel - n.Loaded
+	for i := range nodes {
+		n := &nodes[i]
+		free := n.MaxReplicasPerModel - held[n.ID]
+		if pol := r.NodePolicy(n); pol.MaxActiveBackends > 0 && free > 0 {
+			limitFree := pol.MaxActiveBackends - held[n.ID]
+			if !pol.ModelSwap {
+				used, err := r.CountNodeReplicas(ctx, n.ID, modelName)
+				if err != nil {
+					return 0, fmt.Errorf("computing cluster capacity for %s: %w", modelName, err)
+				}
+				limitFree = pol.MaxActiveBackends - used
+			}
+			free = min(free, limitFree)
+		}
 		if free > 0 {
 			total += free
 		}
@@ -2975,7 +3102,7 @@ func (r *NodeRegistry) UpdateVRAMBudget(ctx context.Context, nodeID, budget stri
 			ColVRAMBudget:              budget,
 			ColVRAMBudgetBytes:         ceiling,
 			"vram_budget_manually_set": true,
-			ColAvailableVRAM:           capAvailable(node.AvailableVRAM, ceiling),
+			ColAvailableVRAM:           capAvailable(uncapAvailable(node.AvailableVRAM, node.VRAMBudgetBytes, node.TotalVRAM), ceiling, node.TotalVRAM),
 		})
 	if res.Error != nil {
 		return fmt.Errorf("updating vram_budget on %s: %w", nodeID, res.Error)
@@ -2994,10 +3121,18 @@ func (r *NodeRegistry) UpdateVRAMBudget(ctx context.Context, nodeID, budget stri
 // ResetVRAMBudget clears the admin override and the resolved ceiling, handing
 // budget control back to the worker's reported budget on next register.
 func (r *NodeRegistry) ResetVRAMBudget(ctx context.Context, nodeID string) error {
+	node, err := r.Get(ctx, nodeID)
+	if err != nil {
+		return err
+	}
+	// The worker's budget, else the cluster default, applies again.
+	budget := r.effectiveVRAMBudget(&BackendNode{LimitsWorker: node.LimitsWorker})
+	ceiling := r.resolveVRAMBudgetBytes(budget, node.TotalVRAM)
 	res := r.db.WithContext(ctx).Model(&BackendNode{}).Where("id = ?", nodeID).
 		Updates(map[string]any{
-			ColVRAMBudget:              "",
-			ColVRAMBudgetBytes:         0,
+			ColVRAMBudget:              budget,
+			ColVRAMBudgetBytes:         ceiling,
+			ColAvailableVRAM:           capAvailable(uncapAvailable(node.AvailableVRAM, node.VRAMBudgetBytes, node.TotalVRAM), ceiling, node.TotalVRAM),
 			"vram_budget_manually_set": false,
 		})
 	if res.Error != nil {
@@ -3082,11 +3217,12 @@ func (r *NodeRegistry) ListWithExtras(ctx context.Context) ([]NodeWithExtras, er
 	result := make([]NodeWithExtras, len(nodes))
 	for i, n := range nodes {
 		result[i] = NodeWithExtras{
-			BackendNode:   n,
-			ModelCount:    countMap[n.ID],
-			InFlightCount: inFlightMap[n.ID],
-			Labels:        labelsMap[n.ID],
-			LoadHistory:   r.loadHist.snapshot(n.ID),
+			BackendNode:     n,
+			ModelCount:      countMap[n.ID],
+			InFlightCount:   inFlightMap[n.ID],
+			Labels:          labelsMap[n.ID],
+			LoadHistory:     r.loadHist.snapshot(n.ID),
+			LeavingReplicas: leavingReplicas(n.Status, countMap[n.ID]),
 		}
 	}
 	return result, nil

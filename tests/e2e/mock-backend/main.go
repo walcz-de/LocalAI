@@ -166,6 +166,15 @@ func (m *MockBackend) LoadModel(ctx context.Context, in *pb.ModelOptions) (*pb.R
 	if strings.HasPrefix(in.Model, "fail-load") {
 		return &pb.Result{Message: "mock: load failure", Success: false}, nil
 	}
+	// MOCK_LOAD_DELAY makes a load take that long (a Go duration), so a spec
+	// can act on a worker while a load runs on it.
+	if d, err := time.ParseDuration(os.Getenv("MOCK_LOAD_DELAY")); err == nil && d > 0 {
+		select {
+		case <-time.After(d):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	return &pb.Result{
 		Message: "Model loaded successfully (mocked)",
 		Success: true,
@@ -361,6 +370,9 @@ var errMockContextOverflow = fmt.Errorf("request (9739 tokens) exceeds the avail
 func (m *MockBackend) PredictStream(in *pb.PredictOptions, stream pb.Backend_PredictStreamServer) error {
 	if err := checkModelIdentity(in); err != nil {
 		return err
+	}
+	if spec, ok := parseBenchSpec(in.Prompt); ok {
+		return streamBench(spec, stream)
 	}
 	xlog.Debug("PredictStream called", "prompt", in.Prompt)
 	if strings.Contains(in.Prompt, "MOCK_ERROR_CONTEXT_OVERFLOW") {

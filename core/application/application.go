@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/mudler/LocalAI/core/services/collections"
 	"github.com/mudler/LocalAI/core/services/messaging"
+	"github.com/mudler/LocalAI/core/services/promptcachesvc"
 	"github.com/mudler/LocalAI/core/services/remotes"
 	"github.com/mudler/LocalAI/pkg/modelsearch"
 	"io"
@@ -43,6 +44,7 @@ import (
 	"github.com/mudler/LocalAI/core/services/advisorylock"
 	"github.com/mudler/LocalAI/core/services/backendupdates"
 	"github.com/mudler/LocalAI/core/services/cloudproxy/mitm"
+	"github.com/mudler/LocalAI/core/services/clustersettings"
 	"github.com/mudler/LocalAI/core/services/facerecognition"
 	"github.com/mudler/LocalAI/core/services/failover"
 	"github.com/mudler/LocalAI/core/services/failover/distsync"
@@ -53,6 +55,7 @@ import (
 	"github.com/mudler/LocalAI/core/services/monitoring"
 	"github.com/mudler/LocalAI/core/services/nodes"
 	"github.com/mudler/LocalAI/core/services/notify"
+	"github.com/mudler/LocalAI/core/services/plugins"
 	"github.com/mudler/LocalAI/core/services/routing/admission"
 	"github.com/mudler/LocalAI/core/services/routing/billing"
 	"github.com/mudler/LocalAI/core/services/routing/corpus"
@@ -104,6 +107,15 @@ const faceEmbeddingDim = 0
 const voiceEmbeddingDim = 0
 
 type Application struct {
+	// promptCache is the disk tier of the prompt cache of this node and
+	// promptCacheNodes the seam purges and usage go through (see
+	// prompt_cache.go). Guarded by promptCacheMu.
+	promptCacheMu    sync.RWMutex
+	promptCache      *promptcachesvc.Node
+	promptCacheNodes promptcachesvc.Nodes
+	// promptCacheDist is the worker sync of distributed mode, nil otherwise.
+	promptCacheDist *promptcachesvc.Distributed
+
 	// shareKinds are the services whose resource kinds are shared through
 	// the policy; shareKindsPolicy is the policy they were registered with
 	// once the owner opened it. See RegisterShareKinds.
@@ -227,6 +239,8 @@ type Application struct {
 	studioConnectorsStop  context.CancelFunc
 	bindingCapsStop       context.CancelFunc // stops the one-time permissions migration of the connector bindings
 	bindingCapsDone       chan struct{}      // closed when that migration returned
+	pluginsStop           context.CancelFunc // stops the refresh loop of the Plugins service
+	pluginsDone           chan struct{}      // closed when that loop returned
 	studioProvider        *provider.Provider
 	studioService         *studio.Service
 	studioWorkerSub       messaging.Subscription // the chat start subscription of a chat worker; nil otherwise
@@ -234,6 +248,8 @@ type Application struct {
 	studioTempDir         string                 // removed at shutdown; set only in memory-only mode
 	studioHostExec        *hostexec.Runner       // the chats' built-in bash on this machine
 	studioFiles           *files.Service
+	pluginsService        atomic.Pointer[plugins.Service] // set at startup after the chats service; turns read it
+	pluginsReason         string
 	studioFilesIndex      io.Closer          // closes the workspace index: ends pending blob removals, frees the JSON folder
 	studioFilesTemp       string             // blob cache folder of a cluster with no data path; removed at shutdown
 	studioTextIndex       *textindex.Indexer // the text of the documents in the files; nil when files are off
@@ -278,6 +294,13 @@ type Application struct {
 	// failoverLock is the probe-leader lock this frontend holds or tries
 	// for; nil when failoverSync is nil.
 	failoverLock *advisorylock.HeldLock
+
+	// clusterSettings holds the memory settings every frontend shares in
+	// distributed mode; nil in standalone mode.
+	clusterSettings *clustersettings.Service
+	// watchdogReady is set once the boot watchdog exists, so a cluster
+	// settings change before it only updates the config.
+	watchdogReady atomic.Bool
 
 	// Upgrade checker (background service for detecting backend upgrades)
 	upgradeChecker *UpgradeChecker
@@ -803,6 +826,13 @@ func (a *Application) Shutdown() error {
 			a.bindingCapsStop()
 			<-a.bindingCapsDone
 		}
+		// The refresh loop of the plugins fetches into DataPath and writes
+		// the package files: it ends before Shutdown returns, for the same
+		// reason.
+		if a.pluginsStop != nil {
+			a.pluginsStop()
+			<-a.pluginsDone
+		}
 		if a.studioConnectors != nil {
 			a.studioConnectors.Close()
 		}
@@ -869,6 +899,7 @@ func (a *Application) Shutdown() error {
 		// Before distributed shutdown: the sync's subscriptions live on the
 		// NATS connection that closes there.
 		a.stopFailoverDistributed()
+		a.stopClusterSettings()
 		a.stopUpgradeRuns()
 		a.distributed.Shutdown()
 		if a.modelLoader != nil {
@@ -979,6 +1010,15 @@ func (a *Application) start() (startErr error) {
 		return nil
 	}
 	assistantClient.Chats = a.StudioService
+	// The Plugins service starts after the assistant; the tool reads it at
+	// each call. An install it queues shows in /api/operations like one
+	// from the REST API.
+	assistantClient.Plugins = a.Plugins
+	assistantClient.PluginJobs = func(pluginID, jobID string) {
+		if c := a.operationCache(); c != nil && jobID != "" {
+			c.Set(galleryop.PluginOpKey(pluginID), jobID)
+		}
+	}
 	// The client tools reach the API in memory, as the acting user, with
 	// the transport the chats use. The provider is built before the
 	// assistant but is read at each call.
@@ -1030,6 +1070,8 @@ func (a *Application) start() (startErr error) {
 	assistantClient.PIIRedactor = a.piiRedactor
 	assistantClient.PIIEvents = a.piiEvents
 	assistantClient.RouterDecisions = a.routerDecisions
+	// The prompt cache goes through the same seam as the REST routes.
+	assistantClient.PromptCache = a
 	// Router corpus tools — same factories the RouteModel middleware
 	// uses, so the assistant and the request path agree on store
 	// namespaces and model resolution.
@@ -1037,6 +1079,8 @@ func (a *Application) start() (startErr error) {
 	assistantClient.RouterEmbedder = a.Embedder
 	assistantClient.RouterEmbedderFingerprint = a.EmbedderFingerprint
 	assistantClient.RouterVectorStore = a.VectorStore
+	// The memory settings go where POST /api/settings sends them.
+	assistantClient.MemorySettings = a.UpdateMemorySettings
 	// Failover chains: failoverManager does not exist yet at this point
 	// in startup (New() in startup.go builds it after start() returns),
 	// so it can't be wired here like the fields above. New() sets

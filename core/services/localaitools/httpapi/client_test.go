@@ -294,6 +294,40 @@ var _ = Describe("httpapi.Client against the LocalAI admin REST surface", func()
 		})
 	})
 
+	Describe("DrainNode", func() {
+		It("posts drain with force and timeout, and resume", func() {
+			var paths []string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				Expect(r.Method).To(Equal(http.MethodPost))
+				paths = append(paths, r.URL.RequestURI())
+				switch r.URL.Path {
+				case "/api/nodes/n1/drain":
+					_, _ = w.Write([]byte(`{"status":"draining","immediate":false,"drain_deadline":"2030-01-01T00:00:00Z","leaving_replicas":2}`))
+				case "/api/nodes/n1/resume":
+					_, _ = w.Write([]byte(`{"message":"node resumed"}`))
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer srv.Close()
+			c := New(srv.URL, "")
+
+			r, err := c.DrainNode(ctx, localaitools.DrainNodeRequest{NodeID: "n1", Action: "drain", Force: true, Timeout: "5m"})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(r.Status).To(Equal("draining"))
+			Expect(r.LeavingReplicas).To(Equal(2))
+			Expect(r.DrainDeadline).To(Equal("2030-01-01T00:00:00Z"))
+
+			r, err = c.DrainNode(ctx, localaitools.DrainNodeRequest{NodeID: "n1", Action: "resume"})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(r.Status).To(Equal("healthy"))
+			Expect(paths).To(Equal([]string{"/api/nodes/n1/drain?force=true&timeout=5m", "/api/nodes/n1/resume"}))
+
+			_, err = c.DrainNode(ctx, localaitools.DrainNodeRequest{NodeID: "n1", Action: "stop"})
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
 	Describe("ListNodes", func() {
 		It("carries the live state of each route of a node", func() {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1102,6 +1136,30 @@ var _ = Describe("P2P", func() {
 		Expect(c.CancelP2PInvite(context.Background(), "i1")).To(Succeed())
 		Expect(paths).To(Equal([]string{"/api/p2p/devices/d 1", "/api/p2p/invites/i1"}))
 	})
+
+	It("reads and changes the user pairing setting with GET and PUT /api/p2p/user-pairing", func() {
+		var sent map[string]any
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			Expect(r.URL.Path).To(Equal("/api/p2p/user-pairing"))
+			if r.Method == http.MethodPut {
+				Expect(json.NewDecoder(r.Body).Decode(&sent)).To(Succeed())
+			} else {
+				Expect(r.Method).To(Equal(http.MethodGet))
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"relays": "none", "allow_open_relay": false, "omit_lan_addrs": true, "max_devices": 3, "max_pending": 2, "max_ttl_seconds": 600})
+		}))
+		DeferCleanup(srv.Close)
+		c := New(srv.URL, "")
+		want := &localaitools.P2PUserPairingInfo{Relays: "none", OmitLANAddrs: true, MaxDevices: 3, MaxPending: 2, MaxTTLSeconds: 600}
+		info, err := c.GetP2PUserPairing(context.Background())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(info).To(Equal(want))
+		n := 3
+		info, err = c.SetP2PUserPairing(context.Background(), localaitools.SetP2PUserPairingRequest{MaxDevices: &n})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(info).To(Equal(want))
+		Expect(sent).To(Equal(map[string]any{"max_devices": float64(3)}), "a field left out is not sent")
+	})
 })
 
 var _ = Describe("Federation", func() {
@@ -1231,5 +1289,48 @@ var _ = Describe("Model updates", func() {
 		DeferCleanup(srv.Close)
 		_, err := New(srv.URL, "").UpgradeModel(context.Background(), "tiny", false, nil)
 		Expect(err).To(MatchError(ContainSubstring("context_size")))
+	})
+})
+
+var _ = Describe("Memory settings", func() {
+	It("sets and resets the limits of a node on /api/nodes/:id/limits", func() {
+		var method string
+		var body map[string]any
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			Expect(r.URL.Path).To(Equal("/api/nodes/n1/limits"))
+			method = r.Method
+			body = nil
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			_, _ = w.Write([]byte(`{"max_active_backends":1,"model_swap":false,"sources":{"max_active_backends":"override"}}`))
+		}))
+		DeferCleanup(srv.Close)
+		c := New(srv.URL, "")
+		one, off := 1, false
+
+		got, err := c.SetNodeLimits(context.Background(), localaitools.SetNodeLimitsRequest{NodeID: "n1", MaxActiveBackends: &one, ModelSwap: &off})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(method).To(Equal(http.MethodPut))
+		Expect(body).To(Equal(map[string]any{"max_active_backends": float64(1), "model_swap": false}))
+		Expect(got.NodeID).To(Equal("n1"))
+		Expect(got.Sources).To(HaveKeyWithValue("max_active_backends", "override"))
+
+		_, err = c.SetNodeLimits(context.Background(), localaitools.SetNodeLimitsRequest{NodeID: "n1", Reset: true})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(method).To(Equal(http.MethodDelete))
+	})
+
+	It("sends the memory policy to /api/settings with the setting names", func() {
+		var body map[string]any
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			Expect(r.Method).To(Equal(http.MethodPost))
+			Expect(r.URL.Path).To(Equal("/api/settings"))
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			_, _ = w.Write([]byte(`{"success":true}`))
+		}))
+		DeferCleanup(srv.Close)
+		off, two := false, 2
+
+		Expect(New(srv.URL, "").SetModelMemoryPolicy(context.Background(), localaitools.ModelMemoryPolicy{ModelSwap: &off, MaxActiveBackends: &two})).To(Succeed())
+		Expect(body).To(Equal(map[string]any{"model_swap": false, "max_active_backends": float64(2)}))
 	})
 })

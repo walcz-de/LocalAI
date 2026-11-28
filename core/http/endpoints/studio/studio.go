@@ -154,7 +154,7 @@ var chatRules = []errRule{
 	fixed(http.StatusConflict, "project_unavailable", studiosvc.ProjectUnavailableText, studiosvc.ErrProjectUnavailable),
 	verbatim(http.StatusBadRequest, typeInvalid, "studio: ", studiosvc.ErrNothingToRegenerate, studiosvc.ErrNotUserMessage,
 		studiosvc.ErrInvalidSettings, studiosvc.ErrBadImport, session.ErrInvalid),
-	verbatim(http.StatusBadRequest, typeInvalid, "", studiosvc.ErrBadSkillName, studiosvc.ErrBadAddonID, studiosvc.ErrBadConnection, studiosvc.ErrBadMCPSwitch, studiosvc.ErrBadBuiltinGroup),
+	verbatim(http.StatusBadRequest, typeInvalid, "", studiosvc.ErrBadSkillName, studiosvc.ErrBadAddonID, studiosvc.ErrBadConnection, studiosvc.ErrBadMCPSwitch, studiosvc.ErrBadBuiltinGroup, studiosvc.ErrBadPluginSwitch),
 	verbatim(http.StatusConflict, typeFilesOff, "", files.ErrUnavailable),
 	fixed(http.StatusRequestEntityTooLarge, typeInvalid, "an attachment is too large", workspace.ErrTooLarge),
 	fixed(http.StatusConflict, typeConflict, "a sub-agent conversation takes no messages from you", studiosvc.ErrSubAgentReadOnly),
@@ -226,7 +226,7 @@ func conversation(rec session.ChatRecord, info store.TurnInfo) schema.ChatsConve
 		ID: rec.ID, Title: rec.Title, Model: rec.Model, Kind: rec.Kind, ParentID: rec.ParentID,
 		AgentID: rec.AgentID, Origin: rec.Origin, OriginID: rec.OriginID, Assistant: rec.Assistant,
 		ProjectID: rec.ProjectID, PulledProjects: rec.PulledProjects, Collections: rec.Collections,
-		Created: rec.Created, Updated: rec.Updated, Running: info.Running, LastTurn: string(info.Last),
+		PluginsOff: rec.PluginsOff, Created: rec.Created, Updated: rec.Updated, Running: info.Running, LastTurn: string(info.Last),
 		WillResume: info.WillResume, ResumeAttempts: info.ResumeAttempts,
 		Settings: settingsJSON(rec.Settings),
 		Dock:     dockJSON(rec.Dock),
@@ -319,7 +319,7 @@ func (h *Handlers) Create(c echo.Context) error {
 	user := userID(c)
 	in := studiosvc.CreateInput{Title: req.Title, Model: req.Model, AgentID: req.AgentID, Assistant: req.Assistant, ProjectID: req.ProjectID, Collections: req.Collections}
 	if sw := req.Switches; sw != nil {
-		in.Switches = studiosvc.Switches{AddonsOff: sw.AddonsOff, McpOff: sw.McpOff, BuiltinsOff: sw.BuiltinsOff, BuiltinsOn: sw.BuiltinsOn, SkillsOff: sw.SkillsOff, Connections: sw.Connections}
+		in.Switches = studiosvc.Switches{AddonsOff: sw.AddonsOff, McpOff: sw.McpOff, BuiltinsOff: sw.BuiltinsOff, BuiltinsOn: sw.BuiltinsOn, SkillsOff: sw.SkillsOff, PluginsOff: sw.PluginsOff, Connections: sw.Connections}
 	}
 	rec, err := h.svc.Create(c.Request().Context(), user, in)
 	if err != nil {
@@ -597,6 +597,12 @@ func (h *Handlers) Send(c echo.Context) error {
 		cmd = studiosvc.Command{Skill: req.Skill, Agent: req.Agent}
 	}
 	cmd.Skill, cmd.Agent = strings.TrimSpace(cmd.Skill), strings.TrimSpace(cmd.Agent)
+	// The text of a message sent with a skill or a plugin command is what
+	// the person typed after its name: its arguments, before any MCP context
+	// joins the text.
+	if cmd.Skill != "" {
+		cmd.Args = text
+	}
 	if text == "" && len(up) == 0 && len(refs) == 0 && cmd.Skill == "" {
 		return fail(c, http.StatusBadRequest, "invalid_request_error", "text is required")
 	}

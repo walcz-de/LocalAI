@@ -1,0 +1,528 @@
+{
+    "title": {
+        "add": "Model Ekle",
+        "edit": "Model Düzenleyici"
+    },
+    "subtitle": {
+        "chooseModelType": "Başlamak için bir model türü seç",
+        "newModel": "Yeni model"
+    },
+    "actions": {
+        "backTo": "Geri dön: {{page}}",
+        "models": "Modeller",
+        "templates": "Şablonlar",
+        "createModel": "Model Oluştur",
+        "saveChanges": "Değişiklikleri Kaydet",
+        "saving": "Kaydediliyor...",
+        "saved": "Kaydedildi",
+        "switchWarning": "Sekme değiştirmeden önce değişiklikleri kaydet veya vazgeç.",
+        "discardAndSwitch": "Vazgeç ve Geç"
+    },
+    "tabs": {
+        "interactive": "Etkileşimli",
+        "yaml": "YAML",
+        "yamlDescription": "YAML'ı doğrudan düzenle. Oluşturmanın çalışması için model adı YAML içinde ayarlanmış olmalı."
+    },
+    "forms": {
+        "modelName": {
+            "label": "Model Adı",
+            "placeholder": "my-model-name",
+            "hint": "Yalnızca harf, rakam, tire, alt çizgi ve nokta kullan."
+        },
+        "empty": {
+            "nav": "Alan eklemek için yukarıdaki arama çubuğunu kullan",
+            "title": "Yapılandırılmış alan yok",
+            "text": "Yapılandırma alanlarını bulup eklemek için yukarıdaki arama çubuğunu kullan."
+        }
+    },
+    "proxyVision": {
+        "label": "Bu model görsellere bakabilir",
+        "hint": "Üstteki model görselleri kabul ediyorsa bunu aç. LocalAI bunu denetleyemez. Eklenen görseller mesajla birlikte modele gider."
+    },
+    "engineSettings": {
+        "title": "Çalışma zamanı ayarı",
+        "leadNoCommand": "{{engine}} bu modeli nasıl yükler ve çalıştırır. Boş bir alan varsayılanı korur.",
+        "loading": "{{engine}} ayarları yükleniyor",
+        "default": "Varsayılan",
+        "defaultIs": "Varsayılan ({{value}})",
+        "on": "Açık",
+        "off": "Kapalı",
+        "auto": "Otomatik",
+        "reset": "Sıfırla: {{name}}",
+        "groups": {
+            "memory": "Bellek",
+            "sampling": "Örnekleme varsayılanları",
+            "template": "Sohbet şablonu",
+            "speed": "Hız",
+            "serving": "Eşzamanlı sunum",
+            "speculative": "Spekülatif kod çözme",
+            "engine_advanced": "Gelişmiş llama.cpp seçenekleri"
+        },
+        "fields": {
+            "context_size": "Bağlam boyutu",
+            "gpu_layers": "GPU katmanları",
+            "options_parallel": "Paralel slotlar",
+            "flash_attention": "Flash attention",
+            "cache_type_k": "KV önbellek türü (K)",
+            "cache_type_v": "KV önbellek türü (V)",
+            "parameters_batch": "Batch boyutu",
+            "threads": "İş parçacıkları",
+            "options_threads_batch": "Batch iş parçacıkları",
+            "options_fit": "Boş belleğe sığdır",
+            "options_no_op_offload": "No op offload",
+            "parameters_temperature": "Sıcaklık",
+            "parameters_top_p": "Top-p",
+            "parameters_top_k": "Top-k",
+            "parameters_min_p": "Min-p",
+            "options_use_jinja": "Jinja sohbet şablonu",
+            "load_mode": "Yükleme modu",
+            "options_ubatch": "Mikro batch boyutu",
+            "draft_model": "Taslak model dosyası",
+            "options_spec_max_streams": "N akışın üstünde taslağı duraklat",
+            "options_paged_kv": "Sayfalı sunum",
+            "options_paged_preempt": "Önbellek dolunca duraklat",
+            "options_prefill_budget": "Prefill bütçesi",
+            "backend_sampling": "GPU örnekleme",
+            "options_kv_pool_tokens": "KV havuzu token sayısı",
+            "options_kv_output_reserve": "Çıktı rezervi",
+            "options_cache_idle_slots": "Boştaki slotları önbelleğe al",
+            "options_n_cache_reuse": "Önbellek yeniden kullanım parçası",
+            "options_slot_prompt_similarity": "Slot prompt benzerliği",
+            "options_kv_unified_per_slot": "Slot başına token",
+            "options_cache_ram": "Prompt önbellek belleği (MiB)",
+            "options_mmproj_use_gpu": "Görüntü projektörü GPU'da",
+            "options_backend_sampling_min_slots": "GPU örnekleme için en az slot",
+            "options_context_shift": "Bağlam kaydırma",
+            "options_cont_batching": "Sürekli batch",
+            "options_kv_unified": "Birleşik KV önbelleği",
+            "options_swa_full": "Tam kayan pencere önbelleği",
+            "options_fit_params_target": "Sığdırma payı (MiB)",
+            "options_fit_params_min_ctx": "Sığdırma için en küçük bağlam",
+            "options_n_cpu_ffn": "CPU'daki yoğun FFN katmanları",
+            "options_moe_cache_cpu_share": "MoE önbelleğinin CPU payı",
+            "options_lazy_mode": "Tembel yükleme",
+            "options_split_mode": "Çoklu GPU bölme",
+            "options_device": "Cihazlar",
+            "options_grpc_servers": "RPC worker'ları",
+            "options_check_tensors": "Tensörleri denetle",
+            "options_warmup": "Isınma",
+            "options_verbosity": "Günlük ayrıntı düzeyi",
+            "options_n_ctx_checkpoints": "Bağlam kontrol noktaları",
+            "options_checkpoint_min_step": "Kontrol noktası aralığı",
+            "options_n_rs_seq": "Yinelemeli durum anlık görüntüleri",
+            "options_slot_save_path": "Slot kayıt klasörü",
+            "options_yarn_orig_ctx": "YaRN özgün bağlamı",
+            "options_pooling_type": "Embedding havuzlama",
+            "options_embd_normalize": "Embedding normalleştirme",
+            "options_image_min_tokens": "Görüntü başına en az görsel token",
+            "options_image_max_tokens": "Görüntü başına en çok görsel token",
+            "options_reasoning_format": "Akıl yürütme biçimi",
+            "options_enable_reasoning": "Düşünme",
+            "options_reasoning_budget": "Akıl yürütme bütçesi",
+            "options_prefill_assistant": "Asistan yanıtını önceden doldur",
+            "options_spec_type": "Spekülatif tür",
+            "options_spec_n_max": "En çok taslak token",
+            "options_spec_n_min": "En az taslak token",
+            "options_spec_p_min": "En düşük taslak olasılığı",
+            "options_spec_p_split": "Taslak bölme olasılığı",
+            "options_draft_gpu_layers": "Taslak GPU katmanları",
+            "options_draft_threads": "Taslak iş parçacıkları",
+            "options_draft_threads_batch": "Taslak batch iş parçacıkları",
+            "options_draft_cache_type_k": "Taslak KV önbellek türü (K)",
+            "options_draft_cache_type_v": "Taslak KV önbellek türü (V)",
+            "options_spec_draft_n_ubatch": "Taslak mikro batch boyutu",
+            "options_spec_draft_sampling": "Taslak örnekleme",
+            "options_spec_draft_device": "Taslak cihazları",
+            "options_draft_cpu_moe": "Taslak MoE CPU'da",
+            "options_draft_n_cpu_moe": "CPU'daki taslak MoE katmanları",
+            "options_draft_override_tensor": "Taslak tensör geçersiz kılma",
+            "options_spec_ngram_size_n": "N-gram arama boyutu",
+            "options_spec_ngram_size_m": "N-gram öneri boyutu",
+            "options_spec_ngram_min_hits": "N-gram en az isabet",
+            "options_spec_ngram_mod_n_min": "ngram-mod en az",
+            "options_spec_ngram_mod_n_max": "ngram-mod en çok",
+            "options_spec_ngram_mod_n_match": "ngram-mod eşleşme uzunluğu",
+            "options_spec_ngram_map_k_size_n": "ngram-map-k arama boyutu",
+            "options_spec_ngram_map_k_size_m": "ngram-map-k öneri boyutu",
+            "options_spec_ngram_map_k_min_hits": "ngram-map-k en az isabet",
+            "options_spec_ngram_map_k4v_size_n": "ngram-map-k4v arama boyutu",
+            "options_spec_ngram_map_k4v_size_m": "ngram-map-k4v öneri boyutu",
+            "options_spec_ngram_map_k4v_min_hits": "ngram-map-k4v en az isabet",
+            "options_spec_lookup_cache_static": "Statik n-gram önbellek dosyası",
+            "options_spec_lookup_cache_dynamic": "Dinamik n-gram önbellek dosyası",
+            "options_grammar_engine": "Grammar motoru",
+            "options_prompt_cache_disk": "Disk prompt önbelleği",
+            "options_prompt_cache_disk_ttl_hours": "Disk önbelleği yaşam süresi (saat)",
+            "options_prompt_cache_disk_min_tokens": "Disk önbelleği en az token",
+            "options_prompt_cache_disk_quota_mib": "Kullanıcı başına disk önbelleği kotası (MiB)",
+            "options_prompt_cache_disk_max_size_mib": "Disk önbelleği boyut sınırı (MiB)",
+            "options_prompt_cache_disk_shared": "Paylaşılan disk önbelleği",
+            "options_prompt_cache_disk_low_free_mib": "Disk önbelleği düşük boş alan (MiB)",
+            "options_prompt_cache_disk_critical_free_mib": "Disk önbelleği kritik boş alan (MiB)"
+        },
+        "choices": {
+            "load_mode": {
+                "default": "Varsayılan (otomatik)",
+                "none": "Yok (belleğe oku)",
+                "mmap": "mmap",
+                "mlock": "mlock",
+                "mmap_mlock": "mmap + mlock",
+                "direct_io": "Doğrudan G/Ç"
+            },
+            "backend_sampling": {
+                "off": "Kapalı",
+                "auto": "Otomatik",
+                "on": "Açık"
+            }
+        },
+        "hints": {
+            "load_mode": "Model dosyasının nasıl okunacağı. mmap, mmlock ve direct_io seçeneğini yazar.",
+            "backend_sampling": "Sonraki tokenın seçildiği yer: CPU ya da GPU."
+        },
+        "errors": {
+            "notInteger": "Bir tam sayı yaz.",
+            "notNumber": "Bir sayı yaz.",
+            "range": "{{min}} ile {{max}} arasında bir değer yaz.",
+            "min": "{{min}} veya daha büyük bir değer yaz.",
+            "max": "{{max}} veya daha küçük bir değer yaz.",
+            "enum": "Şunlardan birini kullan: {{values}}.",
+            "colon": "İki nokta üst üste değeri keser. Kaldır.",
+            "empty": "Bir girdi yaz veya satırı kaldır.",
+            "rawOwned": "{{name}} yukarıdaki bir alanla ayarlanıyor. O alanı kullan.",
+            "layerRange": "Her aralığın bir başlangıç ve bir bitiş katmanı olmalı; bitiş başlangıçtan önce olamaz.",
+            "overrideShape": "Her girdiyi pattern=buffer biçiminde yaz: {{entry}}",
+            "overrideTarget": "Buffer adı yalnızca harf, rakam ve alt çizgi içerebilir: {{target}}",
+            "overrideRegex": "Bu desen geçerli bir düzenli ifade değil: {{entry}}"
+        },
+        "placement": {
+            "title": "Tensör yerleşimi",
+            "modes": {
+                "off": "Kapalı ({{engine}} karar verir)",
+                "experts": "MoE uzmanları CPU'da",
+                "rest": "İlk N katman GPU'da, kalanların uzmanları CPU'da",
+                "ranges": "Seçilen katmanların uzmanları CPU'da",
+                "raw": "Özel regex"
+            },
+            "help": {
+                "off": "Hiçbir şey yazılmaz.",
+                "experts": "Her katmanın uzman ağırlıklarını sistem belleğinde tutar. Modelin geri kalanı GPU'da kalır.",
+                "rest": "İlk N katmanı GPU'da, sonraki her katmanın uzmanlarını CPU'da tutar. Toplam katman sayısıyla birlikte desen, kalanı tek bir aralık olarak listeler.",
+                "ranges": "Seçtiğin katmanların uzmanlarını sistem belleğinde tutar, örneğin 0-6 ve 18-23.",
+                "raw": "Değeri yazdığın gibi yazar."
+            },
+            "gpuLayers": "Uzmanları GPU'da olan katmanlar",
+            "layers": "Katmanlar",
+            "rangeN": "Aralık {{n}}",
+            "from": "İlk katman",
+            "to": "Son katman",
+            "addRange": "Aralık ekle",
+            "removeRange": "Aralığı kaldır: {{n}}",
+            "raw": "Geçersiz kılma değeri",
+            "rawHint": "Virgülle ayrılmış pattern=buffer girdileri, {{binary}} {{flag}} içindeki gibi.",
+            "generated": "Üretilen değer",
+            "nothing": "Hiçbir şey. Tensörleri {{engine}} yerleştirir.",
+            "mode": "Yerleşim",
+            "totalLayers": "Toplam katman",
+            "totalUnknown": "Bilinmiyor",
+            "failed": "Sunucu deseni oluşturamadı: {{message}}",
+            "building": "Desen oluşturuluyor"
+        },
+        "presets": {
+            "title": "Hazır bir kurulumla başla",
+            "bigMoe": {
+                "name": "Küçük GPU'da büyük MoE",
+                "text": "Tüm katmanlar GPU'da, uzmanlar CPU'da, 8 bit KV önbelleği."
+            },
+            "maxContext": {
+                "name": "Maksimum bağlam",
+                "text": "128K bağlam, flash attention ve 8 bit KV önbelleği."
+            },
+            "lowVram": {
+                "name": "Düşük VRAM",
+                "text": "4K bağlam, 4 bit KV önbelleği ve küçük bir mikro batch."
+            }
+        },
+        "applied": {
+            "title": "{{name}}: {{count}} ayar değişti.",
+            "none": "Hiçbir şey değişmedi. Form zaten bu değerlere sahipti.",
+            "note": "Alanlar düzenlenebilir kalır. Modeli kaydedene kadar hiçbir şey kaydedilmez.",
+            "undo": "Geri al",
+            "dismiss": "Gizle"
+        },
+        "raw": {
+            "title": "Gelişmiş seçenekler",
+            "hint": "Seçenek listesinin diğer girdileri, her satırda bir tane: ad:değer veya --flag:value gibi bir {{binary}} bayrağı.",
+            "empty": "Başka seçenek yok.",
+            "entry": "Seçenek {{n}}",
+            "remove": "Kaldır: {{entry}}",
+            "add": "Seçenek ekle"
+        },
+        "preview": {
+            "title": "Komut önizlemesi",
+            "aside": "Komut satırı",
+            "updating": "Güncelleniyor",
+            "loading": "Komut yükleniyor",
+            "copy": "Kopyala",
+            "copied": "Kopyalandı",
+            "copyFailed": "Kopyalanamadı",
+            "failed": "Önizleme kullanılamıyor.",
+            "note": "Bu ayarlara karşılık gelen {{binary}} komutu. LocalAI backend'i kendisi başlatır; bu satır karşılaştırma ve LocalAI dışında kullanım içindir."
+        },
+        "paste": {
+            "title": "Bir {{binary}} komutu yapıştır",
+            "hint": "Alanı olan bayraklar o alanı doldurur. Alanı olmayan bayraklar ham seçenek olarak tutulur ve aşağıda listelenir.",
+            "fill": "Formu doldur",
+            "failed": "Komut okunamadı.",
+            "source": "Yapıştırılan komut",
+            "filled": "Doldurulan ayar: {{count}}.",
+            "allMapped": "Her bayrak eşlendi.",
+            "modelFile": "Komut şu model dosyasını kullanıyor: {{file}}.",
+            "modelFileKept": "Sen başka bir şey seçene kadar bu model şunu korur: {{file}}.",
+            "useModelFile": "Bu dosyayı kullan",
+            "warnings": "Uyarı: {{count}}",
+            "unmapped": "Eşlenmeyen bayrak: {{count}}",
+            "unmappedNote": "Alanı olmayan bir bayrak ham seçenek olarak tutulur ve {{engine}} motoruna yazıldığı gibi iletilir. İstemediklerini kaldır.",
+            "keep": "Ham seçenek olarak tut",
+            "keepAll": "Hepsini tut",
+            "kept": "Tutuldu",
+            "ignored": "Yok sayıldı",
+            "drop": "Kaldır"
+        },
+        "schemaError": {
+            "title": "Çalışma zamanı ayarı kullanılamıyor.",
+            "body": "Sunucu {{engine}} ayarlarını göndermedi ({{message}}). Yine de her ayarı bu düzenleyicinin diğer sekmesinde metin olarak düzenleyebilirsin.",
+            "retry": "Yeniden dene",
+            "openYaml": "Metin olarak düzenle"
+        },
+        "readOnly": {
+            "title": "Salt okunur.",
+            "body": "Bu ayarları yalnızca bir yönetici değiştirebilir."
+        },
+        "drafting": {
+            "title": "Taslak (spekülatif çözümleme)",
+            "lead": "Hızlı bir taslakçı sonraki tokenları önerir, model bunları tek adımda denetler. Yanıtlar daha hızlı gelir; çıktı aynı kalır.",
+            "mode": "Mod",
+            "more": "Diğer taslak seçenekleri",
+            "auto": "{{mode}} varsayılan olarak açık: bu modelde bir MTP başlığı var, bu yüzden siz Kapalı seçmedikçe LocalAI onunla taslak üretir.",
+            "custom": {
+                "title": "Özel taslak ayarı",
+                "body": "Bu model, hiçbir modun kapsamadığı spec_type {{kinds}} kullanıyor. Bir mod seçene kadar olduğu gibi kalır."
+            },
+            "modes": {
+                "off": {
+                    "label": "Kapalı",
+                    "doc": "Taslak yok. Her token yalnızca modelden gelir."
+                },
+                "ngram": {
+                    "label": "N-gram",
+                    "doc": "Konuşmanın önceki kısmında aynı kelimelerin ardından gelen tokenları önerir. Ek model ve ek bellek gerekmez.",
+                    "note": "Girdisini tekrar eden çıktılar için en iyisi, örneğin kod düzenlemeleri veya uzun alıntılar. Normal sohbette az kazandırır ve yüzde birkaç yavaşlatabilir."
+                },
+                "model": {
+                    "label": "Taslak model",
+                    "doc": "Aynı kelime dağarcığına sahip küçük bir model token önerir ve model bunları tek adımda denetler.",
+                    "note": "Taslak model, modelin yanında yüklenir ve kendi belleğini kullanır."
+                },
+                "mtp": {
+                    "label": "MTP",
+                    "doc": "Modelin kendi çoklu token tahmin başlığı sonraki tokenları önerir. Yüklenecek ikinci bir model yok."
+                }
+            },
+            "fields": {
+                "ngram": {
+                    "options_spec_ngram_mod_n_min": {
+                        "label": "Taslak token, en az",
+                        "hint": "Bir eşleşmenin kullanılmadan önce önermesi gereken en az token sayısı."
+                    },
+                    "options_spec_ngram_mod_n_max": {
+                        "label": "Taslak token, en çok",
+                        "hint": "Bir eşleşmeden sonra önerilen en çok token sayısı."
+                    },
+                    "options_spec_ngram_mod_n_match": {
+                        "label": "Eşleşme uzunluğu",
+                        "hint": "Önceki bir bölüm kopyalanmadan önce onunla eşleşmesi gereken token sayısı."
+                    }
+                },
+                "model": {
+                    "options_spec_n_min": {
+                        "label": "Taslak token, en az",
+                        "hint": "Denetlenmeye değer en az taslak token sayısı. 0 her taslağı denetler."
+                    },
+                    "options_spec_n_max": {
+                        "label": "Taslak token, en çok",
+                        "hint": "Taslak modelin adım başına önerdiği en çok token sayısı. Fazlası yalnızca iyi tahmin ediyorsa işe yarar."
+                    },
+                    "options_spec_p_min": {
+                        "label": "Kabul eşiği",
+                        "hint": "Taslak model bu değerden daha az eminse taslağı keser, 0 ile 1 arası."
+                    }
+                },
+                "mtp": {
+                    "options_spec_n_max": {
+                        "label": "Taslak token, en çok",
+                        "hint": "MTP başlığının adım başına önerdiği en çok token sayısı."
+                    },
+                    "options_spec_p_min": {
+                        "label": "Kabul eşiği",
+                        "hint": "Başlık bu değerden daha az eminse taslağı keser, 0 ile 1 arası."
+                    }
+                }
+            },
+            "streams": {
+                "label": "N akışın üstünde taslağı duraklat",
+                "hint": "Aynı anda bundan fazla istek üretirken taslak duraklar, yük düşünce devam eder. 0 hiç duraklatmaz."
+            },
+            "picker": {
+                "label": "Taslak model",
+                "placeholder": "Kurulu bir model seçin",
+                "hint": "Aynı aileden küçük bir model, örneğin 0.6B veya 1B model.",
+                "filter": "Modelleri süz",
+                "loading": "Kurulu modeller yükleniyor...",
+                "empty": "{{engine}} ile çalışan başka bir model kurulu değil. Önce aynı aileden küçük bir model kurun.",
+                "same": "Bu modelle aynı aile",
+                "other": "Diğer kurulu modeller",
+                "file": "Dosyada ayarlı",
+                "fileRow": "Kurulu bir model değil",
+                "noFile": "{{name}} taslak olarak kullanılacak bir model dosyasına sahip değil.",
+                "failed": "Kurulu modeller listelenemedi."
+            },
+            "fit": {
+                "title": "Uyum",
+                "ok": "Uyumlu",
+                "okText": "Aynı kelime dağarcığı: {{tokens}} token.",
+                "mismatch": "Yüklenmeyecek",
+                "mismatchText": "Kelime dağarcıkları farklı ({{main}} ve {{draft}} token). llama.cpp bu çifti reddeder, bu yüzden model yüklenmez.",
+                "family": "Aynı aile",
+                "familyText": "İkisi de {{family}} modeli. Doğrulamak için kelime dağarcığı okunamadı.",
+                "unknown": "Denetlenmedi",
+                "unknownText": "Kelime dağarcıkları karşılaştırılamadı. Taslak, modelle aynı tokenizer'ı kullanmalıdır.",
+                "unmatched": "Dosya kurulu bir model değil, bu yüzden denetlenemez."
+            },
+            "memory": {
+                "title": "Bellek",
+                "total": "≈ {{size}} daha fazla",
+                "split": "({{context}} tokenda {{weights}} ağırlık ve {{kv}} KV önbelleği).",
+                "none": "Bu model için tahmin yok.",
+                "unmatched": "Tahmin yok: yaklaşık dosya boyutu artı modelin bağlamı kadar büyük bir KV önbelleği bekleyin."
+            }
+        },
+        "quick": {
+            "title": "Hızlı kurulum",
+            "custom": "Özel",
+            "customText": "Aşağıdaki alanları kendin ayarla.",
+            "estimating": "Tahmin ediliyor...",
+            "more": "≈ {{size}} daha fazla bellek",
+            "less": "≈ {{size}} daha az bellek",
+            "estimate": "Bu rakamlar tahmindir.",
+            "approximate": "Kaba tahminler: model düzeni dosyadan okunmadı.",
+            "failed": "Bellek tahmini kullanılamıyor.",
+            "batch": "Toplu iş",
+            "concurrency": "Eşzamanlılık",
+            "bestFor": "En uygun: {{use}}",
+            "share": "Akış başına yaklaşık {{tokens}} bağlam belirteci",
+            "tight": "f16 KV önbelleği sığmıyor, bu yüzden 8 bitlik olan kullanılıyor.",
+            "unsupported": "Burada sunulmuyor",
+            "needs": "{{size}} bellek gerekir",
+            "noFit": "Sığmıyor: ≈ {{size}} / {{limit}}",
+            "shared": "Yuvalar tek bir KV önbelleğini paylaşır; bu yüzden daha fazla akış yaklaşık aynı belleği ister: her akış bağlamın daha küçük bir payını alır.",
+            "compare": "Kurulumları karşılaştır",
+            "nowLabel": "Şu anki bellek",
+            "nowShort": "KV önbelleği ≈ {{kv}}, hesaplama tamponları ≈ {{compute}}, {{context}} token için",
+            "estimateShort": "Tahmin",
+            "approximateShort": "Kaba tahmin",
+            "moreShort": "+{{size}}",
+            "lessShort": "−{{size}}"
+        },
+        "profiles": {
+            "balanced": {
+                "name": "Dengeli",
+                "text": "Varsayılan toplu iş boyutları: LocalAI bunları GPU'nuz için seçer.",
+                "line": "LocalAI'nin GPU'nuz için seçtiği toplu iş boyutları."
+            },
+            "longPrompts": {
+                "name": "Uzun istemler",
+                "text": "2048'lik bir toplu iş. Uzun istemler çok daha hızlı okunur; hesaplama arabellekleri daha fazla bellek kullanır.",
+                "memory": {
+                    "discrete": "Ayrık GPU'da mikro toplu iş 1024'tür: hesaplama arabelleği tek bir karta sığmalıdır."
+                },
+                "line": "Uzun istemleri çok daha hızlı okur. Daha fazla bellek kullanır."
+            },
+            "concurrencyDefault": {
+                "name": "Varsayılan",
+                "text": "LocalAI yuvaları GPU'nuz için seçer ve arka uç kendi varsayılanlarını kullanır.",
+                "bestFor": "Bir veya birkaç kişi.",
+                "line": "Bir veya birkaç kişi için. Slotları LocalAI seçer."
+            },
+            "streams8": {
+                "name": "8 akış",
+                "text": "Sayfalı sunumla 8 yuva: istekler KV önbelleğini paylaşır ve önbellek dolunca başarısız olmak yerine bekler.",
+                "bestFor": "Tek bir modelle sohbet eden bir ekip.",
+                "short": "8",
+                "line": "Tek bir modelle sohbet eden bir ekip için."
+            },
+            "streams16": {
+                "name": "16 akış",
+                "text": "16 yuva, 16 istek çalışırken GPU örnekleme, taslak yok.",
+                "bestFor": "Paralel istek gönderen ajanlar ve araçlar.",
+                "memory": {
+                    "system": "GPU yok: belirteçler CPU'da örneklenir."
+                },
+                "short": "16",
+                "line": "Paralel istek gönderen ajanlar ve araçlar için."
+            },
+            "streams32": {
+                "name": "32+ akış",
+                "text": "Her zaman açık GPU örnekleme ve taslaksız 32 yuva: toplamda en çok saniyede belirteç, her akış daha yavaş.",
+                "bestFor": "Toplu işler ve aynı anda çok sayıda kullanıcı.",
+                "memory": {
+                    "discrete": "8 bitlik KV önbelleği: yaklaşık iki kat belirteç sığar, kalite ve hızda küçük bir kayıpla.",
+                    "system": "GPU olmadan sunulmaz: 32 akışa bölünen bir CPU her birini fazla yavaşlatır."
+                },
+                "short": "32+",
+                "line": "Toplu işler ve çok sayıda kullanıcı için. Toplamda saniyede en çok token."
+            }
+        },
+        "choiceHints": {
+            "backend_sampling": {
+                "off": "Token'ları CPU'da örnekle. Dosyaya hiçbir şey yazılmaz.",
+                "auto": "Model birkaç paralel istekle bir GPU'da çalıştığında ve istek grammar ya da logprobs gerektirmediğinde GPU örneklemesini kullan.",
+                "on": "Token'ları GPU'da örnekle. Çok sayıda paralel istekte daha hızlıdır. Grammar, akıl yürütme bütçesi ya da logprobs kullanan isteklerde kendiliğinden kapanır."
+            },
+            "load_mode": {
+                "default": "llama.cpp seçer: belleğe eşlenir; modeli iki kez tutacak tümleşik GPU'lar hariç."
+            }
+        },
+        "groupCount": "{{count}} ayar",
+        "memory": {
+            "label": "Bellek türü",
+            "auto": "Algılanan: {{kind}}",
+            "autoUnknown": "Algılanmadı",
+            "detected": "Bu sunucuda {{kind}} ({{size}})",
+            "detectedDevice": "Bu sunucuda {{kind}}: {{device}}, {{size}}",
+            "chosen": "{{kind}}, sizin seçiminiz",
+            "unknown": "Bellek türü algılanmadı: {{kind}} kuralları kullanılıyor",
+            "useValue": "{{value}} kullan",
+            "kinds": {
+                "unified": {
+                    "label": "Birleşik bellek",
+                    "doc": "GPU sistem belleğini paylaşır (DGX Spark, Jetson, Apple silicon, AMD APU'lar). Daha fazla yuva sığar; istem önbelleği ve kontrol noktaları aynı belleği kullandığı için küçük tutulur."
+                },
+                "discrete": {
+                    "label": "Ayrık GPU",
+                    "doc": "GPU'nun kendi belleği vardır. Yuvalar VRAM tahminiyle sınırlanır, 32 akış 8 bitlik KV önbelleği kullanır ve istem önbelleği sistem belleğinde kalır."
+                },
+                "system": {
+                    "label": "GPU yok",
+                    "doc": "Model sistem belleğinde CPU üzerinde çalışır. Önbellekler küçük tutulur ve 32 akış sunulmaz."
+                }
+            },
+            "advice": {
+                "unifiedLoadMode": "Birleşik bellekte, belleğe eşlenen bir model yüklenirken iki kez tutulur. Default onu bir kez yükler."
+            }
+        },
+        "flags": {
+            "show": "{{engine}} bayraklarını göster"
+        },
+        "more": "Daha fazla"
+    }
+}

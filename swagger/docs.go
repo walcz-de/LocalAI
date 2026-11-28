@@ -4182,6 +4182,100 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/auth/admin/features": {
+            "get": {
+                "description": "Returns the agent, general and API features with their labels, the default a user gets when their permissions do not name the feature (an administrator's override, or the built-in default), and a configurable flag that tells whether PUT /api/auth/admin/features/{feature}/default accepts the feature. Also returns the names of the installed models.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "List the features and their defaults (admin)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/admin/features/{feature}/default": {
+            "put": {
+                "description": "Sets the default of a feature for every user whose permissions do not name it. An explicit value in a user's permissions still wins, and administrators always have every feature. Only features reported as configurable by GET /api/auth/admin/features accept a default; others answer 400. The default is stored in the auth database, so every frontend applies it within 30 seconds.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Change the default of a feature (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Feature key, for example p2p_pair",
+                        "name": "feature",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The new default",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/routes.featureDefaultRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/auth.FeatureMeta"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/backend-logs": {
             "get": {
                 "description": "Returns a sorted list of model IDs that have captured backend process output",
@@ -13768,6 +13862,65 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/chats/{id}/plugins": {
+            "put": {
+                "description": "Sets the installs switched off in one chat, replacing the list. A chat keeps what is off, so a plugin turned on later is on in existing chats. At most 200 install IDs. Needs the chats and the plugins features.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "Switch plugins off in a chat",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chat ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Install IDs switched off",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/plugins.ChatPluginsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The list as stored",
+                        "schema": {
+                            "$ref": "#/definitions/plugins.ChatPluginsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid list",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No such chat",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "501": {
+                        "description": "The chats of this server cannot keep plugin switches",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/chats/{id}/project": {
             "put": {
                 "description": "project_id is the project's id; an empty one takes the chat out of its project. The chat must be idle (409 otherwise). The tool switches of the chat stay as they are: the defaults of a project apply to new chats only. An archived project takes no chats (400).",
@@ -16938,6 +17091,173 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/nodes/{id}/drain": {
+            "post": {
+                "tags": [
+                    "Nodes"
+                ],
+                "summary": "Drain a node",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Node ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Remove the node's replicas at once instead of waiting for replacements",
+                        "name": "force",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Drain deadline as a Go duration (default: the --drain-timeout setting, 10m)",
+                        "name": "timeout",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/localai.DrainNodeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/nodes/{id}/limits": {
+            "get": {
+                "tags": [
+                    "Nodes"
+                ],
+                "summary": "Read a node's effective memory limits",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Node ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/nodes.EffectiveLimits"
+                        }
+                    },
+                    "404": {
+                        "description": "node not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Sets max_active_backends (models kept loaded on the node, 0 = no limit), vram_budget (\"80%\" or \"12GB\"; empty clears that override), memory_reclaimer_threshold (0 to 1) and model_swap for one node. A key left out keeps its value. Returns the effective limits. Admin only.",
+                "tags": [
+                    "Nodes"
+                ],
+                "summary": "Override a node's memory limits",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Node ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "overrides to set",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/nodes.NodeLimits"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/nodes.EffectiveLimits"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid value",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "node not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "Nodes"
+                ],
+                "summary": "Clear a node's memory limit overrides",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Node ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/nodes.EffectiveLimits"
+                        }
+                    },
+                    "404": {
+                        "description": "node not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/nodes/{id}/max-replicas-per-model": {
             "put": {
                 "tags": [
@@ -17014,6 +17334,48 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "node not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/nodes/{id}/resume": {
+            "post": {
+                "tags": [
+                    "Nodes"
+                ],
+                "summary": "Resume a draining node",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Node ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -17407,9 +17769,70 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/p2p/device/session": {
+            "post": {
+                "description": "Served only on the P2P protocol /localai/http/1, and only to a paired device; the normal HTTP listener answers 404. The body carries the credential that the redeem of a sign-in invite returned, as JSON or as the form field \"credential\". The credential works only from the peer that redeemed the invite. When the device is an active sign-in device, the credential matches, the owner is active and still has the feature p2p_pair (admins always do), the answer sets the session cookie: a form post gets 303 to /, JSON gets 200 with the user. Every other case gets the same 403. After 5 wrong credentials from one peer in an hour the answer is 429.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "p2p"
+                ],
+                "summary": "Sign in with a device credential (over P2P only)",
+                "parameters": [
+                    {
+                        "description": "Device credential",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/p2p.DeviceSessionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/p2p.SessionUser"
+                        }
+                    },
+                    "303": {
+                        "description": "Redirect to / for a form post"
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/p2p/devices": {
             "get": {
-                "description": "Lists the paired devices, revoked ones included, with how each one reaches the server now (path kind direct, hole_punched or relayed, the relay and its limits). Needs P2P mode share. Admin only.",
+                "description": "Lists the paired devices, revoked ones included, with how each one reaches the server now (path kind direct, hole_punched or relayed, the relay and its limits), the owner (owner_id, owner_name) and whether the device signs in as its owner (sign_in). owner keeps the devices of one user. Needs P2P mode share. Admin only.",
                 "produces": [
                     "application/json"
                 ],
@@ -17417,6 +17840,14 @@ const docTemplate = `{
                     "p2p"
                 ],
                 "summary": "List P2P devices",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Keep the devices of this user ID",
+                        "name": "owner",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -17670,6 +18101,315 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/p2p.OKResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/p2p/me": {
+            "get": {
+                "description": "Whether a device can pair now (available is true in P2P mode share; reason not_share otherwise), the limits of the user (max_devices, max_pending, max_ttl_seconds, max_mints_per_hour) and how many devices and pending invites the user has. Needs the feature p2p_pair and a user account (the API key of LOCALAI_API_KEY gets 409 with error type needs_account).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "p2p"
+                ],
+                "summary": "My P2P pairing",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/p2p.MyPairing"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/p2p/me/devices": {
+            "get": {
+                "description": "Lists the devices the user paired, revoked ones included, with the path each one uses now and when it was last seen. Needs P2P mode share, the feature p2p_pair and a user account.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "p2p"
+                ],
+                "summary": "List my P2P devices",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/p2p.DeviceList"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/p2p/me/devices/{id}": {
+            "delete": {
+                "description": "Revokes a device of the user: it leaves the allowlist, its connections close, the relays drop it and the web sessions it opened end. A device of another user gets 404. Needs P2P mode share, the feature p2p_pair and a user account.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "p2p"
+                ],
+                "summary": "Revoke one of my P2P devices",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Device ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/p2p.RevokeResult"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "A device of another user gets 404. Needs P2P mode share, the feature p2p_pair and a user account.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "p2p"
+                ],
+                "summary": "Rename one of my P2P devices",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Device ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New label",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/p2p.RenameDeviceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/p2p.OKResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/p2p/me/invites": {
+            "get": {
+                "description": "Lists the pending invites the user minted, without the links. Needs P2P mode share, the feature p2p_pair and a user account.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "p2p"
+                ],
+                "summary": "List my pending P2P invites",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/p2p.InviteList"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates a one-time invite link for a device that signs in as the user once it pairs: the redeem gives it a credential for POST /api/p2p/device/session. The body takes label and ttl_seconds only; the kind (device, with sign-in), the relays, open relays and local addresses come from the setting p2p_user_pairing, and any other field is ignored. ttl_seconds above max_ttl_seconds gets 400. 429 with error type limit_reached when the user has max_pending pending invites or max_devices devices, minted 10 invites in the last hour, or the server has 20 pending sign-in invites. The link is shown once. Needs P2P mode share, the feature p2p_pair and a user account.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "p2p"
+                ],
+                "summary": "Pair one of my devices",
+                "parameters": [
+                    {
+                        "description": "Label and life of the invite",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/p2p.MyMintRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/p2p.MintResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/p2p/me/invites/{id}": {
+            "delete": {
+                "description": "Cancels a pending invite of the user and drops its relay pass. An invite of another user gets 404. Needs P2P mode share, the feature p2p_pair and a user account.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "p2p"
+                ],
+                "summary": "Cancel one of my P2P invites",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Invite ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/p2p.OKResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
                         }
                     },
                     "404": {
@@ -18285,6 +19025,76 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/p2p/user-pairing": {
+            "get": {
+                "description": "What an invite that a user mints for their own device carries (relays auto or none, allow_open_relay, omit_lan_addrs) and the limits of each user (max_devices, max_pending, max_ttl_seconds). It is kept in the auth database, so every frontend uses the same setting. 409 without authentication. Admin only.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "p2p"
+                ],
+                "summary": "Read the P2P user pairing setting",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/p2p.UserPairingSettings"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "A field left out stays as it is. relays is auto or none; max_devices is 1 to 100, max_pending 1 to 20 and max_ttl_seconds 60 to 86400; any other value gets 400. A change applies to the next invite and the next redeem; devices and invites that exist stay. 409 without authentication. Admin only.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "p2p"
+                ],
+                "summary": "Change the P2P user pairing setting",
+                "parameters": [
+                    {
+                        "description": "Fields to change",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/p2p.SetUserPairingRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/p2p.UserPairingSettings"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/pii/analyze": {
             "post": {
                 "description": "Runs the configured PII detectors (NER and/or pattern tiers) over the supplied text and returns the matched entity spans with the policy action that would fire. Detection only — the text is not modified and no block is enforced. Select detectors explicitly via ` + "`" + `detectors` + "`" + `, or pass a consuming ` + "`" + `model` + "`" + ` to use its effective policy: the model's own ` + "`" + `pii.detectors` + "`" + `, else the instance-wide ` + "`" + `pii_default_detectors` + "`" + `. A model with PII disabled, or enabled with nothing to scan with, is a 400. The raw matched value is never returned; admins may set ` + "`" + `reveal:true` + "`" + ` for the audit hash prefix.",
@@ -18336,6 +19146,1014 @@ const docTemplate = `{
                         "description": "Redacted text + entities",
                         "schema": {
                             "$ref": "#/definitions/schema.PIIRedactResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugins/catalog": {
+            "get": {
+                "description": "Lists the entries of the active marketplaces from their last good list; nothing is fetched. runs_code keeps the entries known to run code (true) or known to run none (false); an entry is known once a version of it was installed, and inspect tells for sure. Needs the plugins feature.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "Browse the plugins",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Text in the name, description, category or tags",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Marketplace ID",
+                        "name": "marketplace",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Category",
+                        "name": "category",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Known to run code, or known to run none",
+                        "name": "runs_code",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "First entry",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Entries per page (default 50, at most 200)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "One page",
+                        "schema": {
+                            "$ref": "#/definitions/plugins.CatalogPage"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid query",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugins/catalog/{marketplace}/{name}": {
+            "get": {
+                "description": "Returns one entry of an active marketplace, with the installs of it that the caller can see. Needs the plugins feature.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "One plugin of a marketplace",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Marketplace ID",
+                        "name": "marketplace",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Plugin name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The entry",
+                        "schema": {
+                            "$ref": "#/definitions/plugins.CatalogItem"
+                        }
+                    },
+                    "404": {
+                        "description": "No such entry or marketplace",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugins/inspect": {
+            "post": {
+                "description": "Fetches the plugin at the commit its marketplace entry points at, checks every file, computes the content digest, reads what it contributes and whether it runs code, and returns a preview token. The token works once, for 15 minutes, for the caller only. Any user with the plugins feature may inspect.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "Inspect a plugin before an install",
+                "parameters": [
+                    {
+                        "description": "Plugin ID (name@marketplace)",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/plugins.InspectRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The preview and its token",
+                        "schema": {
+                            "$ref": "#/definitions/plugins.Preview"
+                        }
+                    },
+                    "400": {
+                        "description": "Not name@marketplace, or an invalid plugin",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No such entry, or its marketplace is off",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "A source type LocalAI does not fetch (unsupported), or files the checks refuse (content_refused)",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too many inspects of this user, or too many at once on this server (rate_limited)",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "The plugin could not be fetched",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugins/inspect/{token}/files/{path}": {
+            "get": {
+                "description": "Returns one file of the package that a preview token (of an inspect or of an update preview) names, as plain text. It does not use the token up. Only the caller who made the preview can read it.",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "One file of a preview, for review",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Preview token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File path inside the plugin",
+                        "name": "path",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The file",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid or expired token, or an invalid path",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No such file",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugins/installs": {
+            "get": {
+                "description": "Lists the installs for everyone and the caller's own, with the caller's switch. An administrator adds all=true to list the personal installs of every user. Needs the plugins feature.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "List the plugin installs",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Every install (administrators only)",
+                        "name": "all",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Installs",
+                        "schema": {
+                            "$ref": "#/definitions/plugins.InstallList"
+                        }
+                    },
+                    "403": {
+                        "description": "all=true for a user",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Confirms a preview token and queues the install; the job fetches the plugin again at the same commit and refuses files that differ from the reviewed ones. scope is user (default: for the caller only, a plugin that runs no code, while plugins_user_installs is on) or instance (for everyone, administrators only). A plugin that runs code is installed for everyone only, by an administrator from the browser: the request needs the administrator's own browser session and the header X-LocalAI-Confirm set to the plugin ID; an API key or an MCP call gets 403 not_human_surface. The progress is in GET /api/operations (isPlugin).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "Install a plugin",
+                "parameters": [
+                    {
+                        "description": "Token and scope",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/plugins.InstallRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "The plugin ID, for a plugin that runs code",
+                        "name": "X-LocalAI-Confirm",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Queued",
+                        "schema": {
+                            "$ref": "#/definitions/plugins.JobAccepted"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid or used token (invalid_token), or an invalid scope",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "needs_admin, code_for_everyone, forbidden or not_human_surface",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Installed already (conflict), or installed for everyone (instance_installed, param names the install)",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Too many installs (limit_reached)",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugins/installs/{id}": {
+            "get": {
+                "description": "Returns an install with what its package contributes, the components left out with their reasons, the code files and the hosts its remote MCP servers connect to. A personal install of another user is not found, except for an administrator.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "One plugin install",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Install ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The install",
+                        "schema": {
+                            "$ref": "#/definitions/plugins.InstallDetail"
+                        }
+                    },
+                    "404": {
+                        "description": "No such install",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Removes an install and the switches of its users. The owner removes a personal install; an administrator removes any install.",
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "Remove a plugin",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Install ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Removed"
+                    },
+                    "403": {
+                        "description": "forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No such install",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugins/installs/{id}/files/{path}": {
+            "get": {
+                "description": "Returns one file of the installed package as plain text.",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "One file of an installed plugin",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Install ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File path inside the plugin",
+                        "name": "path",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The file",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid path",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No such install or file",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugins/installs/{id}/me": {
+            "get": {
+                "description": "Returns whether the caller has the install on, whether it waits for a new confirmation because it now runs code, the caller's settings, and which secret settings are set.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "My state of a plugin",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Install ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The state",
+                        "schema": {
+                            "$ref": "#/definitions/plugins.MyState"
+                        }
+                    },
+                    "403": {
+                        "description": "A personal install of another user",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No such install",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Turns an install on or off for the caller and sets their settings. Turning off keeps the settings. An install that runs code since the caller turned it on answers 409 needs_reenable until the request also sends reenable true. Secret settings are not supported yet (422).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "Turn a plugin on or off for me",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Install ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Changes",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/plugins.MyStateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The state",
+                        "schema": {
+                            "$ref": "#/definitions/plugins.MyState"
+                        }
+                    },
+                    "400": {
+                        "description": "A setting the plugin does not have",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "A personal install of another user",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No such install",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "needs_reenable",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Secret settings (unsupported)",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugins/installs/{id}/rollback": {
+            "post": {
+                "description": "Sets the previous version of an install again, with the rights of an update; the version rolled back from becomes the available update. For an install for everyone that runs code, in either version, the request needs the administrator's own browser session with X-LocalAI-Confirm set to the install ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "Roll a plugin back",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Install ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "The install ID, when code is involved",
+                        "name": "X-LocalAI-Confirm",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The install after the rollback",
+                        "schema": {
+                            "$ref": "#/definitions/plugins.InstallDetail"
+                        }
+                    },
+                    "400": {
+                        "description": "No previous version",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "blocked, forbidden or not_human_surface",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No such install, or the previous version is gone",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "The install changed meanwhile",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugins/installs/{id}/update": {
+            "post": {
+                "description": "Confirms an update preview and queues the update. When the preview has needsCodeReview, the request needs the administrator's own browser session with the header X-LocalAI-Confirm set to the install ID (else 403 not_human_surface), and approved_files must name every changed code file. The progress is in GET /api/operations (isPlugin).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "Update a plugin",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Install ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Token and approved code files",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/plugins.UpdateRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "The install ID, for an update whose code changed",
+                        "name": "X-LocalAI-Confirm",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Queued",
+                        "schema": {
+                            "$ref": "#/definitions/plugins.JobAccepted"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid token, or a changed code file not approved",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "blocked, forbidden or not_human_surface",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No such install",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugins/installs/{id}/update/preview": {
+            "post": {
+                "description": "Fetches the newer version and returns the files added, removed and changed, the unified diffs of the changed code files (256 KiB in all), the old and new code reasons and a preview token. The owner of a personal install or an administrator may ask. A personal install whose new version runs code is blocked and keeps its version (403 blocked).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "Preview the update of a plugin",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Install ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The diff and its token",
+                        "schema": {
+                            "$ref": "#/definitions/plugins.UpdatePreview"
+                        }
+                    },
+                    "403": {
+                        "description": "blocked or forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No such install",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "No update available (no_update)",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugins/marketplaces": {
+            "get": {
+                "description": "Lists the marketplaces of plugins compatible with the Claude Code plugin format, with their state and the short code of the last failed refresh. Needs the plugins feature.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "List the plugin marketplaces",
+                "responses": {
+                    "200": {
+                        "description": "Marketplaces",
+                        "schema": {
+                            "$ref": "#/definitions/plugins.MarketplaceList"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "The plugins feature is off for the caller",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Plugins are not set up on this server (plugins_unavailable)",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Adds a marketplace (owner/repo, an https git URL or an https URL of a marketplace.json file) and reads it at once. Nothing is kept when the first read fails. Administrators only.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "Add a plugin marketplace",
+                "parameters": [
+                    {
+                        "description": "Source",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_mudler_LocalAI_core_http_endpoints_plugins.AddMarketplaceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "The new marketplace",
+                        "schema": {
+                            "$ref": "#/definitions/plugins.Marketplace"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid source, ref or ID, or the marketplace could not be read",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Not an administrator",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "The ID is taken",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Too many marketplaces (limit_reached)",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugins/marketplaces/{id}": {
+            "put": {
+                "description": "Changes the ref (read at the next refresh) or the enabled switch of a marketplace. Administrators only.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "Change a plugin marketplace",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Marketplace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Changes",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_mudler_LocalAI_core_http_endpoints_plugins.UpdateMarketplaceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The marketplace",
+                        "schema": {
+                            "$ref": "#/definitions/plugins.Marketplace"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid ref",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Not an administrator",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No such marketplace",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Removes a marketplace and its list. A default marketplace stays removed and is not added again at start. The installs from it stay. Administrators only.",
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "Remove a plugin marketplace",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Marketplace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Removed"
+                    },
+                    "403": {
+                        "description": "Not an administrator",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No such marketplace",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/plugins/marketplaces/{id}/refresh": {
+            "post": {
+                "description": "Reads the marketplace now. A failure keeps the last good list and records a short code in lastError; the answer is the marketplace in either case. A refresh never installs anything. Administrators only.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Plugins"
+                ],
+                "summary": "Refresh a plugin marketplace",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Marketplace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The marketplace after the refresh",
+                        "schema": {
+                            "$ref": "#/definitions/plugins.Marketplace"
+                        }
+                    },
+                    "403": {
+                        "description": "Not an administrator",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No such marketplace",
+                        "schema": {
+                            "$ref": "#/definitions/schema.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/prompt-cache": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "prompt-cache"
+                ],
+                "summary": "Show the disk prompt cache: size, free disk, effective cap and state of each node, and the size of each model.",
+                "responses": {
+                    "200": {
+                        "description": "Response",
+                        "schema": {
+                            "$ref": "#/definitions/promptcachesvc.StatusReport"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/prompt-cache/clear": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "prompt-cache"
+                ],
+                "summary": "Clear the disk prompt cache, of every model or of one model.",
+                "parameters": [
+                    {
+                        "description": "model to clear, empty for all",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/localai.PromptCacheClearRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Response",
+                        "schema": {
+                            "$ref": "#/definitions/localai.PromptCacheClearResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/prompt-cache/mine": {
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "prompt-cache"
+                ],
+                "summary": "Clear my cached prompts from the disk prompt cache.",
+                "responses": {
+                    "200": {
+                        "description": "Response",
+                        "schema": {
+                            "$ref": "#/definitions/localai.PromptCacheClearResponse"
                         }
                     }
                 }
@@ -23702,6 +25520,25 @@ const docTemplate = `{
                 }
             }
         },
+        "auth.FeatureMeta": {
+            "type": "object",
+            "properties": {
+                "configurable": {
+                    "description": "ConfigurableDefault marks a feature whose default an administrator may\nchange (PUT /api/auth/admin/features/:feature/default).",
+                    "type": "boolean"
+                },
+                "default": {
+                    "description": "DefaultValue is the value a user gets when their permission map does\nnot name the feature. The metas functions give the built-in default;\nEffectiveFeatureMetas gives the one in force.",
+                    "type": "boolean"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                }
+            }
+        },
         "auth.WebSocketTicketResponse": {
             "type": "object",
             "properties": {
@@ -24152,7 +25989,8 @@ const docTemplate = `{
                 "page",
                 "dashboard",
                 "knowledge",
-                "voice_profile"
+                "voice_profile",
+                "plugin"
             ],
             "x-enum-varnames": [
                 "ChangeMemory",
@@ -24161,7 +25999,8 @@ const docTemplate = `{
                 "ChangePage",
                 "ChangeDashboard",
                 "ChangeKnowledge",
-                "ChangeVoiceProfile"
+                "ChangeVoiceProfile",
+                "ChangePlugin"
             ]
         },
         "contract.ChangeProposal": {
@@ -24768,6 +26607,34 @@ const docTemplate = `{
                 }
             }
         },
+        "enginesettings.Advice": {
+            "type": "object",
+            "properties": {
+                "avoid": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "control": {
+                    "description": "Control is a Combined id or a flag key.",
+                    "type": "string"
+                },
+                "doc": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "$ref": "#/definitions/enginesettings.MemoryKind"
+                },
+                "value": {
+                    "description": "Value is the recommended choice (Combined) or value (flag).",
+                    "type": "string"
+                }
+            }
+        },
         "enginesettings.BackendMatch": {
             "type": "object",
             "properties": {
@@ -24815,10 +26682,12 @@ const docTemplate = `{
         "enginesettings.Capability": {
             "type": "string",
             "enum": [
+                "drafting",
                 "command-line",
                 "tensor-placement"
             ],
             "x-enum-varnames": [
+                "CapabilityDrafting",
                 "CapabilityCommandLine",
                 "CapabilityTensorPlacement"
             ]
@@ -24826,6 +26695,10 @@ const docTemplate = `{
         "enginesettings.Choice": {
             "type": "object",
             "properties": {
+                "doc": {
+                    "description": "Doc says what the choice does. Optional; a client shows it for the\ncurrent choice.",
+                    "type": "string"
+                },
                 "label": {
                     "type": "string"
                 },
@@ -24879,6 +26752,105 @@ const docTemplate = `{
             "type": "object",
             "additionalProperties": {}
         },
+        "enginesettings.DraftMode": {
+            "type": "object",
+            "properties": {
+                "auto": {
+                    "description": "Auto: the backend turns the mode on by itself for a model that has\nwhat Needs names when the file sets no kind.",
+                    "type": "boolean"
+                },
+                "doc": {
+                    "type": "string"
+                },
+                "fields": {
+                    "description": "Fields are the flag keys drawn under the mode, in order.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "model": {
+                    "description": "Model: the mode needs a draft model file (ModelKey).",
+                    "type": "boolean"
+                },
+                "needs": {
+                    "description": "Needs names what the model must have, such as NeedsMTPHead. A client\noffers the mode only when the model has it, or when the file already\nuses the mode.",
+                    "type": "string"
+                },
+                "note": {
+                    "description": "Note is the trade-off of the mode, said plainly. Optional.",
+                    "type": "string"
+                },
+                "set": {
+                    "description": "Set lists flag values written when the mode is picked and the flag\nis unset, such as the window LocalAI uses for MTP.",
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "types": {
+                    "description": "Types are the kinds read back as this mode. The first is written\nwhen the mode is picked. Empty for Off and for a draft model.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "enginesettings.DraftStreams": {
+            "type": "object",
+            "properties": {
+                "default": {
+                    "type": "string"
+                },
+                "doc": {
+                    "type": "string"
+                },
+                "option": {
+                    "type": "string"
+                }
+            }
+        },
+        "enginesettings.Drafting": {
+            "type": "object",
+            "properties": {
+                "group": {
+                    "description": "Group is the editor section the modes are drawn in. A client draws\nits other flags under the modes as \"more options\".",
+                    "type": "string"
+                },
+                "model_key": {
+                    "description": "ModelKey is the flag key of the draft model file.",
+                    "type": "string"
+                },
+                "modes": {
+                    "description": "Modes are the choices, the first one being Off (no kind, no model).",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/enginesettings.DraftMode"
+                    }
+                },
+                "off_type": {
+                    "description": "OffType is the kind Off writes when the model would draft without\none (a mode with Auto). Empty: Off always writes no kind.",
+                    "type": "string"
+                },
+                "streams": {
+                    "description": "Streams is the load limit of drafting. Optional.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/enginesettings.DraftStreams"
+                        }
+                    ]
+                },
+                "type_key": {
+                    "description": "TypeKey is the flag key of the drafting kind (a comma-separated list).",
+                    "type": "string"
+                }
+            }
+        },
         "enginesettings.Flag": {
             "type": "object",
             "properties": {
@@ -24915,6 +26887,10 @@ const docTemplate = `{
                 "key": {
                     "description": "Key is a stable identifier, unique in the table.",
                     "type": "string"
+                },
+                "localai_only": {
+                    "description": "LocalAIOnly marks an option that LocalAI's backend reads and the\nengine's own command line does not have. It has no CLI spelling, a\npasted command never sets it, and a built command leaves it out.",
+                    "type": "boolean"
                 },
                 "max": {
                     "type": "number"
@@ -24985,6 +26961,64 @@ const docTemplate = `{
                 },
                 "to": {
                     "type": "integer"
+                }
+            }
+        },
+        "enginesettings.Memory": {
+            "type": "object",
+            "properties": {
+                "advice": {
+                    "description": "Advice lists the recommended value of a control per kind.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/enginesettings.Advice"
+                    }
+                },
+                "fallback": {
+                    "description": "Fallback is the kind a client assumes when the host is unknown. The\ndiscrete rules are the cautious ones.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/enginesettings.MemoryKind"
+                        }
+                    ]
+                },
+                "fit_fraction": {
+                    "description": "FitFraction is the share of the device memory a profile's estimate may\ntake and still count as fitting. The rest is for the system, other\nmodels and estimate error.",
+                    "type": "number"
+                },
+                "kinds": {
+                    "description": "Kinds says, for each kind, what it is and what the rules do there.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/enginesettings.MemoryKindInfo"
+                    }
+                }
+            }
+        },
+        "enginesettings.MemoryKind": {
+            "type": "string",
+            "enum": [
+                "discrete",
+                "unified",
+                "system"
+            ],
+            "x-enum-varnames": [
+                "MemoryDiscrete",
+                "MemoryUnified",
+                "MemorySystem"
+            ]
+        },
+        "enginesettings.MemoryKindInfo": {
+            "type": "object",
+            "properties": {
+                "doc": {
+                    "type": "string"
+                },
+                "kind": {
+                    "$ref": "#/definitions/enginesettings.MemoryKind"
+                },
+                "label": {
+                    "type": "string"
                 }
             }
         },
@@ -25102,11 +27136,22 @@ const docTemplate = `{
         "enginesettings.Preset": {
             "type": "object",
             "properties": {
+                "best_for": {
+                    "description": "BestFor says in one line which use the profile fits. Optional.",
+                    "type": "string"
+                },
                 "description": {
                     "type": "string"
                 },
                 "id": {
                     "type": "string"
+                },
+                "memory": {
+                    "description": "Memory holds the values that depend on the memory kind of the host.\nA kind it does not list uses Settings alone. Profiles only.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/enginesettings.PresetMemory"
+                    }
                 },
                 "name": {
                     "type": "string"
@@ -25119,10 +27164,49 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "profile": {
+                    "description": "Profile marks one of a set of exclusive setups, such as a balanced,\na long prompt and a many users setup. A client shows the profiles as\none choice and reads the current one back: a profile is current when\nevery key it lists has its value (unset for nil). A client that\nswitches from the current profile to another also unsets the keys the\ncurrent one sets and the new one does not list, so a value is removed\nonly when it came from a profile. A profile has no placement.",
+                    "type": "boolean"
+                },
+                "set": {
+                    "description": "Set groups the profiles into independent choices. Empty is the default\nset; ProfileSetConcurrency is the slot count. A switch within a set\nonly unsets the keys of that set's profiles. Profiles only.",
+                    "type": "string"
+                },
                 "settings": {
-                    "description": "Settings maps flag keys to values.",
+                    "description": "Settings maps flag keys to values. A nil value unsets the key.",
                     "type": "object",
                     "additionalProperties": {}
+                },
+                "streams": {
+                    "description": "Streams is the number of requests a concurrency profile serves at\nonce. Profiles only.",
+                    "type": "integer"
+                }
+            }
+        },
+        "enginesettings.PresetMemory": {
+            "type": "object",
+            "properties": {
+                "min_memory": {
+                    "description": "MinMemory is the smallest device memory, in bytes, the profile is\noffered for. 0: any.",
+                    "type": "integer"
+                },
+                "note": {
+                    "description": "Note is the trade-off of the profile on this kind. Optional.",
+                    "type": "string"
+                },
+                "settings": {
+                    "description": "Settings are merged over the profile's own settings for this kind. A\nnil value unsets the key.",
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "tight": {
+                    "description": "Tight is merged over the result when the memory estimate of the\nprofile does not fit the device (Memory.FitFraction of it), for example\nan 8-bit KV cache when the f16 one would not fit. Optional.",
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "unsupported": {
+                    "description": "Unsupported: the profile is not offered for this kind; Note says why.",
+                    "type": "boolean"
                 }
             }
         },
@@ -25141,10 +27225,32 @@ const docTemplate = `{
                         "$ref": "#/definitions/enginesettings.Capability"
                     }
                 },
+                "collapsed_groups": {
+                    "description": "Collapsed lists the groups a client draws closed.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "combined": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/enginesettings.Combined"
+                    }
+                },
+                "drafting": {
+                    "description": "Drafting describes the drafting capability. Absent without it.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/enginesettings.Drafting"
+                        }
+                    ]
+                },
+                "estimate": {
+                    "description": "Estimate maps VRAM estimate request fields to flag keys.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
                     }
                 },
                 "example": {
@@ -25165,6 +27271,14 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "string"
+                },
+                "memory": {
+                    "description": "Memory describes the memory kinds of the profiles. Absent without it.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/enginesettings.Memory"
+                        }
+                    ]
                 },
                 "name": {
                     "type": "string"
@@ -27288,6 +29402,34 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_mudler_LocalAI_core_http_endpoints_plugins.AddMarketplaceRequest": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "description": "ID names the marketplace; the default comes from marketplace.json.",
+                    "type": "string"
+                },
+                "ref": {
+                    "description": "Ref is the branch or tag to follow; empty is the default branch.",
+                    "type": "string"
+                },
+                "source": {
+                    "description": "Source is owner/repo, an https git URL, or an https URL of a\nmarketplace.json file.",
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_mudler_LocalAI_core_http_endpoints_plugins.UpdateMarketplaceRequest": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "ref": {
+                    "type": "string"
+                }
+            }
+        },
         "hostops.RequestSummary": {
             "type": "object",
             "properties": {
@@ -27534,6 +29676,30 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/localai.ReplicaView"
                     }
+                }
+            }
+        },
+        "localai.DrainNodeResponse": {
+            "type": "object",
+            "properties": {
+                "drain_deadline": {
+                    "description": "DrainDeadline is when the replicas still on the node are removed even\nif no replacement loaded. Absent for an immediate drain.",
+                    "type": "string"
+                },
+                "immediate": {
+                    "description": "Immediate is true when the replicas were removed at once: the drain was\nforced, or the node was not reachable.",
+                    "type": "boolean"
+                },
+                "leaving_replicas": {
+                    "description": "LeavingReplicas is the number of loaded replicas still on the node.",
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status is the status of the node after the request: draining.",
+                    "type": "string"
                 }
             }
         },
@@ -28056,6 +30222,26 @@ const docTemplate = `{
             "properties": {
                 "origin": {
                     "type": "string"
+                }
+            }
+        },
+        "localai.PromptCacheClearRequest": {
+            "type": "object",
+            "properties": {
+                "model": {
+                    "description": "Model is the model whose files go; empty clears every model.",
+                    "type": "string"
+                }
+            }
+        },
+        "localai.PromptCacheClearResponse": {
+            "type": "object",
+            "properties": {
+                "bytes": {
+                    "type": "integer"
+                },
+                "files": {
+                    "type": "integer"
                 }
             }
         },
@@ -28589,6 +30775,17 @@ const docTemplate = `{
         "modeladmin.VRAMRequest": {
             "type": "object",
             "properties": {
+                "batch": {
+                    "description": "Batch is the logical batch (parameters.batch). Absent uses the model's\nconfig; 0 uses LocalAI's default for this host.",
+                    "type": "integer"
+                },
+                "cache_type_k": {
+                    "description": "CacheTypeK and CacheTypeV are llama.cpp KV cache types (f16, q8_0,\nq4_0, ...). Empty uses the model's config, then f16. They size the KV\ncache of the runtime breakdown, and the KV term of the total when\nKVQuantBits is not set.",
+                    "type": "string"
+                },
+                "cache_type_v": {
+                    "type": "string"
+                },
                 "context_size": {
                     "type": "integer"
                 },
@@ -28600,12 +30797,20 @@ const docTemplate = `{
                 },
                 "model": {
                     "type": "string"
+                },
+                "ubatch": {
+                    "description": "UBatch is the physical batch (the ubatch option), capped by the batch.\nAbsent uses the model's config; 0 means the same as the batch.",
+                    "type": "integer"
                 }
             }
         },
         "modeladmin.VRAMResponse": {
             "type": "object",
             "properties": {
+                "architecture": {
+                    "description": "Architecture is general.architecture of a local GGUF model file, and\nMTPLayers the layers of its embedded multi-token prediction head (absent\nwithout one). VocabSize is the number of tokens of its vocabulary. The\nmodel editor reads them to offer MTP and to say whether a draft model\nfits. Absent when unknown.",
+                    "type": "string"
+                },
                 "block_count": {
                     "description": "BlockCount is the number of layers of the model, read from the GGUF\nmetadata. Absent when it is unknown.",
                     "type": "integer"
@@ -28623,11 +30828,25 @@ const docTemplate = `{
                 "model_max_context": {
                     "type": "integer"
                 },
+                "mtp_layers": {
+                    "type": "integer"
+                },
+                "runtime": {
+                    "description": "Runtime is the KV cache and compute buffer part of a llama.cpp model\nfor the KV cache types and physical batch of the request. Absent when\nthe estimate has no weight files.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/vram.RuntimeBreakdown"
+                        }
+                    ]
+                },
                 "size_bytes": {
                     "type": "integer"
                 },
                 "size_display": {
                     "type": "string"
+                },
+                "vocab_size": {
+                    "type": "integer"
                 },
                 "vram_bytes": {
                     "type": "integer"
@@ -29246,6 +31465,49 @@ const docTemplate = `{
                 }
             }
         },
+        "nodes.EffectiveLimits": {
+            "type": "object",
+            "properties": {
+                "max_active_backends": {
+                    "type": "integer"
+                },
+                "memory_reclaimer_enabled": {
+                    "type": "boolean"
+                },
+                "memory_reclaimer_threshold": {
+                    "type": "number"
+                },
+                "model_swap": {
+                    "type": "boolean"
+                },
+                "sources": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "vram_budget": {
+                    "type": "string"
+                }
+            }
+        },
+        "nodes.NodeLimits": {
+            "type": "object",
+            "properties": {
+                "max_active_backends": {
+                    "type": "integer"
+                },
+                "memory_reclaimer_threshold": {
+                    "type": "number"
+                },
+                "model_swap": {
+                    "type": "boolean"
+                },
+                "vram_budget": {
+                    "type": "string"
+                }
+            }
+        },
         "nodes.NodeModel": {
             "type": "object",
             "properties": {
@@ -29296,6 +31558,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "replica_index": {
+                    "type": "integer"
+                },
+                "size_bytes": {
+                    "description": "SizeBytes is the memory estimate the replica was placed with, for the\nlargest-first eviction order (size_aware_eviction). 0 when unknown.",
                     "type": "integer"
                 },
                 "state": {
@@ -29352,6 +31618,14 @@ const docTemplate = `{
                 }
             }
         },
+        "p2p.DeviceSessionRequest": {
+            "type": "object",
+            "properties": {
+                "credential": {
+                    "type": "string"
+                }
+            }
+        },
         "p2p.DeviceView": {
             "type": "object",
             "properties": {
@@ -29385,11 +31659,23 @@ const docTemplate = `{
                     "description": "Online is true while the device is connected.",
                     "type": "boolean"
                 },
+                "owner_id": {
+                    "description": "OwnerID is the user whose invite paired the device; empty for the\nAPI key of LOCALAI_API_KEY.",
+                    "type": "string"
+                },
+                "owner_name": {
+                    "description": "OwnerName is the display name of the owner, when known.",
+                    "type": "string"
+                },
                 "path": {
                     "$ref": "#/definitions/p2p.PathView"
                 },
                 "peer_id": {
                     "type": "string"
+                },
+                "sign_in": {
+                    "description": "SignIn is true when the device signs in as its owner.",
+                    "type": "boolean"
                 },
                 "status": {
                     "description": "Status is active or revoked.",
@@ -29552,6 +31838,46 @@ const docTemplate = `{
                 }
             }
         },
+        "p2p.MyMintRequest": {
+            "type": "object",
+            "properties": {
+                "label": {
+                    "type": "string"
+                },
+                "ttl_seconds": {
+                    "description": "TTLSeconds is the life of the invite: 600 (or max_ttl_seconds, when\nshorter) when zero, at most max_ttl_seconds.",
+                    "type": "integer"
+                }
+            }
+        },
+        "p2p.MyPairing": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "description": "Available is true when the server is in mode share, so a device can\npair now.",
+                    "type": "boolean"
+                },
+                "devices": {
+                    "description": "Devices is the number of active devices of the user.",
+                    "type": "integer"
+                },
+                "limits": {
+                    "$ref": "#/definitions/p2p.UserPairingLimits"
+                },
+                "mode": {
+                    "description": "Mode is the P2P mode in effect.",
+                    "type": "string"
+                },
+                "pending_invites": {
+                    "description": "PendingInvites is the number of pending invites of the user.",
+                    "type": "integer"
+                },
+                "reason": {
+                    "description": "Reason says why not: not_share.",
+                    "type": "string"
+                }
+            }
+        },
         "p2p.OKResponse": {
             "type": "object",
             "properties": {
@@ -29625,10 +31951,18 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "device_credential": {
+                    "description": "DeviceCredential lets the device of a sign-in invite sign in as its\nowner over P2P; it is shown once. Absent for other invites.",
+                    "type": "string"
+                },
                 "device_id": {
                     "type": "string"
                 },
                 "kind": {
+                    "type": "string"
+                },
+                "owner_name": {
+                    "description": "OwnerName names the account the device signs in as, when known.",
                     "type": "string"
                 },
                 "phrase": {
@@ -29637,6 +31971,10 @@ const docTemplate = `{
                 },
                 "server": {
                     "$ref": "#/definitions/p2p.ServerInfo"
+                },
+                "sign_in": {
+                    "description": "SignIn is true when the device got a credential.",
+                    "type": "boolean"
                 }
             }
         },
@@ -29862,6 +32200,23 @@ const docTemplate = `{
                 }
             }
         },
+        "p2p.SessionUser": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                }
+            }
+        },
         "p2p.SetRelayLimitsRequest": {
             "type": "object",
             "properties": {
@@ -29876,6 +32231,29 @@ const docTemplate = `{
                 "rate_bps": {
                     "description": "RateBPS is the bandwidth of one circuit in each direction, in bytes\nper second.",
                     "type": "integer"
+                }
+            }
+        },
+        "p2p.SetUserPairingRequest": {
+            "type": "object",
+            "properties": {
+                "allow_open_relay": {
+                    "type": "boolean"
+                },
+                "max_devices": {
+                    "type": "integer"
+                },
+                "max_pending": {
+                    "type": "integer"
+                },
+                "max_ttl_seconds": {
+                    "type": "integer"
+                },
+                "omit_lan_addrs": {
+                    "type": "boolean"
+                },
+                "relays": {
+                    "type": "string"
                 }
             }
         },
@@ -30106,6 +32484,1238 @@ const docTemplate = `{
                 "running": {
                     "description": "Running is true when the host runs.",
                     "type": "boolean"
+                }
+            }
+        },
+        "p2p.UserPairingLimits": {
+            "type": "object",
+            "properties": {
+                "max_devices": {
+                    "type": "integer"
+                },
+                "max_mints_per_hour": {
+                    "description": "MaxMintsPerHour is fixed in code.",
+                    "type": "integer"
+                },
+                "max_pending": {
+                    "type": "integer"
+                },
+                "max_ttl_seconds": {
+                    "type": "integer"
+                }
+            }
+        },
+        "p2p.UserPairingSettings": {
+            "type": "object",
+            "properties": {
+                "allow_open_relay": {
+                    "type": "boolean"
+                },
+                "max_devices": {
+                    "type": "integer"
+                },
+                "max_pending": {
+                    "type": "integer"
+                },
+                "max_ttl_seconds": {
+                    "type": "integer"
+                },
+                "omit_lan_addrs": {
+                    "type": "boolean"
+                },
+                "relays": {
+                    "description": "Relays is auto or none.",
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.AgentRef": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "disallowedTools": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "maxTurns": {
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "skills": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tools": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "plugins.CatalogItem": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "type": "string"
+                },
+                "category": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "homepage": {
+                    "type": "string"
+                },
+                "installs": {
+                    "description": "Installs are the installs of the plugin that the caller can see.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plugins.InstallRef"
+                    }
+                },
+                "marketplace": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "plugin": {
+                    "description": "PluginID is name@marketplace, the ID that inspect takes.",
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "Reason says why an entry is not supported.",
+                    "type": "string"
+                },
+                "reviewed": {
+                    "description": "Reviewed is the last inspect of the plugin by anyone: the version and\nwhat it contributes.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/plugins.ReviewedVersion"
+                        }
+                    ]
+                },
+                "runsCode": {
+                    "description": "RunsCode says whether the plugin runs code, from RunsCodeFrom; nil\nwhen nothing says. Inspect tells for sure for the version it fetches.",
+                    "type": "boolean"
+                },
+                "runsCodeFrom": {
+                    "description": "RunsCodeFrom is where RunsCode comes from: an install, the last\nreview (inspect) of the plugin, or the runsCode that the curated\nmarketplace claims (a hint; the review decides).",
+                    "type": "string"
+                },
+                "source": {
+                    "type": "object"
+                },
+                "strict": {
+                    "type": "boolean"
+                },
+                "supported": {
+                    "type": "boolean"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.CatalogPage": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plugins.CatalogItem"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "plugins.ChatPluginsRequest": {
+            "type": "object",
+            "properties": {
+                "off": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "plugins.ChatPluginsResponse": {
+            "type": "object",
+            "properties": {
+                "off": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "plugins.CommandRef": {
+            "type": "object",
+            "properties": {
+                "allowedTools": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "argumentHint": {
+                    "type": "string"
+                },
+                "arguments": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "description": {
+                    "type": "string"
+                },
+                "disableModelInvocation": {
+                    "type": "boolean"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "shellInjection": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "plugins.FileChange": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "boolean"
+                },
+                "newLines": {
+                    "type": "integer"
+                },
+                "oldLines": {
+                    "description": "OldLines and NewLines count the lines of each side; 0 for a missing\nside.",
+                    "type": "integer"
+                },
+                "path": {
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.FileDiff": {
+            "type": "object",
+            "properties": {
+                "diff": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.HookHandlerRef": {
+            "type": "object",
+            "properties": {
+                "args": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "command": {
+                    "type": "string"
+                },
+                "timeout": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "url": {
+                    "description": "URL is where an http hook sends the hook payloads.",
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.HookRef": {
+            "type": "object",
+            "properties": {
+                "event": {
+                    "type": "string"
+                },
+                "handlers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plugins.HookHandlerRef"
+                    }
+                },
+                "matcher": {
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.InspectRequest": {
+            "type": "object",
+            "properties": {
+                "plugin": {
+                    "description": "Plugin is name@marketplace.",
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.InstallDetail": {
+            "type": "object",
+            "properties": {
+                "approvedAt": {
+                    "type": "string"
+                },
+                "approvedBy": {
+                    "type": "string"
+                },
+                "codeFiles": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "codeReasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "digest": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "description": "Enabled and NeedsReenable are the caller's own state.",
+                    "type": "boolean"
+                },
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/store.File"
+                    }
+                },
+                "hosts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "installedBy": {
+                    "type": "string"
+                },
+                "model": {
+                    "$ref": "#/definitions/plugins.Model"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "needsReenable": {
+                    "type": "boolean"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "plugin": {
+                    "type": "string"
+                },
+                "previousDigest": {
+                    "type": "string"
+                },
+                "runsCode": {
+                    "type": "boolean"
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "sha": {
+                    "type": "string"
+                },
+                "sizeBytes": {
+                    "type": "integer"
+                },
+                "skipped": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/store.Skipped"
+                    }
+                },
+                "state": {
+                    "type": "string"
+                },
+                "updateDigest": {
+                    "type": "string"
+                },
+                "updateSha": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.InstallList": {
+            "type": "object",
+            "properties": {
+                "installs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plugins.InstallView"
+                    }
+                }
+            }
+        },
+        "plugins.InstallRef": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.InstallRequest": {
+            "type": "object",
+            "properties": {
+                "scope": {
+                    "description": "Scope is \"user\" (the default) or \"instance\".",
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.InstallView": {
+            "type": "object",
+            "properties": {
+                "approvedAt": {
+                    "type": "string"
+                },
+                "approvedBy": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "digest": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "description": "Enabled and NeedsReenable are the caller's own state.",
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "installedBy": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "needsReenable": {
+                    "type": "boolean"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "plugin": {
+                    "type": "string"
+                },
+                "previousDigest": {
+                    "type": "string"
+                },
+                "runsCode": {
+                    "type": "boolean"
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "sha": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "updateDigest": {
+                    "type": "string"
+                },
+                "updateSha": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.JobAccepted": {
+            "type": "object",
+            "properties": {
+                "jobID": {
+                    "type": "string"
+                },
+                "plugin": {
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.MCPRef": {
+            "type": "object",
+            "properties": {
+                "args": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "command": {
+                    "type": "string"
+                },
+                "env": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "headersHelper": {
+                    "description": "HeadersHelper is a shell command that Claude Code runs for the\nheaders. LocalAI does not run it; it makes the plugin code.",
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.Marketplace": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "description": "Active is enabled and not suspended: browse and install read it.",
+                    "type": "boolean"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "createdBy": {
+                    "type": "string"
+                },
+                "default": {
+                    "description": "Default marks a marketplace that LocalAI ships (the curated one).",
+                    "type": "boolean"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "headSha": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "lastError": {
+                    "description": "LastError is a short code of the last failed refresh.",
+                    "type": "string"
+                },
+                "location": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "ref": {
+                    "type": "string"
+                },
+                "refreshedAt": {
+                    "type": "string"
+                },
+                "suspended": {
+                    "description": "Suspended is set for a default marketplace while the \"official\nlibraries\" switch is off.",
+                    "type": "boolean"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.MarketplaceList": {
+            "type": "object",
+            "properties": {
+                "marketplaces": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plugins.Marketplace"
+                    }
+                }
+            }
+        },
+        "plugins.Model": {
+            "type": "object",
+            "properties": {
+                "agents": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plugins.AgentRef"
+                    }
+                },
+                "bin": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "commands": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plugins.CommandRef"
+                    }
+                },
+                "description": {
+                    "type": "string"
+                },
+                "hooks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plugins.HookRef"
+                    }
+                },
+                "mcpServers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plugins.MCPRef"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "skills": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plugins.SkillRef"
+                    }
+                },
+                "skipped": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plugins.SkippedRef"
+                    }
+                },
+                "userConfig": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plugins.OptionRef"
+                    }
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.MyState": {
+            "type": "object",
+            "properties": {
+                "config": {
+                    "type": "object"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "install": {
+                    "type": "string"
+                },
+                "needsReenable": {
+                    "type": "boolean"
+                },
+                "secretsSet": {
+                    "description": "SecretsSet names the sensitive options that have a value. Empty until\nsealed secrets exist (spec 12.4).",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "plugins.MyStateRequest": {
+            "type": "object",
+            "properties": {
+                "config": {
+                    "description": "Config replaces the non-sensitive settings of the plugin.",
+                    "type": "object"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "reenable": {
+                    "description": "Reenable confirms turning on an install that runs code since the\ncaller last turned it on.",
+                    "type": "boolean"
+                },
+                "secrets": {
+                    "description": "Secrets sets sensitive settings. Not supported yet (422).",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "plugins.OptionRef": {
+            "type": "object",
+            "properties": {
+                "default": {},
+                "description": {
+                    "type": "string"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "max": {
+                    "type": "number"
+                },
+                "min": {
+                    "type": "number"
+                },
+                "multiple": {
+                    "type": "boolean"
+                },
+                "options": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "sensitive": {
+                    "type": "boolean"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.Preview": {
+            "type": "object",
+            "properties": {
+                "codeFiles": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "codeReasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "description": {
+                    "type": "string"
+                },
+                "digest": {
+                    "type": "string"
+                },
+                "entry": {
+                    "type": "string"
+                },
+                "expiresAt": {
+                    "type": "string"
+                },
+                "fileCount": {
+                    "type": "integer"
+                },
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/store.File"
+                    }
+                },
+                "hosts": {
+                    "description": "Hosts are the hosts that the remote MCP servers connect to.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "marketplace": {
+                    "type": "string"
+                },
+                "model": {
+                    "$ref": "#/definitions/plugins.Model"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "plugin": {
+                    "type": "string"
+                },
+                "runsCode": {
+                    "type": "boolean"
+                },
+                "sha": {
+                    "description": "SHA is the full commit the files come from; Digest names the files\nand the effective manifest.",
+                    "type": "string"
+                },
+                "sizeBytes": {
+                    "type": "integer"
+                },
+                "token": {
+                    "description": "Token confirms this preview once, before ExpiresAt.",
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.ReviewedVersion": {
+            "type": "object",
+            "properties": {
+                "checkedAt": {
+                    "type": "string"
+                },
+                "codeReasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "digest": {
+                    "type": "string"
+                },
+                "hosts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "model": {
+                    "$ref": "#/definitions/plugins.Model"
+                },
+                "runsCode": {
+                    "type": "boolean"
+                },
+                "sha": {
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.SkillRef": {
+            "type": "object",
+            "properties": {
+                "allowedTools": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "argumentHint": {
+                    "type": "string"
+                },
+                "arguments": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "description": {
+                    "type": "string"
+                },
+                "dir": {
+                    "type": "string"
+                },
+                "disableModelInvocation": {
+                    "type": "boolean"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "shellInjection": {
+                    "type": "boolean"
+                },
+                "userInvocable": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "plugins.SkippedRef": {
+            "type": "object",
+            "properties": {
+                "component": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "reasonCode": {
+                    "type": "string"
+                }
+            }
+        },
+        "plugins.UpdatePreview": {
+            "type": "object",
+            "properties": {
+                "added": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plugins.FileChange"
+                    }
+                },
+                "changed": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plugins.FileChange"
+                    }
+                },
+                "codeFiles": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "codeItems": {
+                    "description": "CodeItems are the code components that the new version adds or\nchanges (command hooks, stdio MCP servers, bin files), described for\nthe review. Some come from the marketplace entry and are in no file.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "diffs": {
+                    "description": "Diffs are the unified diffs of the changed code files, up to\nMaxDiffBytes in all; Truncated says that some were left out.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plugins.FileDiff"
+                    }
+                },
+                "expiresAt": {
+                    "type": "string"
+                },
+                "fromDigest": {
+                    "type": "string"
+                },
+                "fromSha": {
+                    "type": "string"
+                },
+                "install": {
+                    "type": "string"
+                },
+                "needsCodeReview": {
+                    "description": "NeedsCodeReview is set for an instance install whose code changed:\na code file, the code reasons or the code components. The approval\nneeds the administrator's browser session and a tick for each file of\nCodeFiles.",
+                    "type": "boolean"
+                },
+                "newCodeFiles": {
+                    "description": "NewCodeFiles are the files that are code in the new version and were\nnot code before, although their bytes did not change: a hook of the\nmarketplace entry can start to run a file that was plain text. They\nhave no diff, so the review shows their full text. They are also in\nCodeFiles.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "newCodeReasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "oldCodeReasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "plugin": {
+                    "type": "string"
+                },
+                "removed": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plugins.FileChange"
+                    }
+                },
+                "toDigest": {
+                    "type": "string"
+                },
+                "toSha": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                },
+                "truncated": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "plugins.UpdateRequest": {
+            "type": "object",
+            "properties": {
+                "approved_files": {
+                    "description": "ApprovedFiles names each changed code file when the preview has\nneedsCodeReview.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "promptcache.Result": {
+            "type": "object",
+            "properties": {
+                "bytes": {
+                    "type": "integer"
+                },
+                "files": {
+                    "type": "integer"
+                }
+            }
+        },
+        "promptcache.State": {
+            "type": "string",
+            "enum": [
+                "on",
+                "paused_low_disk",
+                "disabled_disk_full",
+                "unknown"
+            ],
+            "x-enum-varnames": [
+                "StateOn",
+                "StatePaused",
+                "StateDisabled",
+                "StateUnknown"
+            ]
+        },
+        "promptcache.Status": {
+            "type": "object",
+            "properties": {
+                "cache_bytes": {
+                    "description": "CacheBytes is what the cache holds after the sweep.",
+                    "type": "integer"
+                },
+                "critical_watermark_bytes": {
+                    "type": "integer"
+                },
+                "effective_cap_bytes": {
+                    "type": "integer"
+                },
+                "free_bytes": {
+                    "description": "FreeBytes and TotalBytes are the numbers of the filesystem that holds\nthe cache (the models filesystem when they share it).",
+                    "type": "integer"
+                },
+                "low_watermark_bytes": {
+                    "description": "LowWatermarkBytes and CriticalWatermarkBytes are the thresholds of\nthat filesystem.",
+                    "type": "integer"
+                },
+                "max_bytes": {
+                    "description": "MaxBytes is the configured cap, EffectiveCapBytes the cap the sweep\nenforced: never more than the cache plus the free space over the low\nwatermark, so the cache never fills the disk.",
+                    "type": "integer"
+                },
+                "removed": {
+                    "description": "Removed is what the sweep deleted.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/promptcache.Result"
+                        }
+                    ]
+                },
+                "shares_models_disk": {
+                    "description": "SharesModelsDisk is true when the models are on the same filesystem.",
+                    "type": "boolean"
+                },
+                "state": {
+                    "$ref": "#/definitions/promptcache.State"
+                },
+                "total_bytes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "promptcachesvc.ModelUsage": {
+            "type": "object",
+            "properties": {
+                "bytes": {
+                    "type": "integer"
+                },
+                "files": {
+                    "type": "integer"
+                },
+                "model": {
+                    "description": "Model is the name of the model configuration, empty when no installed\nmodel has these files (a deleted model, or a changed model file).",
+                    "type": "string"
+                },
+                "model16": {
+                    "type": "string"
+                }
+            }
+        },
+        "promptcachesvc.NodeStatus": {
+            "type": "object",
+            "properties": {
+                "bytes": {
+                    "type": "integer"
+                },
+                "enabled": {
+                    "description": "Enabled is false when the tier is off on the node; Error says why a\nnode gave no usage (offline, no answer).",
+                    "type": "boolean"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "files": {
+                    "type": "integer"
+                },
+                "models": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/promptcachesvc.ModelUsage"
+                    }
+                },
+                "namespaces": {
+                    "type": "integer"
+                },
+                "node": {
+                    "type": "string"
+                },
+                "off_reason": {
+                    "description": "OffReason says why the tier is off on the node: no_path,\nswitched_off, network_disk or not_writable.",
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/promptcache.Status"
+                }
+            }
+        },
+        "promptcachesvc.StatusReport": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "description": "Enabled is the global switch with a place to keep the files.",
+                    "type": "boolean"
+                },
+                "nodes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/promptcachesvc.NodeStatus"
+                    }
+                },
+                "shared": {
+                    "description": "Shared is true when every user shares one namespace.",
+                    "type": "boolean"
+                },
+                "total": {
+                    "description": "Total sums the nodes that answered.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/promptcachesvc.Total"
+                        }
+                    ]
+                }
+            }
+        },
+        "promptcachesvc.Total": {
+            "type": "object",
+            "properties": {
+                "bytes": {
+                    "type": "integer"
+                },
+                "cap_bytes": {
+                    "description": "CapBytes sums the effective caps of the nodes.",
+                    "type": "integer"
+                },
+                "files": {
+                    "type": "integer"
+                },
+                "nodes": {
+                    "description": "Nodes counts the nodes that answered, Unreachable the ones that did\nnot.",
+                    "type": "integer"
+                },
+                "unreachable": {
+                    "type": "integer"
                 }
             }
         },
@@ -30852,6 +34462,14 @@ const docTemplate = `{
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/resourcesets.Entry"
+                }
+            }
+        },
+        "routes.featureDefaultRequest": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
                 }
             }
         },
@@ -31795,6 +35413,13 @@ const docTemplate = `{
                     "description": "Network is the network preset of the Sandbox commands of the agent's\nunattended runs: off (the default), registries or all, capped by the\nadministrator's ceiling.",
                     "type": "string"
                 },
+                "plugins": {
+                    "description": "Plugins are the install IDs of the plugins the agent may use (exact\ngrant: empty grants none).",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "project_id": {
                     "description": "ProjectID is the project the agent belongs to, absent for an agent of no\nproject. It is set when the agent is created and cannot change.",
                     "type": "string",
@@ -32543,6 +36168,13 @@ const docTemplate = `{
                 },
                 "network": {
                     "type": "string"
+                },
+                "plugins": {
+                    "description": "Plugins are the install IDs of the plugins the agent may use.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "projectRef": {
                     "description": "ProjectRef is set in an export file (version 5) of a project agent: the\nproject of the exporting server, used only as a hint for the name to\noffer. An import never takes the project from it. A write to\nPOST /api/chats/agents ignores it.",
@@ -34452,6 +38084,13 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "plugins_off": {
+                    "description": "PluginsOff are the plugin install IDs switched off in the chat.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "project_id": {
                     "description": "ProjectID is the project the chat belongs to; PulledProjects are the\nother projects it reads from. ProjectID can name a project that was\ndeleted since; read that as no project.",
                     "type": "string"
@@ -34595,6 +38234,13 @@ const docTemplate = `{
                             "$ref": "#/definitions/schema.ChatsPlace"
                         }
                     ]
+                },
+                "plugins_off": {
+                    "description": "PluginsOff are the plugin install IDs switched off in the chat.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "project_id": {
                     "description": "ProjectID is the project the chat belongs to; PulledProjects are the\nother projects it reads from. ProjectID can name a project that was\ndeleted since; read that as no project.",
@@ -36114,6 +39760,13 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "plugin_install": {
+                    "description": "PluginInstall and PluginServer name the plugin install and the MCP\nserver of a connector that a plugin owns. Such a connector is read\nonly: a change answers 403. Absent for a connector you made.",
+                    "type": "string"
+                },
+                "plugin_server": {
+                    "type": "string"
+                },
                 "transport": {
                     "description": "http or stdio",
                     "type": "string"
@@ -36148,6 +39801,10 @@ const docTemplate = `{
                 },
                 "off": {
                     "type": "boolean"
+                },
+                "plugin_install": {
+                    "description": "PluginInstall is the plugin install that owns the connector.",
+                    "type": "string"
                 },
                 "reason": {
                     "type": "string"
@@ -38020,6 +41677,9 @@ const docTemplate = `{
                 "agent_name": {
                     "type": "string"
                 },
+                "argument_hint": {
+                    "type": "string"
+                },
                 "description": {
                     "type": "string"
                 },
@@ -38057,8 +41717,25 @@ const docTemplate = `{
                     "description": "New is true for a personal skill that was imported and that no chat has\nused yet. The first use clears it.",
                     "type": "boolean"
                 },
+                "no_menu": {
+                    "type": "boolean"
+                },
+                "no_model": {
+                    "description": "NoModel is set for a plugin skill that only a person may call; NoMenu\nfor one that stays out of the / menu. ArgumentHint is the hint of its\narguments in that menu.",
+                    "type": "boolean"
+                },
                 "path": {
                     "description": "Path is the path of its SKILL.md as the model sees it.",
+                    "type": "string"
+                },
+                "plugin": {
+                    "description": "Plugin, PluginTitle and PluginInstall name the plugin of a skill of the\nplugin layer: its plugin ID (name@marketplace), its name, and the\ninstall that provides it.",
+                    "type": "string"
+                },
+                "plugin_install": {
+                    "type": "string"
+                },
+                "plugin_title": {
                     "type": "string"
                 },
                 "project": {
@@ -38358,6 +42035,13 @@ const docTemplate = `{
                     ]
                 },
                 "mcp_off": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "plugins_off": {
+                    "description": "PluginsOff are the plugin install IDs the chat starts with off, in the\nform PUT /api/chats/{id}/plugins takes. At most 200.",
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -42803,6 +46487,10 @@ const docTemplate = `{
                 "seed": {
                     "type": "integer"
                 },
+                "service_tier": {
+                    "description": "ServiceTier is the OpenAI service tier of the request: auto, default,\nflex or priority. It sets the priority class the backend serves the\nrequest with (core/priority); a caller who is not an administrator\ncannot raise it above default. After the request is read it holds the\ntier that applied.",
+                    "type": "string"
+                },
                 "size": {
                     "description": "image",
                     "type": "string"
@@ -42887,6 +46575,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "object": {
+                    "type": "string"
+                },
+                "service_tier": {
+                    "description": "ServiceTier is the service tier the request was served with, set on\nthe chat and text completion responses.",
                     "type": "string"
                 },
                 "usage": {
@@ -45035,6 +48727,38 @@ const docTemplate = `{
                 }
             }
         },
+        "store.File": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "description": "\"0644\" or \"0755\"",
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "sha256": {
+                    "type": "string"
+                },
+                "size": {
+                    "type": "integer"
+                }
+            }
+        },
+        "store.Skipped": {
+            "type": "object",
+            "properties": {
+                "component": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                }
+            }
+        },
         "studio.ContextFile": {
             "type": "object",
             "properties": {
@@ -45545,6 +49269,39 @@ const docTemplate = `{
                 },
                 "transcript": {
                     "type": "string"
+                }
+            }
+        },
+        "vram.RuntimeBreakdown": {
+            "type": "object",
+            "properties": {
+                "approximate": {
+                    "description": "Approximate is true when the layers and heads were not read from a\nGGUF header, so the KV cache is a rule of thumb per token.",
+                    "type": "boolean"
+                },
+                "cache_type_k": {
+                    "type": "string"
+                },
+                "cache_type_v": {
+                    "type": "string"
+                },
+                "compute_bytes": {
+                    "type": "integer"
+                },
+                "compute_display": {
+                    "type": "string"
+                },
+                "context_length": {
+                    "type": "integer"
+                },
+                "kv_cache_bytes": {
+                    "type": "integer"
+                },
+                "kv_cache_display": {
+                    "type": "string"
+                },
+                "ubatch": {
+                    "type": "integer"
                 }
             }
         },

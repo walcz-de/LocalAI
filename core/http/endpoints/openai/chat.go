@@ -14,6 +14,7 @@ import (
 	"github.com/mudler/LocalAI/core/http/auth"
 	mcpTools "github.com/mudler/LocalAI/core/http/endpoints/mcp"
 	"github.com/mudler/LocalAI/core/http/middleware"
+	"github.com/mudler/LocalAI/core/priority"
 	"github.com/mudler/LocalAI/core/privacy"
 	"github.com/mudler/LocalAI/core/schema"
 	"github.com/mudler/LocalAI/core/services/cloudproxy"
@@ -523,7 +524,7 @@ func ChatEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, evaluator
 				fs := &functions.JSONFunctionStructure{
 					AnyOf: []functions.Item{d.JsonSchema.Schema},
 				}
-				g, err := fs.Grammar(config.FunctionsConfig.GrammarOptions()...)
+				g, err := config.SchemaGrammar(*fs)
 				if err == nil {
 					input.Grammar = g
 				} else {
@@ -557,7 +558,7 @@ func ChatEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, evaluator
 			// Append the no action function
 			if !config.FunctionsConfig.DisableNoAction && !strictMode {
 				if require != nil {
-					g, err := config.FunctionsConfig.ToJSONStructure(funcs).Grammar(config.FunctionsConfig.GrammarOptions()...)
+					g, err := config.SchemaGrammar(config.FunctionsConfig.ToJSONStructure(funcs))
 					if err == nil {
 						require.grammar = g
 					} else {
@@ -574,7 +575,7 @@ func ChatEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, evaluator
 
 			// Update input grammar or json_schema based on use_llama_grammar option
 			jsStruct := config.FunctionsConfig.ToJSONStructure(funcs)
-			g, err := jsStruct.Grammar(config.FunctionsConfig.GrammarOptions()...)
+			g, err := config.SchemaGrammar(jsStruct)
 			if err == nil {
 				config.Grammar = g
 			} else {
@@ -584,7 +585,7 @@ func ChatEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, evaluator
 				require.clientGrammar = config.Grammar
 			}
 		case input.JSONFunctionGrammarObject != nil:
-			g, err := input.JSONFunctionGrammarObject.Grammar(config.FunctionsConfig.GrammarOptions()...)
+			g, err := config.SchemaGrammar(*input.JSONFunctionGrammarObject)
 			if err == nil {
 				config.Grammar = g
 			} else {
@@ -626,6 +627,8 @@ func ChatEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, evaluator
 			c.Response().Header().Set("Cache-Control", "no-cache")
 			c.Response().Header().Set("Connection", "keep-alive")
 			c.Response().Header().Set("X-Correlation-ID", id)
+			// The tier that applied, which OpenAI echoes in every chunk.
+			serviceTier := priority.Of(input.Context).ServiceTier()
 
 			mcpStreamMaxIterations := 10
 			if config.Agent.MaxIterations > 0 {
@@ -669,7 +672,65 @@ func ChatEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, evaluator
 				wroteChunk := false
 				toolsCalled := false
 				var collectedToolCalls []schema.ToolCall
-				var collectedContent string
+				var collectedContent strings.Builder
+				var chunk sseChunkWriter
+
+				// sendChunk writes one chunk without flushing it, and reports
+				// whether it wrote anything.
+				sendChunk := func(ev schema.OpenAIResponse) (bool, error) {
+					if len(ev.Choices) == 0 {
+						xlog.Debug("No choices in the response, skipping")
+						return false, nil
+					}
+					if len(ev.Choices[0].Delta.ToolCalls) > 0 {
+						toolsCalled = true
+						// Collect and merge tool call deltas for MCP execution
+						if hasMCPToolsStream {
+							collectedToolCalls = mergeToolCallDeltas(collectedToolCalls, ev.Choices[0].Delta.ToolCalls)
+						}
+					}
+					// Extract the raw content delta string once per chunk;
+					// both the MCP collector and the PII filter need it
+					// and the type-switch is otherwise duplicated.
+					var rawContent string
+					haveContent := false
+					if ev.Choices[0].Delta != nil && ev.Choices[0].Delta.Content != nil {
+						switch v := ev.Choices[0].Delta.Content.(type) {
+						case string:
+							rawContent = v
+							haveContent = true
+						case *string:
+							if v != nil {
+								rawContent = *v
+								haveContent = true
+							}
+						}
+					}
+					// Collect content for MCP conversation history and automatic tool parsing fallback.
+					// We collect the RAW (unfiltered) content so the model's tool-call
+					// markup keeps parsing correctly even when PII redaction would mask
+					// substrings.
+					if (hasMCPToolsStream || config.FunctionsConfig.AutomaticToolParsingFallback || evidence != nil) && haveContent {
+						collectedContent.WriteString(rawContent)
+					}
+					// OpenAI echoes the tier that applied in every chunk.
+					ev.ServiceTier = serviceTier
+					respData, err := chunk.encode(ev)
+					if err != nil {
+						xlog.Debug("Failed to marshal response", "error", err)
+						input.Cancel()
+						return false, nil
+					}
+					xlog.Debug("Sending chunk", "chunk", redactedJSON{ctx: c.Request().Context(), data: chunk.payload()})
+					_, err = c.Response().Writer.Write(respData)
+					if err != nil {
+						xlog.Debug("Sending chunk failed", "error", err)
+						input.Cancel()
+						return false, err
+					}
+					wroteChunk = true
+					return true, nil
+				}
 
 			LOOP:
 				for {
@@ -680,56 +741,33 @@ func ChatEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, evaluator
 						input.Cancel()
 						break LOOP
 					case ev := <-responses:
-						if len(ev.Choices) == 0 {
-							xlog.Debug("No choices in the response, skipping")
-							continue
-						}
-						if len(ev.Choices[0].Delta.ToolCalls) > 0 {
-							toolsCalled = true
-							// Collect and merge tool call deltas for MCP execution
-							if hasMCPToolsStream {
-								collectedToolCalls = mergeToolCallDeltas(collectedToolCalls, ev.Choices[0].Delta.ToolCalls)
-							}
-						}
-						// Extract the raw content delta string once per chunk;
-						// both the MCP collector and the PII filter need it
-						// and the type-switch is otherwise duplicated.
-						var rawContent string
-						haveContent := false
-						if ev.Choices[0].Delta != nil && ev.Choices[0].Delta.Content != nil {
-							switch v := ev.Choices[0].Delta.Content.(type) {
-							case string:
-								rawContent = v
-								haveContent = true
-							case *string:
-								if v != nil {
-									rawContent = *v
-									haveContent = true
-								}
-							}
-						}
-						// Collect content for MCP conversation history and automatic tool parsing fallback.
-						// We collect the RAW (unfiltered) content so the model's tool-call
-						// markup keeps parsing correctly even when PII redaction would mask
-						// substrings.
-						if (hasMCPToolsStream || config.FunctionsConfig.AutomaticToolParsingFallback || evidence != nil) && haveContent {
-							collectedContent += rawContent
-						}
-						respData, err := json.Marshal(ev)
+						wrote, err := sendChunk(ev)
 						if err != nil {
-							xlog.Debug("Failed to marshal response", "error", err)
-							input.Cancel()
-							continue
-						}
-						xlog.Debug("Sending chunk", "chunk", privacy.Redact(c.Request().Context(), string(respData)))
-						_, err = fmt.Fprintf(c.Response().Writer, "data: %s\n\n", string(respData))
-						if err != nil {
-							xlog.Debug("Sending chunk failed", "error", err)
-							input.Cancel()
 							return err
 						}
-						wroteChunk = true
-						c.Response().Flush()
+						// Write the chunks the worker already has ready, then
+						// flush once: each flush is a write to the socket. A
+						// chunk that is not ready is not waited for, and the
+						// batch is capped so a cancelled request is noticed.
+					BATCH:
+						for range maxChunksPerFlush {
+							select {
+							case next, ok := <-responses:
+								if !ok {
+									break BATCH
+								}
+								w, err := sendChunk(next)
+								if err != nil {
+									return err
+								}
+								wrote = wrote || w
+							default:
+								break BATCH
+							}
+						}
+						if wrote {
+							c.Response().Flush()
+						}
 					case res := <-ended:
 						if res.err == nil {
 							finalUsage = res.usage
@@ -794,7 +832,7 @@ func ChatEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, evaluator
 						// Append assistant message with tool_calls
 						assistantMsg := schema.Message{
 							Role:      "assistant",
-							Content:   collectedContent,
+							Content:   collectedContent.String(),
 							ToolCalls: collectedToolCalls,
 						}
 						input.Messages = append(input.Messages, assistantMsg)
@@ -840,8 +878,8 @@ func ChatEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, evaluator
 
 				// Automatic tool parsing fallback for streaming: when no tools were
 				// requested but the model emitted tool call markup, parse and emit them.
-				if !shouldUseFn && config.FunctionsConfig.AutomaticToolParsingFallback && collectedContent != "" && !toolsCalled {
-					parsed := functions.ParseFunctionCall(collectedContent, config.FunctionsConfig)
+				if !shouldUseFn && config.FunctionsConfig.AutomaticToolParsingFallback && collectedContent.Len() > 0 && !toolsCalled {
+					parsed := functions.ParseFunctionCall(collectedContent.String(), config.FunctionsConfig)
 					for i, fc := range parsed {
 						toolCallID := fc.ID
 						if toolCallID == "" {
@@ -866,7 +904,8 @@ func ChatEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, evaluator
 								},
 								Index: 0,
 							}},
-							Object: "chat.completion.chunk",
+							Object:      "chat.completion.chunk",
+							ServiceTier: serviceTier,
 						}
 						respData, _ := json.Marshal(toolCallMsg)
 						fmt.Fprintf(c.Response().Writer, "data: %s\n\n", respData)
@@ -878,13 +917,14 @@ func ChatEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, evaluator
 				// The answer has been streamed already, so the note can only
 				// follow it as one more content delta.
 				if !toolsCalled {
-					if note := evidence.suffix(collectedContent); note != "" {
+					if note := evidence.suffix(collectedContent.String()); note != "" {
 						noteChunk := schema.OpenAIResponse{
-							ID:      id,
-							Created: created,
-							Model:   input.Model,
-							Choices: []schema.Choice{{Index: 0, Delta: &schema.Message{Content: &note}}},
-							Object:  "chat.completion.chunk",
+							ID:          id,
+							Created:     created,
+							Model:       input.Model,
+							Choices:     []schema.Choice{{Index: 0, Delta: &schema.Message{Content: &note}}},
+							Object:      "chat.completion.chunk",
+							ServiceTier: serviceTier,
 						}
 						noteData, _ := json.Marshal(noteChunk)
 						fmt.Fprintf(c.Response().Writer, "data: %s\n\n", noteData)
@@ -918,7 +958,8 @@ func ChatEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, evaluator
 							Delta:        &schema.Message{},
 						},
 					},
-					Object: "chat.completion.chunk",
+					Object:      "chat.completion.chunk",
+					ServiceTier: serviceTier,
 				}
 				respData, _ := json.Marshal(resp)
 
@@ -939,7 +980,7 @@ func ChatEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, evaluator
 				if input.StreamOptions != nil && input.StreamOptions.IncludeUsage {
 					trailerUsage := streamUsageFromTokenUsage(finalUsage, extraUsage)
 					trailerUsage.CompressionMeta = middleware.CompressionMetadata(c)
-					trailer := streamUsageTrailerJSON(id, input.Model, created, trailerUsage)
+					trailer := streamUsageTrailerJSON(id, input.Model, created, trailerUsage, serviceTier)
 					_, _ = fmt.Fprintf(c.Response().Writer, "data: %s\n\n", trailer)
 				}
 
@@ -1311,6 +1352,8 @@ func ChatEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, evaluator
 					Choices: result,
 					Object:  "chat.completion",
 					Usage:   &usage,
+					// The tier that applied, as OpenAI echoes it.
+					ServiceTier: priority.Of(input.Context).ServiceTier(),
 				}
 				respData, _ := json.Marshal(resp)
 				xlog.Debug("Response", "response", privacy.Redact(c.Request().Context(), string(respData)))

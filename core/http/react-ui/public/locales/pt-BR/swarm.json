@@ -133,7 +133,9 @@
     "run": {}
   },
   "inspector": {
-    "peer": "ID de par"
+    "peer": "ID de par",
+    "leaving": "Modelos ainda aqui",
+    "drainDeadline": "Prazo da drenagem"
   },
   "splitServer": {
     "label": "Servidor de divisão",
@@ -191,5 +193,43 @@
   },
   "failover": {
     "lostConnection": "Conexão:"
+  },
+  "limits": {
+    "title": "Limites",
+    "sub": "Configurações de memória deste nó. Um valor definido aqui prevalece sobre o ambiente do worker e as configurações do cluster (Configurações, Modelos na memória).",
+    "maxActive": "Modelos mantidos carregados",
+    "vramBudget": "Orçamento de memória da GPU",
+    "vramBudgetPlaceholder": "ex. 80% ou 12GB",
+    "threshold": "Limite de memória",
+    "thresholdOff": "Desligado ({{pct}}% quando ligado)",
+    "swap": "Trocar modelos quando a memória estiver cheia",
+    "noLimit": "Sem limite",
+    "none": "Nenhum",
+    "on": "Ligado",
+    "off": "Desligado",
+    "edit": "Editar",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "reset": "Redefinir tudo",
+    "saved": "Limites salvos em {{name}}",
+    "resetDone": "Substituições removidas em {{name}}",
+    "failed": "Não foi possível alterar os limites: {{error}}",
+    "loadFailed": "Não foi possível ler os limites deste nó",
+    "source": {
+      "override": "Definido aqui",
+      "worker": "Ambiente do worker",
+      "cluster": "Cluster",
+      "default": "Padrão"
+    }
+  },
+  "detail": {
+    "vramBudgetOf": "Orçamento, {{detected}} detectados",
+    "drainingLeaving": "Modelos ainda aqui: {{count}}. O que restar às {{time}} será removido.",
+    "drainingEmpty": "Não resta mais nada nele. Você já pode parar o worker."
+  },
+  "leave": {
+    "reloadDrain": "é carregado em outro nó saudável adequado enquanto este continua a servi-lo, e depois deixa este nó. Se não tiver regra e estiver ocioso (não fixado, sem uso recente), é removido em vez disso. A memória livre não é comparada aqui.",
+    "reloadNoneDrain": "não tem outro nó saudável para onde ir, então continua servindo aqui até o prazo da drenagem e depois para. Se não tiver regra e estiver ocioso (não fixado, sem uso recente), é removido em vez disso.",
+    "blockedDrain": "continua servindo aqui até o prazo da drenagem e depois para: a regra dele só permite {{selector}} e nenhum outro nó saudável tem esses rótulos."
   }
 }

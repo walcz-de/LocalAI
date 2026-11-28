@@ -176,6 +176,13 @@ type Node struct {
 	PeerID string `json:"peer_id,omitempty"`
 	// SplitServer is true when the node may serve model-split workers.
 	SplitServer bool `json:"split_server,omitempty"`
+	// Status is the node status: healthy, unhealthy, offline, draining or
+	// pending.
+	Status string `json:"status,omitempty"`
+	// DrainDeadline and LeavingReplicas describe a drain: when the replicas
+	// left on the node are removed, and how many are still on it.
+	DrainDeadline   string `json:"drain_deadline,omitempty"`
+	LeavingReplicas int    `json:"leaving_replicas,omitempty"`
 	// Routes says, for each route of the node, if it is live: what the health
 	// monitor judges the node by. A node stays healthy while one route that
 	// carries work (nats or tunnel) is live.
@@ -190,6 +197,37 @@ type NodeRouteState struct {
 	Transport string `json:"transport,omitempty"`
 	State     string `json:"state"`
 	Reason    string `json:"reason,omitempty"`
+}
+
+// DrainNodeRequest is the input of drain_node.
+type DrainNodeRequest struct {
+	NodeID string `json:"node_id" jsonschema:"backend node ID from list_nodes"`
+	Action string `json:"action" jsonschema:"drain or resume"`
+	// Force removes the node's replicas at once instead of waiting for
+	// their replacements.
+	Force bool `json:"force,omitempty" jsonschema:"drain only: remove the node's replicas at once instead of waiting until replacements load on other nodes"`
+	// Timeout is the drain deadline as a duration such as 10m. Empty uses
+	// the server default.
+	Timeout string `json:"timeout,omitempty" jsonschema:"drain only: deadline as a duration such as 10m, after which the replicas left on the node are removed; empty uses the server default"`
+}
+
+// The actions of drain_node.
+const (
+	DrainActionDrain  = "drain"
+	DrainActionResume = "resume"
+)
+
+// NodeDrain is the result of drain_node.
+type NodeDrain struct {
+	NodeID string `json:"node_id"`
+	// Status is the node status after the action: draining or healthy.
+	Status string `json:"status"`
+	// Immediate is true when the replicas were removed at once.
+	Immediate bool `json:"immediate,omitempty"`
+	// DrainDeadline is when the replicas left on the node are removed.
+	DrainDeadline string `json:"drain_deadline,omitempty"`
+	// LeavingReplicas is the number of loaded replicas still on the node.
+	LeavingReplicas int `json:"leaving_replicas"`
 }
 
 // NodeSplitServer is the result of set_node_split_server.
@@ -223,6 +261,46 @@ func NodeRoute(attached []string, peerID string) string {
 type SetNodeVRAMBudgetRequest struct {
 	NodeID string `json:"node_id"          jsonschema:"The federated node id (from list_nodes) whose VRAM budget to set."`
 	Budget string `json:"budget,omitempty" jsonschema:"VRAM allocation cap as a percentage (e.g. 80%) or absolute amount (e.g. 12GB). Empty string clears the override."`
+}
+
+// SetNodeLimitsRequest is the input for set_node_limits. Each field that is
+// set becomes an admin override for the node; Reset clears every override
+// so the worker's env and the cluster settings apply again.
+type SetNodeLimitsRequest struct {
+	NodeID                   string   `json:"node_id" jsonschema:"The node id (from list_nodes)."`
+	MaxActiveBackends        *int     `json:"max_active_backends,omitempty" jsonschema:"Models kept loaded on the node; 0 means no limit."`
+	VRAMBudget               *string  `json:"vram_budget,omitempty" jsonschema:"GPU memory budget of the node, e.g. 80% or 12GB; empty string clears this override."`
+	MemoryReclaimerThreshold *float64 `json:"memory_reclaimer_threshold,omitempty" jsonschema:"Memory use from 0 to 1 above which idle models on the node are unloaded."`
+	ModelSwap                *bool    `json:"model_swap,omitempty" jsonschema:"Whether the node may unload an idle model to make room for another."`
+	Reset                    bool     `json:"reset,omitempty" jsonschema:"Clear every override of the node instead of setting values."`
+}
+
+// NodeLimits is the effective memory limits of a node, and the source of
+// each value: override, worker, cluster or default.
+type NodeLimits struct {
+	NodeID                   string            `json:"node_id"`
+	MaxActiveBackends        int               `json:"max_active_backends"`
+	VRAMBudget               string            `json:"vram_budget"`
+	MemoryReclaimerEnabled   bool              `json:"memory_reclaimer_enabled"`
+	MemoryReclaimerThreshold float64           `json:"memory_reclaimer_threshold"`
+	ModelSwap                bool              `json:"model_swap"`
+	Sources                  map[string]string `json:"sources"`
+}
+
+// ModelMemoryPolicy is the input for set_model_memory_policy: the memory
+// settings to change. A field left out keeps its value.
+type ModelMemoryPolicy struct {
+	MaxActiveBackends        *int     `json:"max_active_backends,omitempty" jsonschema:"Models kept loaded (per node in distributed mode); 0 means no limit."`
+	ModelSwap                *bool    `json:"model_swap,omitempty" jsonschema:"Unload the least recently used idle model to make room for another. Off: the request waits, then gets a 503 with Retry-After."`
+	SizeAwareEviction        *bool    `json:"size_aware_eviction,omitempty" jsonschema:"Unload the largest model first instead of the least recently used."`
+	ForceEvictionWhenBusy    *bool    `json:"force_eviction_when_busy,omitempty" jsonschema:"Also unload models that are serving requests. Interrupts those requests."`
+	LRUEvictionMaxRetries    *int     `json:"lru_eviction_max_retries,omitempty" jsonschema:"How many times a load waits for a busy model to become idle."`
+	LRUEvictionRetryInterval *string  `json:"lru_eviction_retry_interval,omitempty" jsonschema:"The wait between those tries, e.g. 1s."`
+	WatchdogIdleEnabled      *bool    `json:"watchdog_idle_enabled,omitempty" jsonschema:"Unload models that stay idle longer than watchdog_idle_timeout."`
+	WatchdogIdleTimeout      *string  `json:"watchdog_idle_timeout,omitempty" jsonschema:"Idle time before a model is unloaded, e.g. 15m."`
+	MemoryReclaimerEnabled   *bool    `json:"memory_reclaimer_enabled,omitempty" jsonschema:"Unload idle models when memory use passes memory_reclaimer_threshold."`
+	MemoryReclaimerThreshold *float64 `json:"memory_reclaimer_threshold,omitempty" jsonschema:"Memory use from 0 to 1, e.g. 0.9."`
+	VRAMBudget               *string  `json:"vram_budget,omitempty" jsonschema:"GPU memory budget, e.g. 80% or 12GB (on each worker node in distributed mode); empty string removes it."`
 }
 
 // ModelSchedulingConfig is the MCP wire shape for one per-model distributed
@@ -784,6 +862,10 @@ type P2PDeviceInfo struct {
 	// Models and AllModels say what a remote device may use.
 	Models    []string `json:"models,omitempty"`
 	AllModels bool     `json:"all_models,omitempty"`
+	// OwnerName is the user whose invite paired the device.
+	OwnerName string `json:"owner_name,omitempty"`
+	// SignIn is true when the device signs in as its owner.
+	SignIn bool `json:"sign_in,omitempty"`
 }
 
 // P2PInviteInfo is the LLM-facing view of one invite. The link is never part
@@ -883,6 +965,29 @@ type SetP2PRelayLimitsRequest struct {
 	CircuitBytes   *int64 `json:"circuit_bytes,omitempty" jsonschema:"data one circuit may carry in each direction, in bytes (0 removes the limit; a value above the relay ceiling is refused)"`
 	CircuitSeconds *int64 `json:"circuit_seconds,omitempty" jsonschema:"time one circuit may stay open, in seconds (0 removes the limit)"`
 	RateBPS        *int64 `json:"rate_bps,omitempty" jsonschema:"bandwidth of one circuit in each direction, in bytes per second (0 removes the limit)"`
+}
+
+// P2PUserPairingInfo is the setting p2p_user_pairing: what an invite that a
+// user mints for their own device carries, and the limits of each user.
+type P2PUserPairingInfo struct {
+	// Relays is auto or none.
+	Relays         string `json:"relays"`
+	AllowOpenRelay bool   `json:"allow_open_relay"`
+	OmitLANAddrs   bool   `json:"omit_lan_addrs"`
+	MaxDevices     int    `json:"max_devices"`
+	MaxPending     int    `json:"max_pending"`
+	MaxTTLSeconds  int    `json:"max_ttl_seconds"`
+}
+
+// SetP2PUserPairingRequest is the input of set_p2p_user_pairing. A field
+// that is left out stays as it is.
+type SetP2PUserPairingRequest struct {
+	Relays         *string `json:"relays,omitempty" jsonschema:"auto (the server's relays) or none"`
+	AllowOpenRelay *bool   `json:"allow_open_relay,omitempty" jsonschema:"let the invites of users name an open relay"`
+	OmitLANAddrs   *bool   `json:"omit_lan_addrs,omitempty" jsonschema:"keep the local network addresses of the server out of the invites of users"`
+	MaxDevices     *int    `json:"max_devices,omitempty" jsonschema:"active devices one user may pair, 1 to 100"`
+	MaxPending     *int    `json:"max_pending,omitempty" jsonschema:"pending invites one user may have, 1 to 20"`
+	MaxTTLSeconds  *int    `json:"max_ttl_seconds,omitempty" jsonschema:"longest life of an invite of a user, in seconds, 60 to 86400"`
 }
 
 // P2PRelayInfo is the LLM-facing view of one relay.
@@ -985,4 +1090,71 @@ type UpgradeRun struct {
 	FinishedAt      string           `json:"finished_at,omitempty"`
 	CancelRequested bool             `json:"cancel_requested,omitempty"`
 	Items           []UpgradeRunItem `json:"items"`
+}
+
+// PromptCacheModel is the disk prompt cache of one model on one node.
+type PromptCacheModel struct {
+	Model   string `json:"model,omitempty"`
+	Model16 string `json:"model16"`
+	Bytes   int64  `json:"bytes"`
+	Files   int    `json:"files"`
+}
+
+// PromptCacheDisk is the disk state of a node at its last janitor sweep.
+// State is on, paused_low_disk, disabled_disk_full or unknown.
+type PromptCacheDisk struct {
+	State                  string `json:"state"`
+	CacheBytes             int64  `json:"cache_bytes"`
+	FreeBytes              uint64 `json:"free_bytes"`
+	TotalBytes             uint64 `json:"total_bytes"`
+	LowWatermarkBytes      uint64 `json:"low_watermark_bytes"`
+	CriticalWatermarkBytes uint64 `json:"critical_watermark_bytes"`
+	MaxBytes               int64  `json:"max_bytes"`
+	EffectiveCapBytes      int64  `json:"effective_cap_bytes"`
+	SharesModelsDisk       bool   `json:"shares_models_disk"`
+}
+
+// PromptCacheNode is the disk prompt cache of one node.
+type PromptCacheNode struct {
+	Node string `json:"node"`
+	// Enabled is false when the tier is off on the node; Error says why a
+	// node gave no usage (offline, no answer).
+	Enabled bool `json:"enabled"`
+	// OffReason says why the tier is off on the node: no_path,
+	// switched_off, network_disk or not_writable.
+	OffReason  string             `json:"off_reason,omitempty"`
+	Error      string             `json:"error,omitempty"`
+	Bytes      int64              `json:"bytes"`
+	Files      int                `json:"files"`
+	Namespaces int                `json:"namespaces"`
+	Status     PromptCacheDisk    `json:"status"`
+	Models     []PromptCacheModel `json:"models"`
+}
+
+// PromptCacheStatus is the answer of get_prompt_cache.
+type PromptCacheStatus struct {
+	Enabled bool              `json:"enabled"`
+	Shared  bool              `json:"shared"`
+	Nodes   []PromptCacheNode `json:"nodes"`
+	Total   PromptCacheTotal  `json:"total"`
+}
+
+// PromptCacheTotal sums the nodes that answered.
+type PromptCacheTotal struct {
+	Bytes       int64 `json:"bytes"`
+	Files       int   `json:"files"`
+	CapBytes    int64 `json:"cap_bytes"`
+	Nodes       int   `json:"nodes"`
+	Unreachable int   `json:"unreachable"`
+}
+
+// PromptCacheClearRequest is the input of clear_prompt_cache.
+type PromptCacheClearRequest struct {
+	Model string `json:"model,omitempty" jsonschema:"Model whose cached prompts to delete. Empty deletes the cache of every model."`
+}
+
+// PromptCacheClearResult says what clear_prompt_cache deleted.
+type PromptCacheClearResult struct {
+	Files int   `json:"files"`
+	Bytes int64 `json:"bytes"`
 }

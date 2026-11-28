@@ -8,6 +8,7 @@
     "subtitle": "Configura le impostazioni runtime di LocalAI",
     "saved": "Impostazioni salvate con successo",
     "saveFailed": "Salvataggio fallito: {{message}}",
+    "memoryConflict": "Le impostazioni di memoria sono state cambiate altrove dopo il caricamento di questa pagina. La pagina mostra ora i valori in vigore. Applica di nuovo la modifica.",
     "loadFailed": "Caricamento impostazioni fallito: {{message}}",
     "sections": {
       "branding": "Branding",
@@ -101,7 +102,8 @@
       "retry": "Riprova la stessa operazione",
       "policy": "Criterio del proprietario · revisione {{revision}}",
       "apply": "Applica l'impostazione di aggiornamento"
-    }
+    },
+    "memoryCluster": "Vale per ogni nodo worker. Per impostare un valore diverso su un nodo, usa la pagina Nodi."
   },
   "backends": {
     "lifecycle": {
@@ -281,7 +283,13 @@
     "sheet": {
       "account": "Account",
       "activity": "Attività",
-      "apiKeys": "Chiavi API"
+      "apiKeys": "Chiavi API",
+      "defaultOn": "Attivo di default per gli utenti",
+      "defaultOnHint": "Salvato subito. Vale per ogni utente il cui accesso non imposta questa funzione.",
+      "followsDefault": "Questo utente segue il default.",
+      "explicit": "Impostato per questo utente: una modifica del default non si applica.",
+      "useDefault": "Usa il default",
+      "useDefaultFor": "Usa il default per {{feature}}"
     },
     "empty": {
       "title": "Nessun utente",
@@ -310,7 +318,10 @@
       "deleted": "Utente eliminato",
       "deleteFailed": "Eliminazione utente non riuscita: {{message}}",
       "passwordReset": "Password reimpostata per {{name}}",
-      "resetFailed": "Reimpostazione password non riuscita: {{message}}"
+      "resetFailed": "Reimpostazione password non riuscita: {{message}}",
+      "defaultOn": "La funzione ora è attiva di default per gli utenti.",
+      "defaultOff": "La funzione ora è disattivata di default per gli utenti.",
+      "defaultFailed": "Impossibile cambiare il default: {{message}}"
     },
     "reset": {
       "title": "Reimposta password",

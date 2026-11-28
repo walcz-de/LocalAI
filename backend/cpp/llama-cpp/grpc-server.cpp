@@ -79,8 +79,11 @@
 #include "model_load_error.h"
 #include "thread_params.h"
 #include "backend_sampling.h"
+#include "grammar_engine.h"
 #include "parallel_params.h"
+#include "serving_policy.h"
 #include "slot_cache.h"
+#include "prompt_cache_policy.h"
 #include "message_content.h"
 #include "moe_cache_option.h"
 #include "option_parse.h"
@@ -107,6 +110,7 @@
 #include <map>
 #include <ctime>
 #include <mutex>
+#include <condition_variable>
 #include <signal.h>
 #include <thread>
 
@@ -213,11 +217,25 @@ static std::string base64_encode_bytes(const unsigned char* data, size_t len) {
 // load_model_mutex in BackendServiceImpl.
 std::atomic<bool> loaded_model{false};
 
+// Set when start_loop() returns, so Free() knows the server loop no longer
+// touches the slots and the prompt cache.
+static std::mutex              loop_exit_mtx;
+static std::condition_variable loop_exit_cv;
+static bool                    loop_exited = false;
+
 // backend_sampling of the loaded model (one per process): the option, and what
 // backend_sampling:auto needs to decide per request. See backend_sampling.h.
 static llama_grpc::backend_sampling_mode backend_sampling_option = llama_grpc::backend_sampling_mode::off;
 static bool backend_sampling_option_set = false;
 static llama_grpc::backend_sampling_model backend_sampling_auto_model;
+
+// grammar_engine of the loaded model (one per process). See grammar_engine.h.
+static llama_grpc::grammar_engine grammar_engine_option = llama_grpc::grammar_engine::automatic;
+#ifdef LLAMA_USE_LLGUIDANCE
+static constexpr bool built_with_llguidance = true;
+#else
+static constexpr bool built_with_llguidance = false;
+#endif
 
 // Completion requests that run now. backend_sampling:auto counts them as the
 // active slots, since a request holds a slot while it generates.
@@ -317,6 +335,11 @@ static inline void signal_handler(int signal) {
 
 // Forward declarations
 static void start_llama_server(server_context& ctx_server);
+
+// Time Free() may spend saving the prompt cache. LocalAI waits 5 s for Free()
+// (backendFreeTimeout, workerBackendFreeTimeout); this leaves room for the
+// reply and the stop.
+static constexpr int64_t prompt_cache_free_budget_us = 3000000;
 static json parse_options(bool streaming, const backend::PredictOptions* predict, const common_params& params_base, llama_context* ctx);
 static ggml_type kv_cache_type_from_str(const std::string & s);
 static std::string get_all_kv_cache_types();
@@ -365,6 +388,38 @@ static void start_llama_server(server_context& ctx_server) {
 
     // this call blocks the main thread until ctx_server.terminate() is called
     ctx_server.start_loop();
+
+    {
+        std::lock_guard<std::mutex> lk(loop_exit_mtx);
+        loop_exited = true;
+    }
+    loop_exit_cv.notify_all();
+}
+
+// The cache key of a task (patches/0007): the salt keeps the cached prompts of
+// one cache namespace (a user, or the shared one) apart from the others, in
+// RAM, on disk and between live slots. A request that must not persist
+// (NoPromptCache: zero-retention, incognito) gets a private salt and is never
+// written to disk, so its cells can never reach disk through a later prompt
+// that shares its prefix. Requests without a salt of their own (score,
+// decisions) pass no_persist.
+static void apply_prompt_cache_key(server_tokens & tokens, const std::string & salt_hex, bool no_persist) {
+#if LOCALAI_HAS_PROMPT_CACHE_DISK
+    prompt_cache_policy::salt_t salt;
+    if (!prompt_cache_policy::parse_salt(salt_hex, salt)) {
+        SRV_WRN("%s", "prompt cache: malformed salt from LocalAI, the request is kept out of the persistent cache\n");
+        salt.fill(0);
+        no_persist = true;
+    }
+    if (no_persist) {
+        salt = prompt_cache_policy::private_salt(salt);
+    }
+    tokens.set_cache_key(salt, !no_persist, 0);
+#else
+    (void) tokens;
+    (void) salt_hex;
+    (void) no_persist;
+#endif
 }
 
 json parse_options(bool streaming, const backend::PredictOptions* predict, const common_params& params_base, llama_context* ctx)
@@ -400,9 +455,18 @@ json parse_options(bool streaming, const backend::PredictOptions* predict, const
     data["min_p"] = predict->minp();
 
 
-    std::string grammar_str = predict->grammar();
-
-
+    // LocalAI sends the llguidance form of a grammar it built from a JSON
+    // schema in the metadata; grammar_engine decides which form is used.
+    std::string llg_grammar;
+    {
+        const auto & md = predict->metadata();
+        const auto it = md.find(llama_grpc::llguidance_grammar_metadata_key);
+        if (it != md.end()) {
+            llg_grammar = it->second;
+        }
+    }
+    const std::string grammar_str = llama_grpc::select_grammar(
+        grammar_engine_option, built_with_llguidance, predict->grammar(), llg_grammar);
 
     if (!grammar_str.empty()) {
         data["grammar"] = grammar_str;
@@ -618,6 +682,11 @@ static void add_rpc_devices(std::string servers) {
     if (rpc_servers.empty()) {
         throw std::invalid_argument("no RPC servers specified");
     }
+    // A GGML_BACKEND_DL build registers no backend until one is loaded, and
+    // this runs before model load does it. Same guard as llama_supports_rpc().
+    if (!ggml_backend_reg_count()) {
+        ggml_backend_load_all();
+    }
     ggml_backend_reg_t rpc_reg = ggml_backend_reg_by_name("RPC");
     if (!rpc_reg) {
         throw std::invalid_argument("failed to find RPC backend");
@@ -632,6 +701,19 @@ static void add_rpc_devices(std::string servers) {
         ggml_backend_register(reg);
     }
 }
+
+// Request priority class (PredictOptions.Priority: -1 batch, 0 default,
+// 1 interactive) for the server's waiting order, where the pin carries
+// server_task::priority (patches/0003-server-request-priority.patch).
+#if LOCALAI_HAS_TASK_PRIORITY
+#define LOCALAI_SET_TASK_PRIORITY(task, request) ((task).priority = (request)->priority())
+#else
+#define LOCALAI_SET_TASK_PRIORITY(task, request) ((void) 0)
+#endif
+
+// Set by params_parse when the model asks for paged_kv:true together with an
+// option paged serving cannot run with; LoadModel fails with it.
+static std::string paged_load_error;
 
 static void params_parse(server_context& /*ctx_server*/, const backend::ModelOptions* request,
                                 common_params & params) {
@@ -697,6 +779,33 @@ static void params_parse(server_context& /*ctx_server*/, const backend::ModelOpt
     std::optional<int> parallel_option;
     // Initialize grpc_servers to empty (can be overridden by options)
     std::string grpc_servers_option = "";
+    // Paged serving (serving_policy.h, patches/0002-paged-serving.patch), on
+    // by default. Held here and decided after the passthrough flags, because
+    // it depends on kv_unified, context_shift and cont_batching, and it
+    // changes the default slot count. Unset means the model did not say.
+    std::optional<bool> paged_kv;
+    std::optional<bool> paged_preempt;
+    int kv_pool_tokens = 0;
+    std::optional<int> prefill_budget;
+    std::optional<int> prefill_long;
+    int kv_output_reserve = 256;
+    // An explicit cont_batching:false, which parallel > 1 would otherwise
+    // override: paged serving steps aside for it (or fails the load when
+    // paged_kv:true is explicit).
+    bool cont_batching_off = false;
+    // Prefix sharing between live slots and load-adaptive drafting (serving_policy.h).
+    std::optional<bool> slot_attach;
+    std::optional<int> spec_max_streams;
+    // Order of waiting requests and the per-request prefill cap (serving_policy.h).
+    std::optional<bool> admission_order;
+    std::optional<int> prefill_cap;
+    bool lazy_idle_save = false;
+    // Disk tier of the prompt cache (prompt_cache_policy.h, patches/0006 and
+    // 0007). On by default when LocalAI gives a directory.
+    prompt_cache_policy::disk_options prompt_disk;
+    // The node that started this process gives the policy numbers through the
+    // environment (.agents/prompt-cache-backends.md); model options below win.
+    prompt_cache_policy::apply_env(prompt_disk, [](const char * name) { return std::getenv(name); });
 
     // Initialize fit_params options (can be overridden by options)
     // fit_params: whether to auto-adjust params to fit device memory (default: true as in llama.cpp)
@@ -786,7 +895,9 @@ static void params_parse(server_context& /*ctx_server*/, const backend::ModelOpt
 
     backend_sampling_option = llama_grpc::backend_sampling_mode::off;
     backend_sampling_option_set = false;
+    grammar_engine_option = llama_grpc::grammar_engine::automatic;
     backend_sampling_auto_model = llama_grpc::backend_sampling_model{};
+    std::string grammar_max_repetition_option;
 
      // decode options. Options are in form optname:optvale, or if booleans only optname.
     for (int i = 0; i < request->options_size(); i++) {
@@ -817,6 +928,39 @@ static void params_parse(server_context& /*ctx_server*/, const backend::ModelOpt
                     // If conversion fails, keep the default value
                 }
             }
+        } else if (!strcmp(optname, "prompt_cache_disk")) {
+            if (const auto v = llama_grpc::parse_switch(optval_str)) {
+                prompt_disk.enabled = *v ? 1 : 0;
+            } else {
+                SRV_WRN("prompt_cache_disk: '%s' is not on or off, ignoring\n", optval_str.c_str());
+            }
+        } else if (!strcmp(optname, "prompt_cache_disk_ttl_hours") || !strcmp(optname, "prompt_cache_disk_min_tokens") ||
+                   !strcmp(optname, "prompt_cache_disk_quota_mib") || !strcmp(optname, "prompt_cache_disk_max_size_mib") ||
+                   !strcmp(optname, "prompt_cache_disk_low_free_mib") || !strcmp(optname, "prompt_cache_disk_critical_free_mib")) {
+            long v = -1;
+            try {
+                v = std::stol(optval_str);
+            } catch (const std::exception &) {
+                v = -1;
+            }
+            if (v < 0) {
+                SRV_WRN("%s: '%s' is not a number of 0 or more, ignoring\n", optname, optval_str.c_str());
+            } else if (!strcmp(optname, "prompt_cache_disk_ttl_hours")) {
+                prompt_disk.ttl_hours = v;
+            } else if (!strcmp(optname, "prompt_cache_disk_min_tokens")) {
+                prompt_disk.min_tokens = v;
+            } else if (!strcmp(optname, "prompt_cache_disk_quota_mib")) {
+                prompt_disk.quota_mib = v;
+            } else if (!strcmp(optname, "prompt_cache_disk_low_free_mib")) {
+                prompt_disk.low_free_mib = v;
+            } else if (!strcmp(optname, "prompt_cache_disk_critical_free_mib")) {
+                prompt_disk.crit_free_mib = v;
+            } else {
+                prompt_disk.max_size_mib = v;
+            }
+        } else if (!strcmp(optname, "prompt_cache_disk_shared")) {
+            // Read by LocalAI, which then sends the shared (empty) salt with
+            // every request of this model. Nothing to do here.
         } else if (!strcmp(optname, "slot_save_path")) {
             // Directory for SlotCache save/restore files. Take everything after
             // the first ':' so a path that contains one is kept whole. Without
@@ -853,6 +997,66 @@ static void params_parse(server_context& /*ctx_server*/, const backend::ModelOpt
                 } catch (const std::exception& e) {
                     // If conversion fails, fall back to the environment/default
                 }
+            }
+        } else if (!strcmp(optname, "paged_kv") || !strcmp(optname, "paged_serving")) {
+            if (const auto v = llama_grpc::parse_switch(optval_str)) {
+                paged_kv = *v;
+            } else {
+                SRV_WRN("%s: ignoring invalid value '%s' (expected true or false)\n", optname, optval_str.c_str());
+            }
+        } else if (!strcmp(optname, "slot_attach") || !strcmp(optname, "prefix_attach")) {
+            if (const auto v = llama_grpc::parse_switch(optval_str)) {
+                slot_attach = *v;
+            } else {
+                SRV_WRN("%s: ignoring invalid value '%s' (expected true or false)\n", optname, optval_str.c_str());
+            }
+        } else if (!strcmp(optname, "admission_order") || !strcmp(optname, "paged_order")) {
+            if (const auto v = llama_grpc::parse_switch(optval_str)) {
+                admission_order = *v;
+            } else {
+                SRV_WRN("%s: ignoring invalid value '%s' (expected true or false)\n", optname, optval_str.c_str());
+            }
+        } else if (!strcmp(optname, "lazy_idle_save")) {
+            if (const auto v = llama_grpc::parse_switch(optval_str)) {
+                lazy_idle_save = *v;
+            } else {
+                SRV_WRN("lazy_idle_save: ignoring invalid value '%s' (expected true or false)\n", optval_str.c_str());
+            }
+        } else if (!strcmp(optname, "prefill_cap")) {
+            if (const auto n = llama_grpc::parse_non_negative_int(optval_str)) {
+                prefill_cap = *n;
+            } else {
+                SRV_WRN("prefill_cap: ignoring invalid value '%s' (expected a non-negative integer)\n", optval_str.c_str());
+            }
+        } else if (!strcmp(optname, "spec_max_streams")) {
+            if (const auto n = llama_grpc::parse_non_negative_int(optval_str)) {
+                spec_max_streams = *n;
+            } else {
+                SRV_WRN("spec_max_streams: ignoring invalid value '%s' (expected a non-negative integer)\n", optval_str.c_str());
+            }
+        } else if (!strcmp(optname, "paged_preempt")) {
+            if (const auto v = llama_grpc::parse_switch(optval_str)) {
+                paged_preempt = *v;
+            } else {
+                SRV_WRN("paged_preempt: ignoring invalid value '%s' (expected true or false)\n", optval_str.c_str());
+            }
+        } else if ((!strcmp(optname, "prefill_budget") || !strcmp(optname, "max_prefill_tokens")) &&
+                   (optval_str == "auto" || optval_str == "adaptive")) {
+            prefill_budget = serving_policy::prefill_budget_adaptive;
+        } else if (!strcmp(optname, "kv_pool_tokens") || !strcmp(optname, "prefill_budget") ||
+                   !strcmp(optname, "max_prefill_tokens") || !strcmp(optname, "kv_output_reserve") ||
+                   !strcmp(optname, "prefill_long")) {
+            const auto n = llama_grpc::parse_non_negative_int(optval_str);
+            if (!n) {
+                SRV_WRN("%s: ignoring invalid value '%s' (expected a non-negative integer)\n", optname, optval_str.c_str());
+            } else if (!strcmp(optname, "kv_pool_tokens")) {
+                kv_pool_tokens = *n;
+            } else if (!strcmp(optname, "kv_output_reserve")) {
+                kv_output_reserve = *n;
+            } else if (!strcmp(optname, "prefill_long")) {
+                prefill_long = *n;
+            } else {
+                prefill_budget = *n;
             }
         } else if (!strcmp(optname, "grpc_servers") || !strcmp(optname, "rpc_servers")) {
             if (optval != NULL) {
@@ -940,8 +1144,10 @@ static void params_parse(server_context& /*ctx_server*/, const backend::ModelOpt
         } else if (!strcmp(optname, "cont_batching") || !strcmp(optname, "continuous_batching")) {
             if (optval_str == "true" || optval_str == "1" || optval_str == "yes" || optval_str == "on" || optval_str == "enabled") {
                 params.cont_batching = true;
+                cont_batching_off = false;
             } else if (optval_str == "false" || optval_str == "0" || optval_str == "no" || optval_str == "off" || optval_str == "disabled") {
                 params.cont_batching = false;
+                cont_batching_off = true;
             }
         } else if (!strcmp(optname, "check_tensors")) {
             if (optval_str == "true" || optval_str == "1" || optval_str == "yes" || optval_str == "on" || optval_str == "enabled") {
@@ -1553,6 +1759,19 @@ static void params_parse(server_context& /*ctx_server*/, const backend::ModelOpt
             } else {
                 fprintf(stderr, "backend_sampling: ignoring invalid value '%s' (expected on, off or auto)\n", optval_str.c_str());
             }
+        } else if (!strcmp(optname, "grammar_max_repetition")) {
+            // limit of the GBNF repetition check, see grammar_engine.h; applied after the loop
+            grammar_max_repetition_option = optval_str;
+        } else if (!strcmp(optname, "grammar_engine")) {
+            // auto | gbnf | llguidance, see grammar_engine.h.
+            if (const auto engine = llama_grpc::parse_grammar_engine(optval_str)) {
+                grammar_engine_option = *engine;
+                if (*engine == llama_grpc::grammar_engine::llguidance && !built_with_llguidance) {
+                    fprintf(stderr, "grammar_engine: this build has no llguidance, using GBNF\n");
+                }
+            } else {
+                fprintf(stderr, "grammar_engine: ignoring invalid value '%s' (expected auto, gbnf or llguidance)\n", optval_str.c_str());
+            }
         } else if (!strcmp(optname, "backend_sampling_min_slots")) {
             try {
                 backend_sampling_auto_model.min_slots = std::max(1, std::stoi(optval_str));
@@ -1591,6 +1810,27 @@ static void params_parse(server_context& /*ctx_server*/, const backend::ModelOpt
         params.enable_reasoning = 0;
     }
 
+    // Tool-call grammars of the chat template on llguidance (patches/0008).
+    // The field is the default of every request's sampling parameters.
+#if LOCALAI_HAS_LLG_TEMPLATE_GRAMMARS
+    params.sampling.grammar_llguidance =
+        llama_grpc::template_grammars_on_llguidance(grammar_engine_option, built_with_llguidance);
+#endif
+
+    // The GBNF repetition limit (patches/0005 reads it from the environment).
+    {
+        const std::string v = llama_grpc::grammar_max_repetition(grammar_max_repetition_option, std::getenv("LLAMA_GRAMMAR_MAX_REPETITION"));
+        if (!v.empty()) {
+#ifdef _WIN32
+            // MinGW and MSVC have no setenv. _putenv_s changes the C runtime
+            // environment that getenv in the patch reads.
+            _putenv_s("LLAMA_GRAMMAR_MAX_REPETITION", v.c_str());
+#else
+            setenv("LLAMA_GRAMMAR_MAX_REPETITION", v.c_str(), 1);
+#endif
+        }
+    }
+
     if (backend_sampling_option_set) {
 #if LOCALAI_HAS_BACKEND_SAMPLING
         // on samples every request on the backend. auto starts from off and
@@ -1607,9 +1847,18 @@ static void params_parse(server_context& /*ctx_server*/, const backend::ModelOpt
     // The model options win over LLAMACPP_PARALLEL, including an explicit
     // parallel:1 (previously indistinguishable from the default and replaced
     // by the environment value).
-    params.n_parallel = llama_grpc::resolve_n_parallel(parallel_option, std::getenv("LLAMACPP_PARALLEL"));
+    // Paged serving may raise the default further, see the end of this function.
+    const char * parallel_env = std::getenv("LLAMACPP_PARALLEL");
+    params.n_parallel = llama_grpc::resolve_n_parallel(parallel_option, parallel_env);
+    const int n_parallel_resolved = params.n_parallel;
     if (params.n_parallel > 1) {
         params.cont_batching = true;
+    }
+
+    // The total KV pool of paged serving. It is the context size, named for
+    // what it means when the slots share it.
+    if (kv_pool_tokens > 0) {
+        params.n_ctx = kv_pool_tokens;
     }
 
     // Add RPC devices from option or environment variable (fallback)
@@ -1858,6 +2107,153 @@ static void params_parse(server_context& /*ctx_server*/, const backend::ModelOpt
     params.cpuparams_batch.n_threads = llama_grpc::resolve_batch_threads(
         params.cpuparams_batch.n_threads,
         params.cpuparams.n_threads);
+
+    // The disk tier of the prompt cache: <root>/llama-cpp/<pin>-<model>/, where
+    // root comes from the node that started this process. The directory name
+    // changes with the llama.cpp commit and the patches (their state format
+    // can change) and with the model.
+#if LOCALAI_HAS_PROMPT_CACHE_DISK
+    {
+        const char * root_env = std::getenv("LOCALAI_PROMPT_CACHE_ROOT");
+        const std::string root = root_env ? root_env : "";
+        const auto disk = prompt_cache_policy::resolve_disk(prompt_disk, root, params.cache_ram_mib);
+        if (!disk.info.empty()) {
+            SRV_WRN("%s\n", disk.info.c_str());
+        }
+        if (disk.on) {
+            namespace fs = std::filesystem;
+            const std::string model_dir = std::string(LOCALAI_LLAMA_PIN) + "-" + llama_grpc::slot_sha256_hex(request->model()).substr(0, 16);
+            const std::string base      = (fs::u8path(root) / "llama-cpp").string();
+            const std::string dir       = (fs::u8path(base) / model_dir).string();
+            bool ok = true;
+            std::string warn, derr;
+#ifdef _WIN32
+            std::error_code ec;
+            fs::create_directories(fs::u8path(dir), ec);
+            ok = !ec;
+            derr = ec.message();
+#else
+            for (const auto & d : { root, base, dir }) {
+                if (!llama_grpc::slot_ensure_private_dir(d, warn, derr)) {
+                    ok = false;
+                    break;
+                }
+            }
+#endif
+            if (!ok) {
+                SRV_WRN("prompt_cache_disk: %s is not usable (%s), the disk prompt cache stays off\n", dir.c_str(), derr.c_str());
+            } else {
+                params.cache_disk_path         = dir;
+                params.cache_disk_max_size_mib = prompt_disk.max_size_mib > 0 ? (int32_t) prompt_disk.max_size_mib : -1;
+                params.cache_disk_ttl_s        = prompt_cache_policy::ttl_seconds(prompt_disk);
+                params.cache_disk_min_tokens   = (int32_t) prompt_cache_policy::min_tokens(prompt_disk);
+                params.cache_disk_ns_quota_mib = (int32_t) prompt_disk.quota_mib;
+                params.cache_disk_async        = true;
+                params.cache_disk_low_free_mib  = (int32_t) prompt_disk.low_free_mib;
+                params.cache_disk_crit_free_mib = (int32_t) prompt_disk.crit_free_mib;
+#if LOCALAI_HAS_PROMPT_CACHE_POLICY_ENV
+                params.cache_disk_min_reuse     = (int32_t) prompt_cache_policy::min_reuse(prompt_disk);
+                params.cache_disk_max_ckpt      = (int32_t) prompt_cache_policy::max_checkpoints_of(prompt_disk);
+                params.cache_disk_overhead_ms   = (int32_t) (prompt_cache_policy::overhead_seconds(prompt_disk) * 1000.0);
+#endif
+                // What an entry depends on, in clear, next to the entries. The
+                // file names carry hashes of it (directory: pin and model;
+                // compat: model file, KV types and layout, RoPE; namespace;
+                // prefix hash). A tier shared between nodes can read this to
+                // check that another node's entries fit before loading them.
+                {
+                    std::error_code fec;
+                    const auto mf = fs::u8path(params.model.path);
+                    json manifest = {
+                        { "format", 1 },
+                        { "llama_pin", LOCALAI_LLAMA_PIN },
+                        { "state_version", LLAMA_STATE_SEQ_VERSION },
+                        { "model_identity_sha256", llama_grpc::slot_sha256_hex(request->model()) },
+                        { "model_file_size", (uint64_t) fs::file_size(mf, fec) },
+                        { "model_file_mtime", (int64_t) fs::last_write_time(mf, fec).time_since_epoch().count() },
+                        { "cache_type_k", ggml_type_name(params.cache_type_k) },
+                        { "cache_type_v", ggml_type_name(params.cache_type_v) },
+                        { "flash_attn", (int) params.flash_attn_type },
+                        { "swa_full", params.swa_full },
+                        { "compat", server_prompt_cache_disk_compat(params) },
+                        { "prefix_block_tokens", (int) server_tokens::hash_block_size },
+                        { "file_name", "<compat>-<namespace>-<prefix hash>.cache" },
+                    };
+                    const auto path = fs::u8path(dir) / "manifest.json";
+                    const auto tmp  = fs::u8path(dir) / "manifest.json.tmp";
+                    { std::ofstream out(tmp, std::ios::trunc); out << manifest.dump(2) << "\n"; }
+                    fs::rename(tmp, path, fec);
+                }
+                if (const char * mbps = std::getenv("LOCALAI_PROMPT_CACHE_READ_MBPS")) {
+                    try {
+                        params.cache_disk_read_mbps = std::max(0.0, std::stod(mbps));
+                    } catch (const std::exception &) {
+                        params.cache_disk_read_mbps = 0;
+                    }
+                }
+            }
+        }
+    }
+#else
+    if (prompt_disk.enabled == 1) {
+        SRV_WRN("%s", "prompt_cache_disk: this llama.cpp build has no disk prompt cache, ignoring\n");
+    }
+#endif
+
+    // Paged serving and the prefill budget are on unless the model turns them
+    // off. Decided here, after the passthrough flags, on the final kv_unified,
+    // context_shift and cont_batching.
+    paged_load_error.clear();
+#if LOCALAI_HAS_SERVING_POLICY
+    {
+        const auto paged = serving_policy::resolve_paged(paged_kv, params.kv_unified, params.ctx_shift, !cont_batching_off);
+        paged_load_error = paged.error;
+        if (!paged.info.empty()) {
+            SRV_INF("%s\n", paged.info.c_str());
+        }
+        params.paged_serving     = paged.on;
+        params.paged_preempt     = paged.on && paged_preempt.value_or(true);
+        params.prefill_budget    = prefill_budget.value_or(serving_policy::default_prefill_budget);
+        params.prefill_long      = prefill_long.value_or(serving_policy::default_prefill_long);
+        params.kv_output_reserve = kv_output_reserve;
+        params.paged_attach      = paged.on && slot_attach.value_or(true);
+#if LOCALAI_HAS_ADMISSION_ORDER
+        params.paged_order       = paged.on && admission_order.value_or(true);
+        params.prefill_cap       = paged.on ? prefill_cap.value_or(serving_policy::default_prefill_cap) : 0;
+        params.paged_lazy_save   = paged.on && lazy_idle_save;
+#else
+        (void) admission_order;
+        (void) prefill_cap;
+        (void) lazy_idle_save;
+#endif
+        params.spec_max_streams  = spec_max_streams.value_or(serving_policy::default_spec_max_streams);
+        // The slots share one pool, so with a single slot paged serving does
+        // nothing: it defaults to more. An explicit parallel (the options,
+        // LLAMACPP_PARALLEL or a passthrough flag) always wins.
+        const bool parallel_explicit = parallel_option || parallel_env != nullptr || params.n_parallel != n_parallel_resolved;
+        if (paged.on && !parallel_explicit) {
+            params.n_parallel    = serving_policy::paged_default_parallel;
+            params.cont_batching = true;
+            SRV_INF("paged serving: parallel is not set, using %d slots\n", params.n_parallel);
+        } else if (paged.on && params.n_parallel <= 1 && paged_kv) {
+            SRV_WRN("%s", "paged_kv: parallel is 1, a single slot gets nothing from paged serving\n");
+        }
+    }
+#else
+    // Forks without the hooks: say so only when the model asked for the feature.
+    if (paged_kv.value_or(false) || prefill_budget.value_or(0) != 0) {
+        SRV_WRN("%s", "paged_kv and prefill_budget: this llama.cpp build has no paged serving hooks, ignoring\n");
+    }
+    (void) paged_preempt;
+    (void) prefill_long;
+    (void) kv_output_reserve;
+    (void) cont_batching_off;
+    (void) slot_attach;
+    (void) spec_max_streams;
+    (void) admission_order;
+    (void) prefill_cap;
+    (void) lazy_idle_save;
+#endif
 
 #ifndef LOCALAI_LLAMA_CPP_NO_SCORE_TASK
     // Score-task suffix forking: reserve seq ids (and recurrent-state cells)
@@ -2699,6 +3095,49 @@ public:
                             "\", requested \"" + request->modelidentity() + "\"");
     }
 
+    // Free saves the prompt cache to disk before LocalAI stops this process,
+    // within a fixed time (prompt_cache_free_budget_us), so the save never
+    // races the next model load into the same memory. It stops the server
+    // loop first: nothing else touches the slots while it saves, and the
+    // process is on its way out. It answers Unimplemented on purpose: this
+    // backend cannot unload a model and load another in the same process, so
+    // both callers (the model loader and the distributed worker) must still
+    // stop the process, which is what they do for Unimplemented.
+    grpc::Status Free(ServerContext* context, const backend::HealthMessage* /*request*/, backend::Result* result) override {
+        auto auth = checkAuth(context);
+        if (!auth.ok()) return auth;
+
+#if LOCALAI_HAS_PROMPT_CACHE_DISK
+        if (loaded_model && ctx_server.impl->has_prompt_cache_disk()) {
+            const int64_t deadline = ggml_time_us() + prompt_cache_free_budget_us;
+
+            ctx_server.terminate();
+
+            bool exited = false;
+            {
+                std::unique_lock<std::mutex> lk(loop_exit_mtx);
+                exited = loop_exit_cv.wait_for(lk, std::chrono::microseconds(std::max<int64_t>(0, deadline - ggml_time_us())),
+                                               []() { return loop_exited; });
+            }
+            if (exited) {
+                const int64_t t_start = ggml_time_us();
+                ctx_server.impl->save_prompt_cache(deadline);
+                SRV_INF("Free: prompt cache saved in %.0f ms\n", (ggml_time_us() - t_start) / 1000.0);
+            } else {
+                SRV_WRN("%s", "Free: the server loop did not stop in time, the prompt cache is not saved\n");
+            }
+            // The process now exits by itself. The SIGTERM that LocalAI sends next
+            // may arrive while ctx_server is being destroyed: make it a no-op.
+            shutdown_handler = [](int) {};
+            result->set_success(true);
+            result->set_message("prompt cache saved; stop the process to free its memory");
+            return grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "llama-cpp frees its memory when the process stops; the prompt cache was saved");
+        }
+#endif
+        (void) result;
+        return grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "llama-cpp frees its memory when the process stops");
+    }
+
     grpc::Status Health(ServerContext* context, const backend::HealthMessage* /*request*/, backend::Reply* reply) override {
         auto auth = checkAuth(context);
         if (!auth.ok()) return auth;
@@ -2751,6 +3190,14 @@ public:
             return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, error_msg);
         }
 #endif
+
+        // An explicit paged_kv:true with an option it cannot run with.
+        if (!paged_load_error.empty()) {
+            const std::string error_msg = paged_load_error;
+            result->set_message(error_msg);
+            result->set_success(false);
+            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, error_msg);
+        }
 
         common_init();
         // Ensure debug logs are enabled after common_init() sets up logging
@@ -2866,6 +3313,17 @@ public:
             // Update the grammar triggers in params
             params.sampling.grammar_triggers = std::move(processed_triggers);
         }
+
+#ifdef LLAMA_USE_LLGUIDANCE
+        // llama.cpp builds the llguidance view of the vocabulary on the first
+        // llguidance grammar and caches it. That takes seconds on a large
+        // vocabulary, so build it here instead of in the first request.
+        if (grammar_engine_option != llama_grpc::grammar_engine::gbnf) {
+            if (llama_sampler * warm = llama_sampler_init_llg(ctx_server.impl->vocab, "lark", "start: \"a\"")) {
+                llama_sampler_free(warm);
+            }
+        }
+#endif
 
         //ctx_server.init();
         result->set_message("Loading succeeded");
@@ -3344,6 +3802,7 @@ public:
                 task.index = i;
 
                 task.tokens    = std::move(inputs[i]);
+                apply_prompt_cache_key(task.tokens, request->promptcachesalt(), request->nopromptcache());
 #ifdef LOCALAI_HAS_SERVER_SCHEMA
                 // The schema evaluator no longer takes the per-slot n_ctx: upstream
                 // dropped the parameter and server-schema stopped consulting n_ctx at
@@ -3379,6 +3838,7 @@ public:
                 task.params.oaicompat_cmpl_id         = completion_id;
                 // oaicompat_model is already populated by eval_llama_cmpl_schema
 
+                LOCALAI_SET_TASK_PRIORITY(task, request);
                 tasks.push_back(std::move(task));
             }
 
@@ -3953,6 +4413,7 @@ public:
                 task.index = i;
 
                 task.tokens    = std::move(inputs[i]);
+                apply_prompt_cache_key(task.tokens, request->promptcachesalt(), request->nopromptcache());
 #ifdef LOCALAI_HAS_SERVER_SCHEMA
                 // The schema evaluator no longer takes the per-slot n_ctx: upstream
                 // dropped the parameter and server-schema stopped consulting n_ctx at
@@ -3986,6 +4447,7 @@ public:
                 task.params.oaicompat_cmpl_id         = completion_id;
                 // oaicompat_model is already populated by eval_llama_cmpl_schema
 
+                LOCALAI_SET_TASK_PRIORITY(task, request);
                 tasks.push_back(std::move(task));
             }
 
@@ -4164,6 +4626,7 @@ public:
 
                 task.params.res_type = TASK_RESPONSE_TYPE_NONE;
                 task.params.embd_normalize = embd_normalize;
+                LOCALAI_SET_TASK_PRIORITY(task, request);
                 tasks.push_back(std::move(task));
             }
 
@@ -4623,6 +5086,7 @@ public:
                     task.id = rd.get_new_id();
                     localai_fill_decision_task(decision, state, questions, question, variant, files,
                         ctx_server.impl->mctx, ctx_server.impl->init_opt, task);
+                    apply_prompt_cache_key(task.tokens, "", true);
                     tasks.push_back(std::move(task));
                     ++expected_results;
                 }
@@ -4836,6 +5300,7 @@ public:
             task.id             = rd.queue_tasks.get_new_id();
             task.index          = 0;
             task.tokens         = server_tokens(llama_tokens(first.begin(), first.begin() + n_shared), false);
+            apply_prompt_cache_key(task.tokens, "", true);
             task.n_score_prompt = n_score_prompt;
             task.n_stable_prompt = n_stable_prompt;
             task.score_suffixes.reserve(included.size());

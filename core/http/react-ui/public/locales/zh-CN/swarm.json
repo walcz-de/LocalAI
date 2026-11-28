@@ -133,7 +133,9 @@
     "run": {}
   },
   "inspector": {
-    "peer": "对等节点 ID"
+    "peer": "对等节点 ID",
+    "leaving": "仍在此处的模型",
+    "drainDeadline": "排空截止时间"
   },
   "splitServer": {
     "label": "拆分服务器",
@@ -191,5 +193,43 @@
   },
   "failover": {
     "lostConnection": "连接："
+  },
+  "limits": {
+    "title": "限制",
+    "sub": "此节点的内存设置。此处设置的值优先于工作节点的环境变量和集群设置（设置，内存中的模型）。",
+    "maxActive": "保持加载的模型数",
+    "vramBudget": "GPU 内存预算",
+    "vramBudgetPlaceholder": "例如 80% 或 12GB",
+    "threshold": "内存阈值",
+    "thresholdOff": "关闭（开启时为 {{pct}}%）",
+    "swap": "内存已满时切换模型",
+    "noLimit": "无限制",
+    "none": "无",
+    "on": "开启",
+    "off": "关闭",
+    "edit": "编辑",
+    "save": "保存",
+    "cancel": "取消",
+    "reset": "全部重置",
+    "saved": "已在 {{name}} 上保存限制",
+    "resetDone": "已清除 {{name}} 上的覆盖值",
+    "failed": "无法更改限制：{{error}}",
+    "loadFailed": "无法读取此节点的限制",
+    "source": {
+      "override": "在此设置",
+      "worker": "工作节点环境",
+      "cluster": "集群",
+      "default": "默认"
+    }
+  },
+  "detail": {
+    "vramBudgetOf": "预算，检测到 {{detected}}",
+    "drainingLeaving": "仍在此处的模型：{{count}} 个。到 {{time}} 仍留下的将被移除。",
+    "drainingEmpty": "上面已没有任何模型。现在可以停止该 worker。"
+  },
+  "leave": {
+    "reloadDrain": "在此节点继续提供服务期间，它会加载到另一个合适的健康节点上，然后离开此节点。如果它没有规则且处于空闲状态（未固定、最近未使用），则会直接移除。此处不比较空闲内存。",
+    "reloadNoneDrain": "没有其他可迁移的健康节点，因此会在此处继续提供服务直到排空截止时间，然后停止。如果它没有规则且处于空闲状态（未固定、最近未使用），则会直接移除。",
+    "blockedDrain": "会在此处继续提供服务直到排空截止时间，然后停止：其规则只允许 {{selector}}，且没有其他健康节点带有这些标签。"
   }
 }

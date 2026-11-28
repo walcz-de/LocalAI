@@ -51,7 +51,7 @@ var flags = []es.Flag{
 		Key: "flash_attention", Target: es.TargetConfig, Path: "flash_attention",
 		CLI: []string{"-fa", "--flash-attn"}, Type: es.TypeEnum, Enum: []string{"on", "off", "auto"},
 		Default: "auto", Group: GroupSpeed,
-		Doc:           "Flash attention. A bare flag means on.",
+		Doc:           "Faster attention that needs less compute memory. A quantized V cache requires it. Auto turns it on when the device supports it.",
 		OptionalValue: true, BareValue: "on",
 	},
 	{
@@ -106,6 +106,7 @@ var flags = []es.Flag{
 	{
 		Key: "backend_sampling", Target: es.TargetOption, Path: "options", Option: "backend_sampling",
 		Type: es.TypeEnum, Enum: []string{"off", "auto", "on"}, Default: "off", Group: GroupSpeed, LocalAIOnly: true,
+		OptionAliases: []string{"gpu_sampling"},
 		Doc: "Sample tokens on the GPU. off: on the CPU. auto: on the GPU when the model runs on a GPU with several parallel requests " +
 			"and the request does not need grammar or logprobs. on: always on the GPU, turned off for a request with a grammar, a reasoning budget or logprobs.",
 	},
@@ -117,20 +118,26 @@ var flags = []es.Flag{
 		Key: "paged_kv", Target: es.TargetOption, Path: "options", Option: "paged_kv",
 		Type: es.TypeBool, Default: "on in builds with paged serving", Group: GroupServing, LocalAIOnly: true,
 		Doc: "Paged serving: start a request only when the shared KV cache has room for it, and pause the newest one when it runs out, " +
-			"so many users share the cache without failing. It needs more than one slot. Default: on in builds with paged serving.",
+			"so many users share the cache without failing. It needs more than one slot.",
 		OptionAliases: []string{"paged_serving"},
 	},
 	{
 		Key: "paged_preempt", Target: es.TargetOption, Path: "options", Option: "paged_preempt",
 		Type: es.TypeBool, Default: "on", Group: GroupServing, LocalAIOnly: true,
-		Doc: "With paged serving: pause the newest request when the KV cache is full and resume it later. Off makes new requests wait instead.",
+		Doc: "With paged serving: pause the request that is cheapest to recompute when the KV cache is full, and resume it later. " +
+			"Keep it on: with it off, a full cache fails every running request.",
 	},
 	{
 		Key: "prefill_budget", Target: es.TargetOption, Path: "options", Option: "prefill_budget",
 		Type: es.TypeString, Default: "256 in builds with paged serving", Group: GroupServing, LocalAIOnly: true,
 		Doc: "Prompt tokens read per step while other requests generate, so a long prompt does not stall them. " +
-			"A number, 0 to turn it off, or auto to follow the load in builds that have it.",
+			"A number, 0 to turn it off, or auto to follow the load.",
 		OptionAliases: []string{"max_prefill_tokens"},
+	},
+	{
+		Key: "prefill_long", Target: es.TargetOption, Path: "options", Option: "prefill_long",
+		Type: es.TypeInt, Min: es.F64(0), Default: "1024", Group: GroupServing, LocalAIOnly: true,
+		Doc: "With paged serving: the prefill budget applies only to prompts longer than this many tokens; shorter prompts are read whole. 0 applies it to every prompt.",
 	},
 	{
 		Key: "kv_pool_tokens", Target: es.TargetOption, Path: "options", Option: "kv_pool_tokens",
@@ -141,6 +148,29 @@ var flags = []es.Flag{
 		Key: "kv_output_reserve", Target: es.TargetOption, Path: "options", Option: "kv_output_reserve",
 		Type: es.TypeInt, Min: es.F64(0), Default: "256", Group: GroupServing, LocalAIOnly: true,
 		Doc: "With paged serving: free tokens a request needs beyond its prompt before it starts, capped at its max tokens.",
+	},
+	{
+		Key: "slot_attach", Target: es.TargetOption, Path: "options", Option: "slot_attach",
+		Type: es.TypeBool, Default: "on", Group: GroupServing, LocalAIOnly: true,
+		Doc:           "With paged serving: a request whose prompt starts like one another request holds starts from that request's KV cache instead of reading the prompt again.",
+		OptionAliases: []string{"prefix_attach"},
+	},
+	{
+		Key: "admission_order", Target: es.TargetOption, Path: "options", Option: "admission_order",
+		Type: es.TypeBool, Default: "on", Group: GroupServing, LocalAIOnly: true,
+		Doc: "With paged serving: waiting requests go by priority class, then by the fewest prompt tokens not in a cache, then by arrival. " +
+			"Off serves them first come, first served.",
+		OptionAliases: []string{"paged_order"},
+	},
+	{
+		Key: "prefill_cap", Target: es.TargetOption, Path: "options", Option: "prefill_cap",
+		Type: es.TypeInt, Min: es.F64(0), Default: "512", Group: GroupServing, LocalAIOnly: true,
+		Doc: "With paged serving: the most prompt tokens one request reads per step while other requests read prompts too. 0 turns it off.",
+	},
+	{
+		Key: "lazy_idle_save", Target: es.TargetOption, Path: "options", Option: "lazy_idle_save",
+		Type: es.TypeBool, Default: "off", Group: GroupServing, LocalAIOnly: true,
+		Doc: "With paged serving: idle slots keep their KV cache until the cache needs room, instead of saving it to the RAM prompt cache after each new request.",
 	},
 	{
 		Key: "threads_batch", Target: es.TargetOption, Path: "options", Option: "threads_batch",
@@ -206,6 +236,49 @@ var flags = []es.Flag{
 		Default: "8192", Group: GroupMemory,
 		Doc: "System memory in MiB for the prompt cache that keeps the KV cache of earlier prompts. 0 turns it off, -1 sets no limit.",
 	},
+	// The disk tier of the prompt cache. LocalAI fills the values of the
+	// server settings (prompt_cache_disk* in the runtime settings) when a
+	// model sets none, so a model needs these only to differ.
+	{
+		Key: "prompt_cache_disk", Target: es.TargetOption, Path: "options", Option: "prompt_cache_disk",
+		Type: es.TypeBool, Default: "the server setting (on)", Group: GroupMemory, LocalAIOnly: true,
+		Doc: "Keep the prompt cache of long prompts on disk, so it survives a model reload. Off keeps it in RAM only.",
+	},
+	{
+		Key: "prompt_cache_disk_ttl_hours", Target: es.TargetOption, Path: "options", Option: "prompt_cache_disk_ttl_hours",
+		Type: es.TypeInt, Min: es.F64(1), Default: "the server setting (168)", Group: GroupMemory, LocalAIOnly: true,
+		Doc: "Hours a disk prompt cache entry is kept after its last use.",
+	},
+	{
+		Key: "prompt_cache_disk_min_tokens", Target: es.TargetOption, Path: "options", Option: "prompt_cache_disk_min_tokens",
+		Type: es.TypeInt, Min: es.F64(1), Default: "the server setting (1024)", Group: GroupMemory, LocalAIOnly: true,
+		Doc: "Shortest prompt, in tokens, that is written to disk.",
+	},
+	{
+		Key: "prompt_cache_disk_quota_mib", Target: es.TargetOption, Path: "options", Option: "prompt_cache_disk_quota_mib",
+		Type: es.TypeInt, Min: es.F64(0), Default: "0", Group: GroupMemory, LocalAIOnly: true,
+		Doc: "Most MiB one user may keep on disk for this model. 0: no limit for the model; the server quota still applies.",
+	},
+	{
+		Key: "prompt_cache_disk_max_size_mib", Target: es.TargetOption, Path: "options", Option: "prompt_cache_disk_max_size_mib",
+		Type: es.TypeInt, Min: es.F64(0), Default: "0", Group: GroupMemory, LocalAIOnly: true,
+		Doc: "Most MiB this model may keep on disk. 0: no limit for the model; the server cap still applies.",
+	},
+	{
+		Key: "prompt_cache_disk_shared", Target: es.TargetOption, Path: "options", Option: "prompt_cache_disk_shared",
+		Type: es.TypeBool, Default: "the server setting (off)", Group: GroupMemory, LocalAIOnly: true,
+		Doc: "Let all users share the disk prompt cache of this model. Turn on only when every user may see the prompts of the others.",
+	},
+	{
+		Key: "prompt_cache_disk_low_free_mib", Target: es.TargetOption, Path: "options", Option: "prompt_cache_disk_low_free_mib",
+		Type: es.TypeInt, Min: es.F64(0), Default: "the server setting (0)", Group: GroupMemory, LocalAIOnly: true,
+		Doc: "Free disk, in MiB, under which the disk prompt cache stops writing and shrinks. 0: the larger of 15% of the disk and 10 GiB.",
+	},
+	{
+		Key: "prompt_cache_disk_critical_free_mib", Target: es.TargetOption, Path: "options", Option: "prompt_cache_disk_critical_free_mib",
+		Type: es.TypeInt, Min: es.F64(0), Default: "the server setting (0)", Group: GroupMemory, LocalAIOnly: true,
+		Doc: "Free disk, in MiB, under which the disk prompt cache turns off until the free space is back above the low mark. 0: 5% of the disk.",
+	},
 	{
 		Key: "mmproj_use_gpu", Target: es.TargetOption, Path: "options", Option: "mmproj_use_gpu",
 		CLI: []string{"--mmproj-offload"}, CLINegated: []string{"--no-mmproj-offload"}, Type: es.TypeBool,
@@ -214,7 +287,7 @@ var flags = []es.Flag{
 	},
 	{
 		Key: "backend_sampling_min_slots", Target: es.TargetOption, Path: "options", Option: "backend_sampling_min_slots",
-		Type: es.TypeInt, Min: es.F64(1), Default: "4", Group: GroupAdvanced, LocalAIOnly: true,
+		Type: es.TypeInt, Min: es.F64(1), Default: "16", Group: GroupAdvanced, LocalAIOnly: true,
 		Doc: "With GPU sampling on Auto: the fewest parallel requests that turn GPU sampling on.",
 	},
 	{
@@ -376,14 +449,24 @@ var flags = []es.Flag{
 	// Speculative decoding: a draft model or n-grams propose tokens that the
 	// model checks in one step.
 	{
+		Key: "draft_model", Target: es.TargetConfig, Path: "draft_model",
+		CLI: []string{"-md", "--model-draft", "--spec-draft-model"}, Type: es.TypeString, Default: "none", Group: GroupSpeculative,
+		Doc: "File of the draft model in the models directory: a small model with the same vocabulary that proposes tokens.",
+	},
+	{
 		Key: "spec_type", Target: es.TargetOption, Path: "options", Option: "spec_type",
 		CLI: []string{"--spec-type"}, Type: es.TypeString, Default: "none, or draft-simple with a draft model", Group: GroupSpeculative,
 		OptionAliases: []string{"speculative_type"},
 		Doc:           "Kind of speculative decoding, or several comma-separated: draft-simple, draft-mtp, draft-eagle3, ngram-simple, ngram-mod and others.",
 	},
 	{
+		Key: "spec_max_streams", Target: es.TargetOption, Path: "options", Option: "spec_max_streams",
+		Type: es.TypeInt, Min: es.F64(0), Default: "4", Group: GroupSpeculative, LocalAIOnly: true,
+		Doc: "Drafting pauses while more than this many requests generate, and resumes when the count drops by a quarter. 0 never pauses.",
+	},
+	{
 		Key: "spec_n_max", Target: es.TargetOption, Path: "options", Option: "spec_n_max",
-		CLI: []string{"--spec-draft-n-max", "--draft", "--draft-n", "--draft-max"}, Type: es.TypeInt, Min: es.F64(0), Default: "16", Group: GroupSpeculative,
+		CLI: []string{"--spec-draft-n-max", "--draft", "--draft-n", "--draft-max"}, Type: es.TypeInt, Min: es.F64(0), Default: "3", Group: GroupSpeculative,
 		OptionAliases: []string{"draft_max"},
 		Doc:           "Most tokens drafted per step.",
 	},
@@ -395,7 +478,7 @@ var flags = []es.Flag{
 	},
 	{
 		Key: "spec_p_min", Target: es.TargetOption, Path: "options", Option: "spec_p_min",
-		CLI: []string{"--spec-draft-p-min", "--draft-p-min"}, Type: es.TypeFloat, Min: es.F64(0), Max: es.F64(1), Default: "0.75", Group: GroupSpeculative,
+		CLI: []string{"--spec-draft-p-min", "--draft-p-min"}, Type: es.TypeFloat, Min: es.F64(0), Max: es.F64(1), Default: "0", Group: GroupSpeculative,
 		OptionAliases: []string{"draft_p_min"},
 		Doc:           "Lowest draft probability to keep drafting.",
 	},
@@ -565,6 +648,22 @@ var flags = []es.Flag{
 		CLI: []string{"--min-p"}, Type: es.TypeFloat, Min: es.F64(0), Max: es.F64(1),
 		Default: "request value, then model default", Group: GroupSampling,
 		Doc: "Drop tokens whose probability is below this fraction of the top token. 0 turns the filter off.",
+	},
+	// grammar_engine is read by LocalAI's llama.cpp backend. A build without
+	// llguidance uses GBNF whatever the value.
+	{
+		Key: "grammar_engine", Target: es.TargetOption, Path: "options", Option: "grammar_engine",
+		Type: es.TypeEnum, Enum: []string{"auto", "gbnf", "llguidance"}, Default: "auto", Group: GroupSampling, LocalAIOnly: true,
+		Doc: "Engine of the grammars LocalAI builds from a JSON schema (response_format and tool calls). " +
+			"auto: llguidance when the backend build has it, GBNF otherwise. gbnf: always llama.cpp's GBNF sampler, as upstream. " +
+			"llguidance: also the tool-call grammars of the chat template, with a fallback to GBNF. " +
+			"A grammar you write yourself always uses GBNF.",
+	},
+	{
+		Key: "grammar_max_repetition", Target: es.TargetOption, Path: "options", Option: "grammar_max_repetition",
+		Type: es.TypeInt, Min: es.F64(1), Default: "100000", Group: GroupSampling, LocalAIOnly: true,
+		Doc: "Limit of the GBNF repetition check (llama.cpp's is 2000). The grammar of a large tool set goes over 2000 " +
+			"and the request fails with \"exceeds sane defaults\"; a lower value bounds the work a grammar can ask for.",
 	},
 	{
 		Key: "override_tensor", Target: es.TargetOption, Path: "options", Option: "-ot",

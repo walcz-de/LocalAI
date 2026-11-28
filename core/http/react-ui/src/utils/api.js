@@ -881,6 +881,16 @@ export const settingsApi = {
   save: (body) => postJSON(API_CONFIG.endpoints.settings, body),
 }
 
+// The disk prompt cache of llama.cpp.
+//   status()        -> { enabled, shared, nodes: [{ node, bytes, files, namespaces, status, models }] }  (admin)
+//   clear(model)    -> { files, bytes }   one model, or every model when model is empty (admin)
+//   clearMine()     -> { files, bytes }   the cached prompts of the caller
+export const promptCacheApi = {
+  status: () => fetchJSON(API_CONFIG.endpoints.promptCache),
+  clear: (model) => postJSON(API_CONFIG.endpoints.promptCacheClear, model ? { model } : {}),
+  clearMine: () => fetchJSON(API_CONFIG.endpoints.promptCacheMine, { method: 'DELETE' }),
+}
+
 // P2P relays and identity (the P2P settings page). Status, invites and devices
 // are in their own block.
 export const p2pRelaysApi = {
@@ -976,6 +986,22 @@ export const p2pNetApi = {
   cancelInvite: (id) => fetchJSON(API_CONFIG.endpoints.p2pInvite(id), { method: 'DELETE' }),
   devices: () => fetchJSON(API_CONFIG.endpoints.p2pDevices),
   revokeDevice: (id) => fetchJSON(API_CONFIG.endpoints.p2pDevice(id), { method: 'DELETE' }),
+  // The policy of the invites users mint for their own devices (admin).
+  userPairing: () => fetchJSON(API_CONFIG.endpoints.p2pUserPairing),
+  setUserPairing: (patch) => fetchJSON(API_CONFIG.endpoints.p2pUserPairing, { method: 'PUT', body: JSON.stringify(patch) }),
+}
+
+// A signed-in user's own devices (feature p2p_pair). A device paired from
+// here signs in as the user. 409 needs_account without a user account, 429
+// limit_reached at a limit, 400 for a life over the cap.
+export const myP2PApi = {
+  me: () => fetchJSON(API_CONFIG.endpoints.p2pMe),
+  mintInvite: (label, ttlSeconds) => postJSON(API_CONFIG.endpoints.p2pMyInvites, { label, ttl_seconds: ttlSeconds }),
+  invites: () => fetchJSON(API_CONFIG.endpoints.p2pMyInvites),
+  cancelInvite: (id) => fetchJSON(API_CONFIG.endpoints.p2pMyInvite(id), { method: 'DELETE' }),
+  devices: () => fetchJSON(API_CONFIG.endpoints.p2pMyDevices),
+  renameDevice: (id, label) => fetchJSON(API_CONFIG.endpoints.p2pMyDevice(id), { method: 'PATCH', body: JSON.stringify({ label }) }),
+  revokeDevice: (id) => fetchJSON(API_CONFIG.endpoints.p2pMyDevice(id), { method: 'DELETE' }),
 }
 
 // Federation (admin): the instances that can serve a group and the groups,
@@ -1243,6 +1269,10 @@ export const adminUsersApi = {
     method: 'PUT', body: JSON.stringify(perms), headers: { 'Content-Type': 'application/json' },
   }),
   getFeatures: () => fetchJSON('/api/auth/admin/features'),
+  // Only a feature whose meta says configurable accepts a default.
+  setFeatureDefault: (feature, enabled) => fetchJSON(`/api/auth/admin/features/${encodeURIComponent(feature)}/default`, {
+    method: 'PUT', body: JSON.stringify({ enabled }), headers: { 'Content-Type': 'application/json' },
+  }),
   setModels: (id, allowlist) => fetchJSON(`/api/auth/admin/users/${encodeURIComponent(id)}/models`, {
     method: 'PUT', body: JSON.stringify(allowlist), headers: { 'Content-Type': 'application/json' },
   }),
@@ -1415,6 +1445,18 @@ export const nodesApi = {
     body: JSON.stringify({ value }),
   }),
   resetVramBudget: (id) => fetchJSON(API_CONFIG.endpoints.nodeVramBudget(id), {
+    method: 'DELETE',
+  }),
+  // The memory limits a node runs with, each with its source (override,
+  // worker, cluster, default). setLimits sends only the keys that change;
+  // resetLimits clears every override of the node.
+  getLimits: (id) => fetchJSON(API_CONFIG.endpoints.nodeLimits(id)),
+  setLimits: (id, limits) => fetchJSON(API_CONFIG.endpoints.nodeLimits(id), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(limits),
+  }),
+  resetLimits: (id) => fetchJSON(API_CONFIG.endpoints.nodeLimits(id), {
     method: 'DELETE',
   }),
   listScheduling: () => fetchJSON(API_CONFIG.endpoints.nodesScheduling),

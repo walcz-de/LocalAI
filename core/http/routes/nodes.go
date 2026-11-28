@@ -50,7 +50,7 @@ func RegisterNodeSelfServiceRoutes(e *echo.Echo, registry *nodes.NodeRegistry, r
 
 	node := e.Group("/api/node", readyMw, nodeCredentialAuth(registry, options...))
 	node.POST("/:id/heartbeat", localai.HeartbeatEndpoint(registry, options...))
-	node.POST("/:id/drain", localai.DrainNodeEndpoint(registry, nil))
+	node.POST("/:id/drain", localai.SelfDrainNodeEndpoint(registry))
 	node.POST("/:id/resume", localai.ResumeNodeEndpoint(registry))
 	node.POST("/:id/deregister", localai.DeactivateNodeEndpoint(registry))
 	node.GET("/:id/models", localai.GetNodeModelsEndpoint(registry))
@@ -129,6 +129,12 @@ func RegisterNodeAdminRoutes(e *echo.Echo, registry *nodes.NodeRegistry, unloade
 	// budget takes over again at the next re-registration.
 	admin.PUT("/:id/vram-budget", localai.UpdateVRAMBudgetEndpoint(registry))
 	admin.DELETE("/:id/vram-budget", localai.ResetVRAMBudgetEndpoint(registry))
+
+	// Per-node memory limits: the effective values with their source, and
+	// sticky admin overrides of the cluster memory settings.
+	admin.GET("/:id/limits", localai.GetNodeLimitsEndpoint(registry))
+	admin.PUT("/:id/limits", localai.SetNodeLimitsEndpoint(registry))
+	admin.DELETE("/:id/limits", localai.ResetNodeLimitsEndpoint(registry))
 
 	// WebSocket proxy for real-time log streaming from workers
 	e.GET("/ws/nodes/:id/backend-logs/:modelId", localai.NodeBackendLogsWSEndpoint(registry, registrationToken, workerHTTPDial), readyMw, adminMw)

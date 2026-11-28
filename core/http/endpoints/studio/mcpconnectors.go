@@ -31,7 +31,8 @@ func mcpOut(m mcpconns.Connector) schema.ChatsMCPConnector {
 	}
 	return schema.ChatsMCPConnector{ID: m.ID, Name: m.Name, Transport: m.Transport, URL: m.URL, Command: m.Command, Args: args,
 		HasToken: m.HasToken, HasHeaders: m.HasHeaders, HasEnv: m.HasEnv, Enabled: m.Enabled, AgentsOnly: m.AgentsOnly,
-		Created: m.Created, Updated: m.Updated}
+		Created: m.Created, Updated: m.Updated,
+		PluginInstall: m.PluginInstallID, PluginServer: m.PluginServer}
 }
 
 func mcpIn(r schema.ChatsMCPConnectorWrite) mcpconns.Input {
@@ -236,7 +237,7 @@ func writeToolsPanel(c echo.Context, p studiosvc.ToolsPanel) error {
 		out.Servers = append(out.Servers, schema.ChatsMCPServerSwitch{Name: s.Name, Off: s.Off, Usable: s.Usable, Reason: s.Reason})
 	}
 	for _, s := range p.Connectors {
-		out.Connectors = append(out.Connectors, schema.ChatsMCPConnectorSwitch{ID: s.ID, Name: s.Name, Off: s.Off, Usable: s.Usable, Reason: s.Reason})
+		out.Connectors = append(out.Connectors, schema.ChatsMCPConnectorSwitch{ID: s.ID, Name: s.Name, Off: s.Off, Usable: s.Usable, Reason: s.Reason, PluginInstall: s.PluginInstall})
 	}
 	return c.JSON(http.StatusOK, out)
 }

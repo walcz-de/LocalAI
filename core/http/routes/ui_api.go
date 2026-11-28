@@ -199,6 +199,9 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 
 			// An add-on install of the install queue: its key names the add-on.
 			addonID, isAddon := galleryop.ParseAddonOpKey(galleryID)
+			// A plugin install or update: its key names the plugin
+			// (name@marketplace).
+			pluginID, isPlugin := galleryop.ParsePluginOpKey(galleryID)
 
 			// Determine if it's a model or backend
 			// First check if it was explicitly marked as a backend operation
@@ -208,7 +211,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 			// backend-vs-model, and a GPU-only backend installed on a worker is
 			// still a backend op even when this host cannot run it. The
 			// capability-filtered listing misclassified those as model ops.
-			if !isBackend && !isAddon {
+			if !isBackend && !isAddon && !isPlugin {
 				backends, _ := gallery.AvailableBackendsUnfiltered(appConfig.BackendGalleries, appConfig.SystemState)
 				for _, b := range backends {
 					backendID := fmt.Sprintf("%s@%s", b.Gallery.Name, b.Name)
@@ -234,6 +237,8 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 			displayName := galleryID
 			if isAddon {
 				displayName = addonID
+			} else if isPlugin {
+				displayName = pluginID
 			} else if strings.Contains(galleryID, "@") {
 				parts := strings.Split(galleryID, "@")
 				if len(parts) > 1 {
@@ -256,6 +261,7 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 				"isDeletion":  isDeletion,
 				"isBackend":   isBackend,
 				"isAddon":     isAddon,
+				"isPlugin":    isPlugin,
 				"isQueued":    isQueued,
 				"cancellable": isCancellable,
 				"message":     message,
@@ -1934,6 +1940,10 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 			"reclaimer_threshold": appConfig.MemoryReclaimerThreshold,
 			"watchdog_interval":   watchdogInterval,
 		}
+		// How the GPU reaches its memory (unified, discrete or none), for the
+		// memory-aware quick setup of the model editor. It describes this
+		// host; in distributed mode the models run on the workers.
+		response["memory"] = xsysinfo.HostMemoryOf(resourceInfo.GPUs)
 
 		// The same host readings a distributed worker reports in its
 		// heartbeat, so a single-node install can draw the CPU and models-disk
@@ -1966,6 +1976,12 @@ func RegisterUIAPIRoutes(app *echo.Echo, cl *config.ModelConfigLoader, ml *model
 		app.GET("/api/settings", localai.GetSettingsEndpoint(applicationInstance), adminMiddleware)
 		app.POST("/api/settings", localai.UpdateSettingsEndpoint(applicationInstance), adminMiddleware)
 	}
+
+	// Disk prompt cache: the admin reads and clears it; any user clears
+	// their own cached prompts.
+	app.GET("/api/prompt-cache", localai.PromptCacheStatusEndpoint(applicationInstance), adminMiddleware)
+	app.POST("/api/prompt-cache/clear", localai.PromptCacheClearEndpoint(applicationInstance), adminMiddleware)
+	app.DELETE("/api/prompt-cache/mine", localai.PromptCacheClearMineEndpoint(applicationInstance))
 
 	// Branding / whitelabeling. The read endpoint and the asset server are
 	// public so the login screen can render the configured logo and instance

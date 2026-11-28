@@ -774,6 +774,9 @@ func (c *Client) ListNodes(ctx context.Context) ([]localaitools.Node, error) {
 		PeerID      string                        `json:"peer_id"`
 		SplitServer bool                          `json:"split_server"`
 		RouteState  []localaitools.NodeRouteState `json:"route_state"`
+		// The drain of the node, when it drains.
+		DrainDeadline   string `json:"drain_deadline"`
+		LeavingReplicas int    `json:"leaving_replicas"`
 	}
 	if err := c.do(ctx, http.MethodGet, routeNodes, nil, &raw); err != nil {
 		// Treat 404/disabled as "no nodes" to keep parity with single-process.
@@ -785,14 +788,17 @@ func (c *Client) ListNodes(ctx context.Context) ([]localaitools.Node, error) {
 	out := make([]localaitools.Node, 0, len(raw))
 	for _, n := range raw {
 		out = append(out, localaitools.Node{
-			ID:          n.ID,
-			Address:     n.Address,
-			HTTPAddress: n.HTTPAddress,
-			Healthy:     n.Status == "healthy",
-			Route:       localaitools.NodeRoute(strings.Split(n.Attached, ","), n.PeerID),
-			PeerID:      n.PeerID,
-			SplitServer: n.SplitServer,
-			Routes:      n.RouteState,
+			ID:              n.ID,
+			Address:         n.Address,
+			HTTPAddress:     n.HTTPAddress,
+			Healthy:         n.Status == "healthy",
+			Route:           localaitools.NodeRoute(strings.Split(n.Attached, ","), n.PeerID),
+			PeerID:          n.PeerID,
+			SplitServer:     n.SplitServer,
+			Routes:          n.RouteState,
+			Status:          n.Status,
+			DrainDeadline:   n.DrainDeadline,
+			LeavingReplicas: n.LeavingReplicas,
 		})
 	}
 	return out, nil
@@ -841,6 +847,48 @@ func (c *Client) DeleteScheduling(ctx context.Context, modelName string) error {
 	return c.do(ctx, http.MethodDelete, routeModelScheduling(modelName), nil, nil)
 }
 
+// DrainNode sends POST /api/nodes/:id/drain (with force and timeout) or
+// POST /api/nodes/:id/resume.
+func (c *Client) DrainNode(ctx context.Context, req localaitools.DrainNodeRequest) (*localaitools.NodeDrain, error) {
+	if req.NodeID == "" {
+		return nil, errors.New("node_id is required")
+	}
+	out := &localaitools.NodeDrain{NodeID: req.NodeID}
+	switch req.Action {
+	case localaitools.DrainActionResume:
+		if err := c.do(ctx, http.MethodPost, routeNodeDrain(req.NodeID, "resume"), nil, nil); err != nil {
+			return nil, err
+		}
+		out.Status = "healthy"
+		return out, nil
+	case localaitools.DrainActionDrain:
+	default:
+		return nil, errors.New("action must be drain or resume")
+	}
+	q := url.Values{}
+	if req.Force {
+		q.Set("force", "true")
+	}
+	if req.Timeout != "" {
+		q.Set("timeout", req.Timeout)
+	}
+	path := routeNodeDrain(req.NodeID, "drain")
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var raw struct {
+		Status          string `json:"status"`
+		Immediate       bool   `json:"immediate"`
+		DrainDeadline   string `json:"drain_deadline"`
+		LeavingReplicas int    `json:"leaving_replicas"`
+	}
+	if err := c.do(ctx, http.MethodPost, path, nil, &raw); err != nil {
+		return nil, err
+	}
+	out.Status, out.Immediate, out.DrainDeadline, out.LeavingReplicas = raw.Status, raw.Immediate, raw.DrainDeadline, raw.LeavingReplicas
+	return out, nil
+}
+
 func (c *Client) SetNodeSplitServer(ctx context.Context, nodeID string, on bool) (*localaitools.NodeSplitServer, error) {
 	var out localaitools.NodeSplitServer
 	if err := c.do(ctx, http.MethodPut, routeNodeSplitServer(nodeID), map[string]bool{"split_server": on}, &out); err != nil {
@@ -855,6 +903,41 @@ func (c *Client) SetNodeVRAMBudget(ctx context.Context, nodeID, budget string) e
 	// use PUT uniformly rather than switching to DELETE for the clear case.
 	body := map[string]any{"value": budget}
 	return c.do(ctx, http.MethodPut, routeNodeVRAMBudget(nodeID), body, nil)
+}
+
+// SetNodeLimits sends PUT /api/nodes/:id/limits, or DELETE with Reset.
+func (c *Client) SetNodeLimits(ctx context.Context, req localaitools.SetNodeLimitsRequest) (*localaitools.NodeLimits, error) {
+	var out localaitools.NodeLimits
+	var err error
+	if req.Reset {
+		err = c.do(ctx, http.MethodDelete, routeNodeLimits(req.NodeID), nil, &out)
+	} else {
+		body := map[string]any{}
+		if req.MaxActiveBackends != nil {
+			body["max_active_backends"] = *req.MaxActiveBackends
+		}
+		if req.VRAMBudget != nil {
+			body["vram_budget"] = *req.VRAMBudget
+		}
+		if req.MemoryReclaimerThreshold != nil {
+			body["memory_reclaimer_threshold"] = *req.MemoryReclaimerThreshold
+		}
+		if req.ModelSwap != nil {
+			body["model_swap"] = *req.ModelSwap
+		}
+		err = c.do(ctx, http.MethodPut, routeNodeLimits(req.NodeID), body, &out)
+	}
+	if err != nil {
+		return nil, err
+	}
+	out.NodeID = req.NodeID
+	return &out, nil
+}
+
+// SetModelMemoryPolicy sends the memory settings to POST /api/settings,
+// which keeps their names.
+func (c *Client) SetModelMemoryPolicy(ctx context.Context, req localaitools.ModelMemoryPolicy) error {
+	return c.do(ctx, http.MethodPost, routeSettings, req, nil)
 }
 
 func (c *Client) VRAMEstimate(ctx context.Context, req localaitools.VRAMEstimateRequest) (*vram.EstimateResult, error) {
@@ -1345,6 +1428,22 @@ func (c *Client) SetP2PRelayLimits(ctx context.Context, id string, req localaito
 	return &info, nil
 }
 
+func (c *Client) GetP2PUserPairing(ctx context.Context) (*localaitools.P2PUserPairingInfo, error) {
+	var out localaitools.P2PUserPairingInfo
+	if err := c.do(ctx, http.MethodGet, routeP2PUserPairing, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) SetP2PUserPairing(ctx context.Context, req localaitools.SetP2PUserPairingRequest) (*localaitools.P2PUserPairingInfo, error) {
+	var out localaitools.P2PUserPairingInfo
+	if err := c.do(ctx, http.MethodPut, routeP2PUserPairing, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (c *Client) RevokeP2PDevice(ctx context.Context, id string) error {
 	return c.do(ctx, http.MethodDelete, routeP2PDevices+"/"+url.PathEscape(id), nil, nil)
 }
@@ -1569,6 +1668,25 @@ func (c *Client) ManageFederationGroup(ctx context.Context, req localaitools.Fed
 	}
 	var out localaitools.FederationGroupInfo
 	if err := c.do(ctx, method, path, body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ---- Prompt cache ----
+
+func (c *Client) GetPromptCache(ctx context.Context) (*localaitools.PromptCacheStatus, error) {
+	var out localaitools.PromptCacheStatus
+	if err := c.do(ctx, http.MethodGet, routePromptCache, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) ClearPromptCache(ctx context.Context, model string) (*localaitools.PromptCacheClearResult, error) {
+	var out localaitools.PromptCacheClearResult
+	body := localaitools.PromptCacheClearRequest{Model: model}
+	if err := c.do(ctx, http.MethodPost, routePromptCacheClear, body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -107,6 +108,23 @@ import (
 //	                         Comma-separated words; the transcription spec asserts
 //	                         the text contains at least one (case-insensitive),
 //	                         e.g. "country" for the jfk.wav sample.
+//	                         "grammar" constrains Predict with a tool-call grammar
+//	                         built from a JSON schema, sent in GBNF and in the
+//	                         llguidance form, and checks the call. With
+//	                         BACKEND_TEST_GRAMMAR_ENGINE (gbnf or llguidance) it
+//	                         also checks which of the two forms the backend used.
+//	                         "grammar_stress" does the same with a large tool set
+//	                         (BACKEND_TEST_GRAMMAR_STRESS_TOOLS tools, default 48)
+//	                         and reports the time per token.
+//	                         "paged_overcommit", "paged_parity", "paged_budget",
+//	                         "paged_cache" and "paged_attach" exercise the llama.cpp paged serving mode
+//	                         and need BACKEND_TEST_OPTIONS with paged_kv and parallel
+//	                         (see the test-extra-backend-llama-cpp-paged target):
+//	                         more requests than the KV pool holds all complete,
+//	                         greedy output does not change when requests share
+//	                         the pool or are preempted, decoding streams keep
+//	                         advancing while a long prompt is read, and the prompt
+//	                         cache still serves a repeated prompt.
 //	                         The "s2s" capability exercises AudioToAudioStream
 //	                         with BACKEND_TEST_AUDIO_* as the spoken input
 //	                         (a text turn with a tool, then its result).
@@ -140,6 +158,15 @@ const (
 	capLogitBias      = "logit_bias"
 	capTokenize       = "tokenize"
 	capTokenClassify  = "token_classify"
+	capGrammar        = "grammar"
+	capGrammarStress  = "grammar_stress"
+	capPagedOver      = "paged_overcommit"
+	capPagedParity    = "paged_parity"
+	capPagedBudget    = "paged_budget"
+	capPagedCache     = "paged_cache"
+	capPagedAttach    = "paged_attach"
+	capPagedResume    = "paged_resume"
+	capPagedStash     = "paged_stash"
 
 	defaultPrompt             = "The capital of France is"
 	streamPrompt              = "Once upon a time"
@@ -196,6 +223,7 @@ var _ = Describe("Backend container", Ordered, func() {
 		modelFile  string // set when a local file is used
 		modelName  string // set when a HuggingFace model id is used
 		mmprojFile string // optional multimodal projector
+		mediaMark  string // the media marker the backend reported at load
 		audioFile  string // optional audio fixture for transcription specs
 		// Face fixtures: two photos of the same person + one different person.
 		faceFile1 string
@@ -441,6 +469,12 @@ var _ = Describe("Backend container", Ordered, func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(res.GetSuccess()).To(BeTrue(), "LoadModel failed: %s", res.GetMessage())
+		if mmprojFile != "" {
+			meta, err := client.ModelMetadata(ctx, &pb.ModelOptions{Model: modelRef, ModelFile: modelPath})
+			if err == nil {
+				mediaMark = meta.GetMediaMarker()
+			}
+		}
 	})
 
 	It("generates output via Predict", func() {
@@ -823,6 +857,63 @@ var _ = Describe("Backend container", Ordered, func() {
 		}
 		Expect(matched).To(BeTrue(),
 			"Expected a tool call named %q in ChatDelta.tool_calls", toolName)
+	})
+
+	It("constrains Predict to a tool-call grammar built from a JSON schema", func() {
+		if !caps[capGrammar] {
+			Skip("grammar capability not enabled")
+		}
+		gbnf, llg := toolCallGrammars(weatherFunctions())
+		run := predictWithGrammar(client, "What is the weather in Paris, in celsius?", gbnf, llg, 128)
+		GinkgoWriter.Printf("Grammar: %q (tokens=%d, %.2f ms/token)\n", run.Output, run.Tokens, run.MsPerToken)
+		name, args := parseToolCall(run.Output)
+		Expect(name).To(Equal("get_weather"))
+		Expect(args).To(HaveKeyWithValue("city", BeAssignableToTypeOf("")))
+		Expect(args).To(HaveKeyWithValue("unit", BeElementOf("celsius", "fahrenheit")))
+	})
+
+	It("samples with the grammar engine that grammar_engine selects", func() {
+		if !caps[capGrammar] {
+			Skip("grammar capability not enabled")
+		}
+		engine := os.Getenv("BACKEND_TEST_GRAMMAR_ENGINE")
+		if engine == "" {
+			Skip("BACKEND_TEST_GRAMMAR_ENGINE not set")
+		}
+		// Two forms that cannot be confused: the output shows which one the
+		// backend sampled with.
+		run := predictWithGrammar(client, "Say a word.",
+			`root ::= "\"gbnf\""`, "%llguidance {}\nstart: \"\\\"llg\\\"\"\n", 8)
+		GinkgoWriter.Printf("Engine: %q\n", run.Output)
+		switch engine {
+		case "gbnf":
+			Expect(run.Output).To(Equal(`"gbnf"`))
+		case "llguidance":
+			Expect(run.Output).To(Equal(`"llg"`))
+		default:
+			Fail("BACKEND_TEST_GRAMMAR_ENGINE must be gbnf or llguidance, not " + engine)
+		}
+	})
+
+	It("constrains Predict to the grammar of a large tool set", func() {
+		if !caps[capGrammarStress] {
+			Skip("grammar_stress capability not enabled")
+		}
+		n := 48
+		if v := os.Getenv("BACKEND_TEST_GRAMMAR_STRESS_TOOLS"); v != "" {
+			_, err := fmt.Sscanf(v, "%d", &n)
+			Expect(err).NotTo(HaveOccurred())
+		}
+		funcs := stressFunctions(n)
+		gbnf, llg := toolCallGrammars(funcs)
+		run := predictWithGrammar(client,
+			"Call tool_07 for item A-1 titled Report, count 3, ratio 0.5, enabled, high priority, owned by Ann (ann@example.com, core team).",
+			gbnf, llg, 384)
+		GinkgoWriter.Printf("Grammar stress: tools=%d gbnf_bytes=%d tokens=%d wall=%s %.2f ms/token\n%s\n",
+			n, len(gbnf), run.Tokens, run.Wall, run.MsPerToken, run.Output)
+		AddReportEntry("grammar_stress", fmt.Sprintf("tools=%d tokens=%d wall=%s ms_per_token=%.2f", n, run.Tokens, run.Wall, run.MsPerToken))
+		name, _ := parseToolCall(run.Output)
+		Expect(name).To(HavePrefix("tool_"))
 	})
 
 	It("transcribes audio via AudioTranscription", func() {
@@ -1494,6 +1585,222 @@ var _ = Describe("Backend container", Ordered, func() {
 		Expect(rxFrames).To(BeNumerically(">=", nFrames),
 			"AudioTransformStream returned %d frames for %d sent", rxFrames, nFrames)
 		GinkgoWriter.Printf("AudioTransformStream: rx %d frames, %d bytes\n", rxFrames, rxBytes)
+	})
+
+	// Paged serving (llama.cpp paged_kv). The KV pool holds about two of these
+	// requests at once, so without admission control the server runs out of
+	// cells and fails every request with "Context size has been exceeded".
+	It("completes more concurrent requests than the KV pool holds", func() {
+		if !caps[capPagedOver] {
+			Skip("paged_overcommit capability not enabled")
+		}
+		ctxSize := int(envInt32("BACKEND_TEST_CTX_SIZE", 512))
+		prompts := make([]string, 8)
+		for i := range prompts {
+			prompts[i] = pagedPrompt(i, ctxSize/4)
+		}
+		res := pagedConcurrent(client, prompts, 32, 10*time.Minute)
+		for i, r := range res {
+			Expect(r.err).NotTo(HaveOccurred(), "request %d failed", i)
+			Expect(r.chunk).To(HaveLen(32), "request %d did not get all its tokens", i)
+		}
+	})
+
+	It("keeps greedy output when requests share the pool or are preempted", func() {
+		if !caps[capPagedParity] {
+			Skip("paged_parity capability not enabled")
+		}
+		ctxSize := int(envInt32("BACKEND_TEST_CTX_SIZE", 512))
+		prompts := make([]string, 6)
+		for i := range prompts {
+			// about a fifth of the pool each: four fit with the 16-token reserve
+			// of the make target, but not with their 96 output tokens, so some preempt
+			prompts[i] = pagedPrompt(100+i, ctxSize/5)
+		}
+		serial := make([]pagedStream, len(prompts))
+		for i, p := range prompts {
+			serial[i] = pagedPredict(client, p, 96, 5*time.Minute)
+			Expect(serial[i].err).NotTo(HaveOccurred())
+		}
+		together := pagedConcurrent(client, prompts, 96, 10*time.Minute)
+		same := 0
+		for i := range prompts {
+			Expect(together[i].err).NotTo(HaveOccurred(), "concurrent request %d failed", i)
+			if together[i].text == serial[i].text {
+				same++
+			} else {
+				GinkgoWriter.Printf("paged parity: request %d differs\n serial:     %q\n concurrent: %q\n", i, serial[i].text, together[i].text)
+			}
+		}
+		// A different batch composition can flip a near tie, so one stream may differ.
+		Expect(same).To(BeNumerically(">=", len(prompts)-1), "greedy output changed under paged serving")
+	})
+
+	// Preempted requests resume by recompute on every memory type, including
+	// the recurrent state of hybrid models, instead of failing with the
+	// retryable "KV pool full" error. Greedy text may change at near ties, so
+	// this checks completion only. A follow-up that branches right after one
+	// prompt reuses its prefix through the context checkpoint the recompute
+	// makes again.
+	It("resumes preempted requests instead of failing them", func() {
+		if !caps[capPagedResume] {
+			Skip("paged_resume capability not enabled")
+		}
+		ctxSize := int(envInt32("BACKEND_TEST_CTX_SIZE", 512))
+		prompts := make([]string, 6)
+		for i := range prompts {
+			prompts[i] = pagedPrompt(700+i, ctxSize/5)
+		}
+		res := pagedConcurrent(client, prompts, 96, 10*time.Minute)
+		for i, r := range res {
+			Expect(r.err).NotTo(HaveOccurred(), "request %d failed instead of resuming", i)
+			Expect(r.chunk).To(HaveLen(96), "request %d did not get all its tokens", i)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		next, err := client.Predict(ctx, &pb.PredictOptions{
+			Prompt: prompts[len(prompts)-1] + " Question: next.", Tokens: 4, Temperature: 0, TopK: 1, Seed: 1, PromptCacheAll: true,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		GinkgoWriter.Printf("paged resume: follow-up prompt processing %.1f ms\n", next.GetTimingPromptProcessing())
+	})
+
+	// A request with an image cannot be rebuilt by recompute (its KV holds
+	// the encoded image), so under pool pressure it is saved to the RAM stash
+	// with its sequence state and restored when there is room again,
+	// instead of failing with the retryable "KV pool full" error.
+	It("stashes image requests that are preempted instead of failing them", func() {
+		if !caps[capPagedStash] {
+			Skip("paged_stash capability not enabled")
+		}
+		Expect(mmprojFile).NotTo(BeEmpty(), "paged_stash needs a vision model and its mmproj")
+		marker := mediaMark
+		if marker == "" {
+			marker = "<__media__>"
+		}
+		ctxSize := int(envInt32("BACKEND_TEST_CTX_SIZE", 512))
+		img := pagedImage()
+		res := make([]pagedStream, 6)
+		var wg sync.WaitGroup
+		for i := range res {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				res[i] = pagedPredictOpts(client, &pb.PredictOptions{
+					Prompt: marker + " Describe the picture. " + pagedPrompt(800+i, ctxSize/8),
+					Images: []string{img}, Tokens: 96, Temperature: 0, TopK: 1, Seed: 1, IgnoreEOS: true,
+				}, 10*time.Minute)
+			}(i)
+		}
+		wg.Wait()
+		for i, r := range res {
+			Expect(r.err).NotTo(HaveOccurred(), "image request %d failed instead of being stashed", i)
+			Expect(r.chunk).To(HaveLen(96), "image request %d did not get all its tokens", i)
+		}
+	})
+
+	It("keeps decoding while a long prompt is read with a prefill budget", func() {
+		if !caps[capPagedBudget] {
+			Skip("paged_budget capability not enabled")
+		}
+		budget := pagedOption(options, "prefill_budget", 0)
+		Expect(budget).To(BeNumerically(">", 0), "paged_budget needs prefill_budget in BACKEND_TEST_OPTIONS")
+		ctxSize := int(envInt32("BACKEND_TEST_CTX_SIZE", 512))
+		long := pagedPrompt(200, ctxSize/3)
+		tctx, tcancel := context.WithTimeout(context.Background(), time.Minute)
+		tok, err := client.TokenizeString(tctx, &pb.PredictOptions{Prompt: long})
+		tcancel()
+		Expect(err).NotTo(HaveOccurred())
+		nLong := len(tok.GetTokens())
+
+		chat := make([]pagedStream, 2)
+		var wg sync.WaitGroup
+		for i := range chat {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				chat[i] = pagedPredict(client, pagedPrompt(300+i, 20), 120, 10*time.Minute)
+			}(i)
+		}
+		time.Sleep(2 * time.Second) // let the two streams start decoding
+		lr := pagedPredict(client, long, 4, 10*time.Minute)
+		wg.Wait()
+		Expect(lr.err).NotTo(HaveOccurred())
+		Expect(lr.chunk).NotTo(BeEmpty())
+
+		// Without a budget the long prompt takes about nLong/n_batch steps; with it,
+		// at least nLong/budget steps, and each step gives every stream one token.
+		minSteps := nLong / budget
+		for i, c := range chat {
+			Expect(c.err).NotTo(HaveOccurred())
+			got := chunksBetween(c, lr.sent, lr.chunk[0])
+			GinkgoWriter.Printf("paged budget: stream %d got %d tokens while %d prompt tokens were read (budget %d)\n", i, got, nLong, budget)
+			Expect(got).To(BeNumerically(">=", minSteps/2),
+				"decoding stalled during the long prompt: the prefill budget is not applied")
+		}
+	})
+
+	// Prefix sharing between live slots: a request whose prompt starts with the
+	// prompt of a request that is still generating starts from that slot's
+	// cells instead of reading the shared part again.
+	It("shares a prompt prefix with a request that is still generating", func() {
+		if !caps[capPagedAttach] {
+			Skip("paged_attach capability not enabled")
+		}
+		ctxSize := int(envInt32("BACKEND_TEST_CTX_SIZE", 512))
+		predict := func(p string) *pb.Reply {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			res, err := client.Predict(ctx, &pb.PredictOptions{
+				Prompt: p, Tokens: 4, Temperature: 0, TopK: 1, Seed: 1, PromptCacheAll: true,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			return res
+		}
+		system := pagedPrompt(600, ctxSize/4)
+		cold := predict(pagedPrompt(601, ctxSize/4) + " Question: one.")
+		done := make(chan pagedStream, 1)
+		go func() {
+			done <- pagedPredictCached(client, system+" Question: two.", 120, 5*time.Minute)
+		}()
+		time.Sleep(3 * time.Second) // the first request is decoding now
+		warm := predict(system + " Question: three.")
+		first := <-done
+		Expect(first.err).NotTo(HaveOccurred())
+		GinkgoWriter.Printf("paged attach: prompt processing %.1f ms cold, %.1f ms with the shared prefix\n",
+			cold.GetTimingPromptProcessing(), warm.GetTimingPromptProcessing())
+		Expect(warm.GetTimingPromptProcessing()).To(BeNumerically("<", cold.GetTimingPromptProcessing()/2),
+			"the shared prefix was read again instead of attached")
+	})
+
+	// With paged serving the RAM prompt cache is loaded when a request is
+	// admitted, not when it is assigned a slot (a waiting request holds no
+	// cells). The cache must still give a repeated prompt its cached prefix.
+	It("reuses the prompt cache when the cache load waits for admission", func() {
+		if !caps[capPagedCache] {
+			Skip("paged_cache capability not enabled")
+		}
+		ctxSize := int(envInt32("BACKEND_TEST_CTX_SIZE", 512))
+		predict := func(p string) *pb.Reply {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			res, err := client.Predict(ctx, &pb.PredictOptions{
+				Prompt: p, Tokens: 4, Temperature: 0, TopK: 1, Seed: 1, PromptCacheAll: true,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			return res
+		}
+		long := pagedPrompt(400, ctxSize/3)
+		first := predict(long)
+		// Other prompts move the first one out of its slot into the RAM cache.
+		for i := 0; i < 4; i++ {
+			predict(pagedPrompt(500+i, 20))
+		}
+		again := predict(long)
+		GinkgoWriter.Printf("paged cache: prompt processing %.1f ms, then %.1f ms from the cache\n",
+			first.GetTimingPromptProcessing(), again.GetTimingPromptProcessing())
+		Expect(again.GetTimingPromptProcessing()).To(BeNumerically("<", first.GetTimingPromptProcessing()/2),
+			"the repeated prompt was read again instead of coming from the prompt cache")
 	})
 })
 

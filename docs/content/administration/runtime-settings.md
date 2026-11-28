@@ -18,7 +18,7 @@ Open **Admin → Settings** in the web UI (`/app/settings`). The page lists ever
 
 | Group | Settings it holds |
 |---|---|
-| Models in memory | Watchdog (idle and busy checks, timeouts, interval), eviction (force when busy, largest first, retries, retry interval), free memory automatically and its threshold, models kept loaded, GPU memory budget |
+| Models in memory | Watchdog (idle and busy checks, timeouts, interval), eviction (force when busy, largest first, retries, retry interval), free memory automatically and its threshold, models kept loaded, swap models when memory is full, GPU memory budget, the [disk prompt cache]({{%relref "/models/disk-prompt-cache" %}}) (on or off, time to live, size cap, quota per user, shortest prompt, shared cache, free-space marks) with its state and a **Clear** button |
 | Speed and defaults | Default threads, default context size, artifact download concurrency, F16 |
 | Backends and galleries | Automatic backend upgrades, development backends, gallery loading on boot, the persistent VRAM cache, the model and backend gallery lists |
 | Access and security | CORS and allowed origins, CSRF protection, shared API keys, whether MCP connectors may reach private networks |
@@ -70,6 +70,7 @@ Changes to watchdog settings are applied immediately by restarting the watchdog 
 - **Force Eviction When Busy**: Allow evicting models even when they have active API calls (default: disabled for safety). **Warning:** Enabling this can interrupt active requests
 - **LRU Eviction Max Retries**: Maximum number of retries when waiting for busy models to become idle before eviction (default: 30)
 - **LRU Eviction Retry Interval**: Interval between retries when waiting for busy models (default: `1s`)
+- **Swap models when memory is full** (`model_swap`, default on, applies at once): when a new model needs room (the active model limit is reached, or a loaded model holds the same concurrency group), unload the least recently used idle model to make room. When off, LocalAI never unloads a model for another one: the request waits for the LRU retry window (retries x interval) and, if no room frees up, gets `503` with a `Retry-After` header. The idle watchdog and the memory reclaimer still unload models. The flag is `--model-swap` (`--no-model-swap`, environment `LOCALAI_MODEL_SWAP=false`)
 
 > **Note:** The "Single Backend" setting is deprecated. Use "Max Active Backends" set to `1` for single-backend behavior.
 
@@ -80,9 +81,39 @@ By default, LocalAI will skip evicting models that have active API calls to prev
 1. The system will wait for models to become idle
 2. It will retry eviction up to the configured maximum number of retries
 3. The retry interval determines how long to wait between attempts
-4. If all retries are exhausted, the system will proceed (which may cause out-of-memory errors if resources are truly exhausted)
+4. If all retries are exhausted, the system will proceed (which may cause out-of-memory errors if resources are truly exhausted). With **Swap models when memory is full** off, the request gets `503` with `Retry-After` instead
 
 You can configure these settings via the web UI or through environment variables. See [VRAM Management]({{%relref "/models/vram-management" %}}) for more details.
+
+#### Memory settings in distributed mode
+
+In distributed mode the settings of **Models in memory** are cluster settings: they are stored once for all frontends (see [Memory settings across frontends]({{%relref "/administration/distributed-mode#memory-settings-across-frontends" %}})) and each one applies to every worker node. The Settings page says so above the group. Four of them can differ per node ([Per-node memory limits]({{%relref "/administration/distributed-mode#per-node-memory-limits" %}})).
+
+| Setting | Single mode | Distributed mode |
+|---|---|---|
+| `max_active_backends` (Models kept loaded) | Models loaded on this machine | Models on each node: loaded, loading and staging replicas. Per node |
+| `model_swap` (Swap models when memory is full) | Unload the least recently used idle model for a new one | The same on each node. Off: a full node is skipped; when every node is full the request gets `503` with `Retry-After`. Per node |
+| `size_aware_eviction` | Unload the largest model first | Unload the largest replica first (size from the load estimate) |
+| `lru_eviction_max_retries`, `lru_eviction_retry_interval` | The wait for a busy model to become idle | The same, capped by the request's own wait. While the scheduler chooses a node, the wait is at most 2.5 seconds when the request (or the replica reconciler) has no deadline |
+| `force_eviction_when_busy` | Unload a model that serves requests | Unload a replica that serves requests |
+| `watchdog_idle_*` | Unload models idle longer than the timeout | Unload replicas idle longer than the timeout, also of models with no scheduling rule; a rule's `min_replicas`, pinned models and warm failover targets stay |
+| `memory_reclaimer_*` | Unload when this machine's memory passes the threshold | Unload on each node whose memory passes its threshold, and keep `(1 - threshold)` of the node's memory free when placing a model. Per node (threshold): a threshold set for one node also turns the reclaimer on there; `0.90` on unified-memory nodes when the cluster names no reclaimer setting |
+| `vram_budget` (GPU memory budget) | Cap of this machine | Cap of each worker that sets none of its own. Per node |
+
+The busy watchdog (`watchdog_busy_*`) still acts only on the backends that a frontend starts itself. In distributed mode a frontend's own watchdog handles only the backends it started; the replicas on the workers are the cluster's to unload.
+
+### Disk Prompt Cache Settings
+
+The `llama-cpp` backend can keep the prompt cache of long prompts on disk, per user. See [Disk Prompt Cache]({{%relref "/models/disk-prompt-cache" %}}) for what it stores and how long.
+
+- **Keep long prompts on disk** (`prompt_cache_disk`): on by default. Backends get a change when they next start
+- **Keep entries for** (`prompt_cache_disk_ttl`): time to keep an entry after its last use (default: `168h`)
+- **Share the cache between users** (`prompt_cache_disk_shared`): one cache for all users (default: off)
+- **Size cap** (`prompt_cache_disk_max_size_mib`), **Quota per user** (`prompt_cache_disk_user_quota_mib`), **Shortest prompt kept** (`prompt_cache_disk_min_tokens`), **Low free space** (`prompt_cache_disk_low_free_mib`) and **Critical free space** (`prompt_cache_disk_critical_free_mib`): advanced limits. `0` is automatic for the size, the quota and the marks; `-1` is no quota
+
+In distributed mode these are cluster settings, like the memory settings: they are stored once in the database, every frontend applies them, and every worker gets them over the control channel. See [Disk prompt cache across nodes]({{%relref "/administration/distributed-mode#disk-prompt-cache-across-nodes" %}}).
+
+The block also shows the size of the cache, the free disk, the cap in effect and the state of each node, and a **Clear** button that deletes the cache of every user and model.
 
 ### Performance Settings
 
@@ -193,6 +224,15 @@ The **Tools** tab lists the built-in chat tools, from `GET /api/chats/admin/tool
   - `chats_trigger_max_per_user` (1 to 1000, default 50): how many triggers a user may have. A user who has more keeps them but cannot add another.
   - `chats_trigger_max_daily_cap` (1 to 1000, default 1000): the highest daily limit one trigger may have. A trigger with a higher limit runs at this one.
 - **Add-ons that replace a built-in tool** (`chats_tool_providers`, a map such as `{"bash": "sandbox", "xlsx": "office"}`, applies at once): when several add-ons replace one tool, the one that serves it. The keys are the replaceable tools (`bash`, `web_search`, `web_fetch`) and the replaceable built-in skills (`xlsx`, `docx`, `pptx`, `pdf`). A chosen add-on that cannot serve a chat (stopped, off for the chat) leaves the name to the built-in, not to another add-on. With none chosen, the add-on installed first serves (ties go by add-on ID), and the tab marks it as the default and says that you should choose. See [Tools that replace a built-in tool]({{% relref "/addons/contract-reference/owner-forwarding#tools-that-replace-a-built-in-tool" %}}).
+
+### Plugins
+
+The settings of the [plugins]({{% relref "/features/plugins" %}}) compatible with the Claude Code plugin format. They apply at once.
+
+- **Personal plugin installs** (`plugins_user_installs`, default on): users can install plugins that run no code for themselves.
+- **Plugin agent models** (`plugins_model_tiers`, a map such as `{"opus": "qwen3-32b"}`, default `{}`): the model of each agent tier of the format. The keys are `haiku`, `sonnet` and `opus`; another key or an empty model refuses the whole map. An unmapped tier uses the chat's model.
+- **Hook timeout** (`plugins_hook_timeout_seconds`, default `60`, 1 to 600): the longest one hook handler may run.
+- **Plugin size** (`plugins_max_bytes`, default `20971520`, 1048576 to 209715200): the largest size of the files of one plugin.
 
 > **Note:** Most collection settings require a restart to take effect. The settings of the removed agent pool, agent jobs and agent hub (`agent_job_retention_days`, `agent_pool_enable_logs`, `agent_pool_agent_hub_url` and the like) are ignored when found in `runtime_settings.json`.
 

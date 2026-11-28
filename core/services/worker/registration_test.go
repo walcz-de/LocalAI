@@ -60,6 +60,25 @@ var _ = Describe("Worker registration body", func() {
 		}
 	})
 
+	It("reports the memory settings its env sets, and nothing else", func() {
+		cfg := &Config{MaxActiveBackends: "2", ModelSwap: "false", MemoryReclaimerThreshold: "0.8"}
+		body := cfg.registrationBody()
+		Expect(body["max_active_backends"]).To(Equal(2))
+		Expect(body["model_swap"]).To(Equal(false))
+		Expect(body["memory_reclaimer_threshold"]).To(Equal(0.8))
+
+		body = (&Config{}).registrationBody()
+		Expect(body).ToNot(HaveKey("max_active_backends"))
+		Expect(body).ToNot(HaveKey("model_swap"))
+		Expect(body).ToNot(HaveKey("memory_reclaimer_threshold"))
+	})
+
+	It("drops a memory setting it cannot read", func() {
+		body := (&Config{MaxActiveBackends: "many", ModelSwap: "perhaps"}).registrationBody()
+		Expect(body).ToNot(HaveKey("max_active_backends"))
+		Expect(body).ToNot(HaveKey("model_swap"))
+	})
+
 	It("includes the VRAM budget in the registration body when set", func() {
 		cfg := &Config{VRAMBudget: "80%"}
 		body := cfg.registrationBody()
@@ -81,6 +100,23 @@ var _ = Describe("Worker registration body", func() {
 		cfg := &Config{VRAMBudget: "50%"}
 		body := cfg.registrationBody()
 		Expect(body["total_vram"]).To(Equal(rawTotal))
+	})
+
+	It("reports the LOCALAI_VRAM_TOTAL figure instead of detection, with the budget as a string", func() {
+		// #13531: detection read NUMA node RAM as VRAM. The operator's total
+		// replaces it; the budget stays a string the frontend resolves.
+		xsysinfo.ApplyVRAMTotalSetting("40GB")
+		DeferCleanup(func() { xsysinfo.SetVRAMTotalOverride(0) })
+
+		body := (&Config{VRAMBudget: "50%"}).registrationBody()
+		Expect(body["total_vram"]).To(Equal(uint64(40_000_000_000)))
+		Expect(body["vram_budget"]).To(Equal("50%"))
+
+		// No tool reports usage on such a host: the heartbeat leaves the
+		// frontend's available VRAM alone instead of claiming it is all free.
+		if len(xsysinfo.GetGPUMemoryUsage()) == 0 {
+			Expect((&Config{}).heartbeatBody()).ToNot(HaveKey("available_vram"))
+		}
 	})
 
 	It("reports RAM when GPU memory is visible", func() {

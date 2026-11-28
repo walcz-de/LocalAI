@@ -1,0 +1,608 @@
+LocalAI paged serving hooks for llama.cpp's server.
+
+Admission, preemption with resume by recompute, and a decode-first prefill
+budget over the unified KV cache. The policy is in serving_policy.h, which
+prepare.sh copies next to server-context.cpp. Every hook runs only when
+common_params::paged_serving is set, or prefill_budget > 0 for the budget.
+See backend/cpp/llama-cpp/PATCHES.md before re-porting this patch.
+
+diff --git a/common/common.h b/common/common.h
+--- a/common/common.h
++++ b/common/common.h
+@@ -663,6 +663,13 @@ struct common_params {
+     bool    cache_idle_slots    = true;  // save and clear idle slots upon starting a new task
+     int32_t n_ctx_checkpoints   = 32;    // max number of context checkpoints per slot
+     int32_t kv_unified_per_slot = 0;     // max context per parallel slot; 0 = unset
++    bool    paged_serving       = false; // LocalAI: admission and pool accounting over the unified KV cache
++    bool    paged_preempt       = false; // LocalAI: preempt the youngest request when the pool is short
++    int32_t kv_output_reserve   = 256;   // LocalAI: free cells a request needs beyond its prompt to start
++    int32_t prefill_budget      = 0;     // LocalAI: decode-first prompt tokens per step, 0 = off, < 0 = adaptive
++    int32_t prefill_long        = 0;     // LocalAI: the prefill budget applies to prompts longer than this, 0 = to every prompt
++    bool    paged_attach        = false; // LocalAI: start a prompt from another slot's prefix cells (paged serving)
++    int32_t spec_max_streams    = 0;     // LocalAI: pause speculative drafting above this many decoding streams, 0 = never
+     int32_t checkpoint_min_step = 8192;  // minimum spacing between context checkpoints
+     int32_t cache_ram_mib       = 8192;  // -1 = no limit, 0 - disable, 1 = 1 MiB, etc.
+     bool    cache_ram_explicit  = false; // set by --cache-ram, decision models disable the cache otherwise
+diff --git a/tools/server/server-context.cpp b/tools/server/server-context.cpp
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -1,4 +1,5 @@
+ #include "server-context.h"
++#include "serving_policy.h" // LocalAI paged serving, see backend/cpp/llama-cpp/PATCHES.md in LocalAI
+ #include <atomic>
+ #include <thread>
+ #include "base64.hpp"
+@@ -373,6 +374,23 @@ struct server_slot {
+     // state
+     slot_state state = SLOT_STATE_IDLE;
+ 
++    // LocalAI paged serving: waits for admission, and the tokens to recompute after a preemption
++    bool         paged_wait = false;
++    llama_tokens paged_resume;
++    bool         paged_cache_load = false; // load the RAM prompt cache at admission, not at launch
++    int          paged_src   = -1;            // slot this one copied its prompt from
++    int          paged_src_task = -1;         // task of that slot at the copy (-2: idle)
++    int64_t      paged_src_n = 0;             // cells copied from it
++    int          paged_n_preempted = 0;       // times this request was preempted
++    int64_t      paged_t_preempted = 0;       // when it was last preempted (us)
++    // RAM stash of a preempted slot that cannot be recomputed (multimodal, aLoRA): its sequence
++    // state, its prompt and the state it was in, put back at admission
++    bool                 paged_stashed = false;
++    server_prompt        paged_stash_prompt;
++    std::vector<uint8_t> paged_stash_tgt;
++    std::vector<uint8_t> paged_stash_dft;
++    slot_state           paged_stash_state = SLOT_STATE_IDLE;
++
+     server_prompt prompt;
+ 
+     bool prompt_save(server_prompt_cache & prompt_cache) const {
+@@ -511,6 +529,19 @@ struct server_slot {
+         audio_commit_rows.clear();
+         inp_embd.clear();
+         rt.reset();
++
++        paged_wait = false;
++        paged_resume.clear();
++        paged_stashed = false;
++        paged_stash_prompt.clear();
++        std::vector<uint8_t>().swap(paged_stash_tgt);
++        std::vector<uint8_t>().swap(paged_stash_dft);
++        paged_cache_load = false;
++        paged_src        = -1;
++        paged_src_n      = 0;
++        paged_src_task   = -1;
++        paged_n_preempted = 0;
++        paged_t_preempted = 0;
+     }
+ 
+     void init_sampler() const {
+@@ -897,6 +928,9 @@ struct server_slot {
+         mem.seq_cp(id, other.id, -1, -1);
+ 
+         other.prompt = prompt.clone();
++        other.paged_src      = id;
++        other.paged_src_n    = prompt.n_tokens();
++        other.paged_src_task = task ? task->id : -2;
+     }
+ 
+     void copy_state_to(server_slot & other) const {
+@@ -910,6 +944,9 @@ struct server_slot {
+         other.stats = stats;
+ 
+         other.prompt = prompt.clone();
++        other.paged_src      = id;
++        other.paged_src_n    = prompt.n_tokens();
++        other.paged_src_task = task ? task->id : -2;
+         other.init_sampler();
+     }
+ };
+@@ -1527,6 +1564,15 @@ private:
+         slots.clear();
+ 
+         ctx_tgt_seq_rm_type = common_context_can_seq_rm(ctx_tgt);
++
++        // LocalAI paged serving: a purely recurrent model (Mamba, RWKV) keeps one state per
++        // slot and no KV pool, so there is nothing to admit against
++        if (params_base.paged_serving && llama_model_is_recurrent(model_tgt) && !llama_model_is_hybrid(model_tgt)) {
++            SRV_INF("%s", "paged serving: off, a recurrent model has no KV pool to share\n");
++            params_base.paged_serving = false;
++            params_base.paged_preempt = false;
++            params_base.prefill_budget = 0;
++        }
+         if (ctx_tgt_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_NO) {
+             SRV_WRN("%s", "speculative decoding not supported by this context\n");
+         }
+@@ -1558,6 +1604,11 @@ private:
+ 
+         if (ctx_dft) {
+             ctx_dft_seq_rm_type = common_context_can_seq_rm(ctx_dft);
++            // LocalAI paged serving: the draft must hold every cell the target pool can hand out
++            if (params_base.paged_serving && llama_n_ctx(ctx_dft) < llama_n_ctx(ctx_tgt)) {
++                SRV_WRN("paged serving: the draft context (%u) is smaller than the target context (%u), the draft fills up first\n",
++                        llama_n_ctx(ctx_dft), llama_n_ctx(ctx_tgt));
++            }
+         }
+ 
+         if (spec) {
+@@ -1941,6 +1992,356 @@ private:
+         return res;
+     }
+ 
++    // LocalAI paged serving: admission, preemption and resume by recompute over the unified KV cache.
++    // The policy is in serving_policy.h. Only called when params_base.paged_serving is set.
++    int64_t n_paged_wait = 0, n_paged_preempt = 0, n_paged_abort = 0, n_paged_stash = 0;
++
++    // cells of one slot, an estimate that counts cells shared with other slots once per slot
++    int64_t paged_n_cells(const server_slot & slot) const {
++        const llama_pos p0 = llama_memory_seq_pos_min(llama_get_memory(ctx_tgt), slot.id);
++        const llama_pos p1 = llama_memory_seq_pos_max(llama_get_memory(ctx_tgt), slot.id);
++        return std::max<int64_t>(p0 < 0 ? 0 : p1 - p0 + 1, slot.prompt.n_tokens());
++    }
++
++    // cells in use by every slot but id_skip, each shared cell counted once
++    int64_t paged_used(int id_skip) const {
++        std::vector<serving_policy::slot_cells> c(slots.size());
++        for (size_t i = 0; i < slots.size(); i++) {
++            const auto & s = slots[i];
++            c[i].cells = s.id == id_skip ? 0 : paged_n_cells(s);
++            // a copied prefix stays shared while the source still runs the task it had at the copy
++            const bool live = s.paged_src >= 0 && s.paged_src < (int) slots.size() &&
++                              (slots[s.paged_src].task ? slots[s.paged_src].task->id : -2) == s.paged_src_task;
++            if (live) {
++                c[i].src    = s.paged_src;
++                c[i].shared = s.paged_src_n;
++            }
++        }
++        return serving_policy::unique_cells(c);
++    }
++
++    int64_t n_paged_attach = 0, n_paged_attach_tokens = 0;
++    bool    spec_paused_now = false; // LocalAI: drafting paused by spec_max_streams
++
++    // start a prompt from the cells of another slot that holds a longer prefix of it, busy or idle:
++    // seq_cp shares the cells, nothing is copied or computed again. Returns the new n_past.
++    int32_t paged_attach(server_slot & slot, int32_t n_past) {
++        if (!params_base.paged_attach || ctx_tgt_seq_rm_type != COMMON_CONTEXT_SEQ_RM_TYPE_PART || n_swa > 0 || mctx ||
++            slot.can_speculate() || slot.task->tokens.has_mtmd || slot.task->n_tokens_shared > 0 || lora_all_alora(slot.lora)) {
++            return n_past;
++        }
++        server_slot * best   = nullptr;
++        int32_t       best_n = n_past;
++        for (auto & other : slots) {
++            if (other.id == slot.id || other.prompt.tokens.has_mtmd || !are_lora_equal(other.prompt.lora, slot.lora) ||
++                llama_memory_seq_pos_min(llama_get_memory(ctx_tgt), other.id) != 0) {
++                continue;
++            }
++            // only cells that exist: a generating slot's last token is not decoded yet
++            const int32_t n_cells = llama_memory_seq_pos_max(llama_get_memory(ctx_tgt), other.id) + 1;
++            const int32_t n = std::min<int32_t>({ (int32_t) other.prompt.tokens.get_common_prefix(slot.task->tokens), n_cells, other.prompt.n_tokens() });
++            if (serving_policy::should_attach(best_n, n)) {
++                best   = &other;
++                best_n = n;
++            }
++        }
++        if (!best) {
++            return n_past;
++        }
++        slot.mem.seq_rm(slot.id, -1, -1);
++        slot.mem.seq_cp(best->id, slot.id, 0, best_n);
++        slot.prompt = best->prompt.clone();
++        slot.prompt.tokens.keep_first(best_n);
++        slot.prompt.checkpoints.clear();
++        slot.paged_src      = best->id;
++        slot.paged_src_n    = best_n;
++        slot.paged_src_task = best->task ? best->task->id : -2;
++        n_paged_attach_tokens += best_n - n_past;
++        SLT_INF(slot, "paged: attached %d prompt tokens of slot %d (attaches = %" PRId64 ", tokens saved = %" PRId64 ")\n",
++                best_n, best->id, ++n_paged_attach, n_paged_attach_tokens);
++        return best_n;
++    }
++
++    int64_t paged_prompt_left(const server_slot & slot) const {
++        if (!slot.paged_resume.empty()) {
++            return (int64_t) slot.paged_resume.size() - slot.prompt.n_tokens();
++        }
++        return slot.state == SLOT_STATE_GENERATING ? 0 : slot.task->n_tokens() - slot.prompt.n_tokens();
++    }
++
++    int64_t paged_reserve(const server_slot & slot) const {
++        return slot.task->need_sampling() ? serving_policy::effective_reserve(params_base.kv_output_reserve, slot.n_predict_max) : 0;
++    }
++
++    // admitted and running: holds cells now or will in this step
++    bool paged_running(const server_slot & slot) const {
++        return slot.is_processing() && !slot.paged_wait && slot.state != SLOT_STATE_STARTED && slot.state != SLOT_STATE_WAIT_OTHER;
++    }
++
++    // a slot whose state is only its text tokens and its sampler can be rebuilt by decoding them again
++    bool paged_resumable(const server_slot & slot) const {
++        // a draft model or MTP head is rebuilt too: the recompute batches go through
++        // common_speculative_process() like any other target batch
++        return slot.task->type == SERVER_TASK_TYPE_COMPLETION && !slot.task->tokens.has_mtmd &&
++               !slot.prompt.tokens.has_mtmd && !slot.task->is_parent() && !slot.task->is_child() &&
++               slot.task->n_tokens_shared == 0 && slot.inp_embd.empty() && !lora_all_alora(slot.lora) &&
++               // recurrent and hybrid memory: the full removal of prompt_clear() works, and the
++               // recompute from position 0 rebuilds the state as a fresh prompt does
++               (ctx_tgt_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_PART ||
++                ctx_tgt_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_FULL ||
++                ctx_tgt_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_RS);
++    }
++
++    // where the recompute of a preempted slot stops once to make a context checkpoint, as the
++    // upstream prompt path does near the end of a prompt (-1: no checkpoint for this slot)
++    int64_t paged_ckpt_at(const server_slot & slot) const {
++        const bool use_ckpt = params_base.n_ctx_checkpoints > 0 &&
++            (ctx_tgt_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_FULL ||
++             ctx_tgt_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_RS || n_swa > 0);
++        const int64_t at = slot.task->n_tokens() - 4;
++        return use_ckpt && at > 0 && at < (int64_t) slot.paged_resume.size() ? at : -1;
++    }
++
++    // a slot that waits for admission may still hold the cells of its previous task
++    bool paged_purgeable(const server_slot & slot) const {
++        return (!slot.is_processing() || slot.state == SLOT_STATE_STARTED || slot.paged_wait) && slot.prompt.n_tokens() > 0;
++    }
++
++    // drop the cached cells of one idle or waiting slot, other than id_keep
++    bool paged_purge(int id_keep) {
++        if (try_clear_idle_slots()) {
++            return true;
++        }
++        for (auto & slot : slots) {
++            if (slot.id != id_keep && slot.is_processing() && paged_purgeable(slot)) {
++                SLT_INF(slot, "paged: dropping %d cached tokens of a waiting slot\n", slot.prompt.n_tokens());
++                slot.prompt_clear();
++                return true;
++            }
++        }
++        return false;
++    }
++
++    // true when the slot may start (or resume) filling n_tokens cells now
++    bool paged_admit(server_slot & slot, int64_t n_tokens) {
++        while (true) {
++            serving_policy::pool_view v;
++            v.n_pool = llama_n_ctx(ctx_tgt);
++            v.n_used = paged_used(slot.id); // its own cells are reused or freed by the prompt fill
++            for (const auto & other : slots) {
++                if (other.id == slot.id) {
++                    continue;
++                }
++                v.idle_cells |= paged_purgeable(other);
++                if (paged_running(other)) {
++                    v.n_active++;
++                    v.n_pending += serving_policy::slot_claim(paged_prompt_left(other), paged_reserve(other), other.stats.n_gen);
++                } else if (other.is_processing() && (other.state == SLOT_STATE_STARTED || other.paged_wait) && other.task->id < slot.task->id) {
++                    v.older_waiting = true;
++                }
++            }
++            // a preempted request waits for extra room, so it is not preempted again right away
++            const int64_t n_need = slot.paged_n_preempted > 0 ? serving_policy::resume_need(n_tokens, paged_reserve(slot))
++                                                              : serving_policy::slot_claim(n_tokens, paged_reserve(slot), slot.stats.n_gen);
++            const auto res = serving_policy::admit(v, n_need);
++            if (res == serving_policy::admit_result::ADMIT) {
++                if (slot.paged_t_preempted > 0) {
++                    SLT_INF(slot, "paged: resuming after waiting %.1f s\n", (ggml_time_us() - slot.paged_t_preempted) / 1e6);
++                    slot.paged_t_preempted = 0;
++                }
++                if (slot.paged_cache_load && prompt_cache) {
++                    // the cache load was held back at launch, so a waiting request holds no cells
++                    slot.paged_cache_load = false;
++                    if (!slot.prompt_load(*prompt_cache, slot.task->tokens, get_task_lora(*slot.task))) {
++                        slot.prompt_clear();
++                    }
++                    prompt_cache->update();
++                }
++                slot.paged_wait = false;
++                return true;
++            }
++            if (res == serving_policy::admit_result::PURGE_IDLE && paged_purge(slot.id)) {
++                continue;
++            }
++            if (!slot.paged_wait) {
++                slot.paged_wait = true;
++                SLT_INF(slot, "paged: waiting for %" PRId64 " free cells (used = %" PRId64 ", pending = %" PRId64 ", pool = %" PRId64 ", waits = %" PRId64 ")\n",
++                        n_need, v.n_used, v.n_pending, v.n_pool, ++n_paged_wait);
++            }
++            return false;
++        }
++    }
++
++    // make room for this step's decode and for the rest of the admitted prompts:
++    // drop idle or waiting cells first, then, with paged_preempt, preempt the youngest slot
++    void paged_preempt_pass() {
++        while (true) {
++            const int64_t n_used = paged_used(-1);
++            int64_t n_demand = 0;
++            std::vector<serving_policy::victim_candidate> cands;
++            for (auto & slot : slots) {
++                if (!paged_running(slot) || slot.state == SLOT_STATE_DONE_PROMPT) {
++                    continue;
++                }
++                const bool gen = slot.state == SLOT_STATE_GENERATING;
++                n_demand += serving_policy::slot_demand(gen, gen && slot.can_speculate() && !spec_paused_now ? std::min(slot.get_n_draft_max(), 64) : 0, paged_prompt_left(slot));
++                const auto type = slot.task->type;
++                // score requests are short forks of one prompt: never a victim
++                if (type != SERVER_TASK_TYPE_TTS && type != SERVER_TASK_TYPE_REALTIME && type != SERVER_TASK_TYPE_TRANSCRIBE_RT &&
++                    type != SERVER_TASK_TYPE_SCORE) {
++                    cands.push_back({ slot.id, slot.task->id, paged_resumable(slot), slot.paged_n_preempted, paged_n_cells(slot) });
++                }
++            }
++            if (!serving_policy::pool_short(llama_n_ctx(ctx_tgt), n_used, n_demand)) {
++                return;
++            }
++            if (paged_purge(-1)) {
++                continue;
++            }
++            if (!params_base.paged_preempt) {
++                return; // admission only, the decode path handles a full pool as before
++            }
++            const int i = serving_policy::pick_victim(cands);
++            if (i < 0) {
++                return; // one request left, the decode path handles it as before
++            }
++            paged_preempt(slots[cands[i].id_slot], cands[i].resumable);
++        }
++    }
++
++    // save a slot that cannot be recomputed to the RAM stash and free its cells; false when the
++    // stash cannot take it (parent or child of a shared prompt, cache_ram 0, or over the cap)
++    bool paged_stash(server_slot & slot) {
++        if (slot.task->is_parent() || slot.task->is_child()) {
++            return false;
++        }
++        const size_t n_tgt = llama_state_seq_get_size_ext(ctx_tgt, slot.id, LLAMA_STATE_SEQ_FLAGS_NONE);
++        const size_t n_dft = ctx_dft ? llama_state_seq_get_size_ext(ctx_dft, slot.id, LLAMA_STATE_SEQ_FLAGS_NONE) : 0;
++        size_t n_held = 0;
++        for (const auto & other : slots) {
++            n_held += other.paged_stash_tgt.size() + other.paged_stash_dft.size();
++        }
++        if (!serving_policy::stash_fits(n_held, n_tgt + n_dft, params_base.cache_ram_mib)) {
++            SLT_WRN(slot, "paged: the RAM stash cannot hold %.1f MiB more (%.1f MiB held, cache_ram %d MiB)\n",
++                    (n_tgt + n_dft) / 1048576.0, n_held / 1048576.0, params_base.cache_ram_mib);
++            return false;
++        }
++        slot.paged_stash_tgt.resize(n_tgt);
++        slot.paged_stash_dft.resize(n_dft);
++        if (llama_state_seq_get_data_ext(ctx_tgt, slot.paged_stash_tgt.data(), n_tgt, slot.id, LLAMA_STATE_SEQ_FLAGS_NONE) != n_tgt ||
++            (n_dft > 0 && llama_state_seq_get_data_ext(ctx_dft, slot.paged_stash_dft.data(), n_dft, slot.id, LLAMA_STATE_SEQ_FLAGS_NONE) != n_dft)) {
++            std::vector<uint8_t>().swap(slot.paged_stash_tgt);
++            std::vector<uint8_t>().swap(slot.paged_stash_dft);
++            return false;
++        }
++        SLT_INF(slot, "paged: KV pool full, stashing %d tokens (%.1f MiB) in RAM (this request: %d, stashes = %" PRId64 ")\n",
++                slot.prompt.n_tokens(), (n_tgt + n_dft) / 1048576.0, ++slot.paged_n_preempted, ++n_paged_stash);
++        slot.paged_t_preempted = ggml_time_us();
++        if (slot.can_speculate()) {
++            slot.spec_draft.clear();
++            slot.spec_draft_q.clear();
++            slot.spec_i_batch.clear();
++            slot.spec_ckpt.clear();
++        }
++        slot.paged_stash_state  = slot.state;
++        slot.paged_stash_prompt = std::move(slot.prompt);
++        slot.prompt             = server_prompt{};
++        slot.prompt_clear(); // frees the cells
++        slot.state         = SLOT_STATE_PROCESSING_PROMPT; // waits for admission like a preempted slot
++        slot.i_batch       = -1;
++        slot.paged_wait    = true;
++        slot.paged_stashed = true;
++        return true;
++    }
++
++    // put a stashed slot back after admission; on failure it ends with the retryable error
++    void paged_unstash(server_slot & slot) {
++        const bool ok = llama_state_seq_set_data_ext(ctx_tgt, slot.paged_stash_tgt.data(), slot.paged_stash_tgt.size(), slot.id,
++                                                     LLAMA_STATE_SEQ_FLAGS_NONE) == slot.paged_stash_tgt.size() &&
++                        (slot.paged_stash_dft.empty() ||
++                         llama_state_seq_set_data_ext(ctx_dft, slot.paged_stash_dft.data(), slot.paged_stash_dft.size(), slot.id,
++                                                      LLAMA_STATE_SEQ_FLAGS_NONE) == slot.paged_stash_dft.size());
++        std::vector<uint8_t>().swap(slot.paged_stash_tgt);
++        std::vector<uint8_t>().swap(slot.paged_stash_dft);
++        slot.paged_stashed = false;
++        if (!ok) {
++            SLT_WRN(slot, "paged: the RAM stash could not be restored (aborts = %" PRId64 ")\n", ++n_paged_abort);
++            slot.paged_stash_prompt.clear();
++            slot.prompt_clear();
++            send_error(slot, "KV pool full, preempted; retry the request", ERROR_TYPE_UNAVAILABLE);
++            slot.release();
++            return;
++        }
++        slot.prompt = std::move(slot.paged_stash_prompt);
++        slot.paged_stash_prompt = server_prompt{};
++        slot.state = slot.paged_stash_state;
++        SLT_INF(slot, "paged: restored %d tokens from the RAM stash\n", slot.prompt.n_tokens());
++        if (slot.state == SLOT_STATE_GENERATING && slot.can_speculate()) {
++            common_speculative_begin(spec.get(), slot.id, slot.prompt.tokens.get_text_tokens());
++        }
++    }
++
++    void paged_preempt(server_slot & slot, bool resumable) {
++        if (!resumable && paged_stash(slot)) {
++            return;
++        }
++        if (!resumable) {
++            SLT_WRN(slot, "paged: KV pool full, aborting a request that cannot be resumed (last resort, aborts = %" PRId64 ")\n", ++n_paged_abort);
++            send_error(slot, "KV pool full, preempted; retry the request", ERROR_TYPE_UNAVAILABLE);
++            slot.release();
++            slot.prompt_clear();
++            return;
++        }
++        SLT_INF(slot, "paged: KV pool full, preempting %d tokens for recompute (this request: %d, preemptions = %" PRId64 ")\n",
++                slot.prompt.n_tokens(), ++slot.paged_n_preempted, ++n_paged_preempt);
++        slot.paged_t_preempted = ggml_time_us();
++        if (slot.state == SLOT_STATE_GENERATING) {
++            // keep every decoded token, the sampler and the grammar keep their state
++            slot.paged_resume = slot.prompt.tokens.get_text_tokens();
++            slot.state = SLOT_STATE_PROCESSING_PROMPT;
++        }
++        if (slot.can_speculate()) {
++            // a pending draft belongs to the cells that are dropped: draft again after the resume
++            slot.spec_draft.clear();
++            slot.spec_draft_q.clear();
++            slot.spec_i_batch.clear();
++            slot.spec_ckpt.clear();
++        }
++        slot.prompt_clear();
++        slot.i_batch    = -1;
++        slot.paged_wait = true;
++    }
++
++    // decode the tokens of a preempted slot again, then let it generate from where it stopped
++    void paged_resume_fill(server_slot & slot, int32_t n_fill_max) {
++        // preemption dropped the checkpoints: make the one near the end of the original prompt
++        // again, so the next turn of the conversation can reuse its prefix
++        const int64_t ckpt_at = paged_ckpt_at(slot);
++        bool ckpt_done = ckpt_at < 0 || slot.prompt.n_tokens() > ckpt_at;
++        if (!ckpt_done && slot.prompt.n_tokens() == ckpt_at) {
++            const auto pos_min = llama_memory_seq_pos_min(llama_get_memory(ctx_tgt), slot.id);
++            const auto pos_max = llama_memory_seq_pos_max(llama_get_memory(ctx_tgt), slot.id);
++            if (pos_min >= 0) {
++                create_checkpoint(slot, 0, pos_min, pos_max);
++            }
++            ckpt_done = true;
++        }
++        const int32_t n_stop = ckpt_done ? (int32_t) slot.paged_resume.size() : (int32_t) ckpt_at;
++        while (slot.prompt.n_tokens() < n_stop && batch.size() < n_fill_max) {
++            const llama_token tok = slot.paged_resume[slot.prompt.n_tokens()];
++            GGML_ASSERT(batch.add(slot.id, tok, slot.prompt.tokens.pos_next(), false, false));
++            slot.prompt.tokens.push_back(tok);
++        }
++        if (slot.prompt.n_tokens() == (int32_t) slot.paged_resume.size()) {
++            slot.paged_resume.clear();
++            slot.state = SLOT_STATE_GENERATING;
++            if (slot.can_speculate()) {
++                // n-gram tables are rebuilt from the tokens; the draft KV was rebuilt by the recompute
++                common_speculative_begin(spec.get(), slot.id, slot.prompt.tokens.get_text_tokens());
++            }
++        }
++    }
++
+     std::vector<common_adapter_lora_info> construct_lora_list(const std::map<int, float> & config) const {
+         std::vector<common_adapter_lora_info> output = params_base.lora_adapters; // copy
+         for (size_t i = 0; i < output.size(); ++i) {
+@@ -3299,7 +3700,15 @@ private:
+ 
+                     // the task is not deferred past this point
+                     if (plan.update_cache && prompt_cache) {
+-                        update_prompt_cache(*slot, task);
++                        if (params_base.paged_serving) {
++                            // LocalAI paged serving: save the slot's prompt now, load the cache at admission
++                            slot->prompt_save(*prompt_cache);
++                            slot->prompt_clear();
++                            prompt_cache->update();
++                            slot->paged_cache_load = true;
++                        } else {
++                            update_prompt_cache(*slot, task);
++                        }
+                     }
+ 
+                     if (task.is_parent()) {
+@@ -4071,6 +4480,24 @@ private:
+         // start populating the batch for this iteration
+         batch.clear();
+ 
++        // LocalAI paged serving: make room before the batch takes the decode tokens
++        if (params_base.paged_serving) {
++            paged_preempt_pass();
++        }
++
++        // LocalAI: pause speculative drafting while many streams decode (batching pays more then)
++        if (spec && params_base.spec_max_streams > 0) {
++            int32_t n_streams = 0;
++            for (const auto & slot : slots) {
++                n_streams += slot.state == SLOT_STATE_GENERATING;
++            }
++            const bool paused = serving_policy::spec_paused(spec_paused_now, n_streams, params_base.spec_max_streams);
++            if (paused != spec_paused_now) {
++                SRV_INF("speculative drafting %s at %d decoding streams\n", paused ? "paused" : "resumed", n_streams);
++                spec_paused_now = paused;
++            }
++        }
++
+         // track if given slot can be batched with slots already in the batch
+         auto & slot_batched = batch.slot_batched;
+ 
+@@ -4102,7 +4529,7 @@ private:
+                 const bool use_ckpt_tgt = ctx_tgt_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_FULL;
+                 const bool use_ckpt_dft = ctx_dft_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_FULL;
+ 
+-                const int n_draft_max = slot.get_n_draft_max();
++                const int n_draft_max = spec_paused_now ? 0 : slot.get_n_draft_max();
+ 
+                 if (n_draft_max > 0) {
+                     GGML_ASSERT(slot.can_speculate());
+@@ -4216,6 +4643,11 @@ private:
+         auto & alora_scale       = batch.alora_scale;
+         auto & alora_disabled_id = batch.alora_disabled_id;
+ 
++        // LocalAI paged serving: decode-first prompt budget (fixed, or adaptive to the decoding streams), n_batch when off
++        const int32_t prefill_budget = serving_policy::step_prefill_budget(params_base.prefill_budget, (int32_t) generating.size(), n_batch);
++        const int32_t n_fill_max = prefill_budget <= 0 ? n_batch :
++            std::min(n_batch, batch.size() + serving_policy::prefill_tokens_this_step(prefill_budget, batch.size(), n_batch));
++
+         // next, batch any pending prompts without exceeding n_batch
+         if (params_base.cont_batching || batch.size() == 0) {
+             bool add_ok = true; // false means the batch is full, skip remaining slots
+@@ -4229,6 +4661,12 @@ private:
+                     return;
+                 }
+ 
++                // LocalAI paged serving: the prefill budget holds back long prompts only
++                const int32_t n_fill_lim = serving_policy::budget_applies(slot.task->n_tokens(), params_base.prefill_long) ? n_fill_max : n_batch;
++                if (batch.size() >= n_fill_lim) {
++                    return;
++                }
++
+                 // check if we can batch this slot with the previous one
+                 if (slot_batched && !slot_batched->can_batch_with(slot)) {
+                     return;
+@@ -4248,6 +4686,25 @@ private:
+ 
+                 // this slot still has a prompt to be processed
+                 if (slot.state == SLOT_STATE_PROCESSING_PROMPT || slot.state == SLOT_STATE_STARTED) {
++                    // LocalAI paged serving: admission, then the recompute of a preempted slot
++                    if (params_base.paged_serving) {
++                        const int64_t n_need = slot.paged_stashed ?
++                            std::max<int64_t>(slot.paged_stash_prompt.n_tokens(), slot.paged_stash_state == SLOT_STATE_GENERATING ? 0 : slot.task->n_tokens()) :
++                            slot.paged_resume.empty() ? slot.task->n_tokens() : (int64_t) slot.paged_resume.size();
++                        if ((slot.state == SLOT_STATE_STARTED || slot.paged_wait) && n_need < slot.n_ctx && !paged_admit(slot, n_need)) {
++                            return;
++                        }
++                        if (slot.paged_stashed) {
++                            paged_unstash(slot);
++                            return;
++                        }
++                        if (!slot.paged_resume.empty()) {
++                            paged_resume_fill(slot, n_fill_max);
++                            slot_batched = slot_batched ? slot_batched : &slot;
++                            return;
++                        }
++                    }
++
+                     const auto & input_tokens = slot.task->tokens;
+ 
+                     // used to determine the number of tokens added to the batch for the current slot
+@@ -4436,6 +4893,12 @@ private:
+                                 n_past = 0;
+                             }
+ 
++                            // LocalAI paged serving: share the prefix cells of another slot
++                            if (params_base.paged_serving && slot.task->params.cache_prompt && !slot.task->is_stateless() &&
++                                slot.task->type == SERVER_TASK_TYPE_COMPLETION && slot.task->params.n_cache_reuse <= 0) {
++                                n_past = paged_attach(slot, n_past);
++                            }
++
+                             llama_pos pos_next = slot.prompt.tokens.pos_next(n_past);
+ 
+                             // number of cached tokens shared with the new prompt, before any checkpoint is restored
+@@ -4694,7 +5157,8 @@ private:
+                     const int32_t n_decision_first = slot.task->type == SERVER_TASK_TYPE_DECISION ? slot.task->decision.pos_first() : -1;
+ 
+                     // add prompt tokens for processing in the current batch
+-                    while (slot.prompt.n_tokens() < slot.task->n_tokens() && batch.size() < n_batch) {
++                    const int32_t n_fill_slot = slot.can_split() ? n_fill_lim : n_batch;
++                    while (slot.prompt.n_tokens() < slot.task->n_tokens() && batch.size() < n_fill_slot) {
+                         // get next token to process
+                         llama_token cur_tok = input_tokens[slot.prompt.n_tokens()];
+                         if (cur_tok == LLAMA_TOKEN_NULL) {

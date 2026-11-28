@@ -8,6 +8,7 @@
     "subtitle": "Configura los ajustes de tiempo de ejecución de LocalAI",
     "saved": "Configuración guardada con éxito",
     "saveFailed": "Error al guardar: {{message}}",
+    "memoryConflict": "Los ajustes de memoria se cambiaron en otro lugar después de que esta página los cargara. La página muestra ahora los valores vigentes. Vuelve a aplicar tu cambio.",
     "loadFailed": "Error al cargar configuración: {{message}}",
     "sections": {
       "branding": "Branding",
@@ -101,7 +102,8 @@
       "retry": "Reintentar la misma operación",
       "policy": "Política del propietario · revisión {{revision}}",
       "apply": "Aplicar el ajuste de actualización"
-    }
+    },
+    "memoryCluster": "Se aplica a cada nodo worker. Para un valor distinto en un nodo, usa la página Nodos."
   },
   "backends": {
     "lifecycle": {
@@ -281,7 +283,13 @@
     "sheet": {
       "account": "Cuenta",
       "activity": "Actividad",
-      "apiKeys": "Claves API"
+      "apiKeys": "Claves API",
+      "defaultOn": "Activado por defecto para los usuarios",
+      "defaultOnHint": "Se guarda al instante. Se aplica a cada usuario cuyo acceso no define esta función.",
+      "followsDefault": "Este usuario sigue el valor predeterminado.",
+      "explicit": "Definido para este usuario: un cambio del valor predeterminado no se aplica.",
+      "useDefault": "Usar el predeterminado",
+      "useDefaultFor": "Usar el predeterminado para {{feature}}"
     },
     "empty": {
       "title": "Todavía no hay usuarios",
@@ -310,7 +318,10 @@
       "deleted": "Usuario eliminado",
       "deleteFailed": "Error al eliminar el usuario: {{message}}",
       "passwordReset": "Contraseña restablecida para {{name}}",
-      "resetFailed": "Error al restablecer la contraseña: {{message}}"
+      "resetFailed": "Error al restablecer la contraseña: {{message}}",
+      "defaultOn": "La función ahora está activada por defecto para los usuarios.",
+      "defaultOff": "La función ahora está desactivada por defecto para los usuarios.",
+      "defaultFailed": "No se pudo cambiar el valor por defecto: {{message}}"
     },
     "reset": {
       "title": "Restablecer contraseña",

@@ -55,6 +55,7 @@ type RunCMD struct {
 	AddonsOfficialLibrary        bool   `name:"addons-official-library" env:"LOCALAI_ADDONS_OFFICIAL_LIBRARY" default:"true" help:"Register the official add-on library on the first start, when the add-on owner has no sources.json yet. A library the admin removes later stays removed. Turn it off with --addons-official-library=false" group:"addons"`
 	AddonsBackendLibrary         bool   `name:"addons-backend-library" env:"LOCALAI_ADDONS_BACKEND_LIBRARY" default:"true" help:"Register the backend library on the first start, when the add-on owner has no sources.json yet. A build from master reads it as the backend source; a tagged build reads the backend gallery until the release cutover. Turn it off to read the backend gallery only" group:"addons"`
 	OfficialLibraries            bool   `name:"official-libraries" env:"LOCALAI_OFFICIAL_LIBRARIES" default:"true" help:"Use the official (shipped default) library sources of add-ons, backends and models. Off: they stay in the list, shown as off, and are not read. Sources you added are not affected. Also a runtime setting (official_libraries)" group:"addons"`
+	PluginMarketplaces           string `name:"plugin-marketplaces" env:"LOCALAI_PLUGIN_MARKETPLACES" help:"Marketplaces of plugins in the Claude Code plugin format that a fresh server gets instead of the curated LocalAI marketplace: comma-separated owner/repo, https git URLs or https marketplace.json URLs, each optionally id=source. Read at the first start only" group:"addons"`
 	AddonsBackendMaxBytes        int64  `name:"addons-backend-max-bytes" env:"LOCALAI_ADDONS_BACKEND_MAX_BYTES" default:"8589934592" help:"Largest compressed size, in bytes, of a backend image installed from a library. Add-ons keep their own limit of 512 MiB" group:"addons"`
 	AddonsWSLDistro              string `name:"addons-wsl-distro" env:"LOCALAI_ADDONS_WSL_DISTRO" help:"Windows only: the WSL 2 distribution that runs the add-ons whose package runs in WSL 2 (osSettings.windows.execution wsl2). Empty uses the default distribution of WSL" group:"addons"`
 	Pprof                        bool   `name:"pprof" env:"LOCALAI_PPROF" default:"false" help:"Enable the private loopback profiling listener" group:"diagnostics"`
@@ -113,6 +114,17 @@ type RunCMD struct {
 	Threads     int  `env:"LOCALAI_THREADS,THREADS" short:"t" help:"Number of threads used for parallel computation. Usage of the number of physical cores in the system is suggested" group:"performance"`
 	ContextSize int  `env:"LOCALAI_CONTEXT_SIZE,CONTEXT_SIZE" help:"Default context size for models" group:"performance"`
 
+	// Disk tier of the llama.cpp prompt cache.
+	PromptCacheDisk                bool          `env:"LOCALAI_PROMPT_CACHE_DISK" group:"models" default:"true" help:"Keep the prompt cache of long llama.cpp prompts on disk under <data-path>/prompt-cache, so it survives a model reload. Each user has a separate namespace. Can also be changed at runtime via the prompt_cache_disk setting"`
+	PromptCachePath                string        `env:"LOCALAI_PROMPT_CACHE_PATH" type:"path" group:"models" help:"Directory of the disk prompt cache. Give a directory on a local disk. Default: <data-path>/prompt-cache. On a network disk, or when it is not writable, the disk prompt cache is off"`
+	PromptCacheDiskMaxSizeMiB      int           `env:"LOCALAI_PROMPT_CACHE_DISK_MAX_SIZE_MIB" group:"models" default:"0" help:"Most MiB the disk prompt cache of this node may use. 0 is automatic: the smaller of 20 GiB and a tenth of the free disk at start"`
+	PromptCacheDiskTTL             time.Duration `env:"LOCALAI_PROMPT_CACHE_DISK_TTL" group:"models" default:"168h" help:"How long a disk prompt cache entry is kept after its last use"`
+	PromptCacheDiskUserQuotaMiB    int           `env:"LOCALAI_PROMPT_CACHE_DISK_USER_QUOTA_MIB" group:"models" default:"0" help:"Most MiB of the disk prompt cache one user may use. 0 is automatic: an equal share of the cap when there is more than one user. -1 is no quota"`
+	PromptCacheDiskMinTokens       int           `env:"LOCALAI_PROMPT_CACHE_DISK_MIN_TOKENS" group:"models" default:"1024" help:"Shortest prompt, in tokens, that the disk prompt cache keeps"`
+	PromptCacheDiskShared          bool          `env:"LOCALAI_PROMPT_CACHE_DISK_SHARED" group:"models" default:"false" help:"Use one disk prompt cache namespace for every user, so users reuse each other's entries. Turn on only when every user may see the prompts of every other user"`
+	PromptCacheDiskLowFreeMiB      int           `env:"LOCALAI_PROMPT_CACHE_DISK_LOW_FREE_MIB" group:"models" default:"0" help:"Free disk space, in MiB, under which the disk prompt cache stops writing and shrinks. 0 is automatic: the larger of 15% of the disk and 10 GiB"`
+	PromptCacheDiskCriticalFreeMiB int           `env:"LOCALAI_PROMPT_CACHE_DISK_CRITICAL_FREE_MIB" group:"models" default:"0" help:"Free disk space, in MiB, under which the disk prompt cache is disabled until the free space is above the low mark again. 0 is automatic: 5% of the disk"`
+
 	Address                            string        `env:"LOCALAI_ADDRESS,ADDRESS" default:":8080" help:"Bind address for the API server" group:"api"`
 	ShutdownTimeout                    time.Duration `name:"shutdown-timeout" env:"LOCALAI_SHUTDOWN_TIMEOUT" default:"20s" help:"On SIGTERM or SIGINT, stop accepting requests and wait this long for in-flight requests to finish, then close the chats and exit. The whole stop takes up to this plus 21s, so keep the sum below the termination grace period of the platform (the default 20s needs a grace period of at least 41s). 0 exits without waiting" group:"api"`
 	CORS                               bool          `env:"LOCALAI_CORS,CORS" help:"" group:"api"`
@@ -152,10 +164,12 @@ type RunCMD struct {
 	WatchdogInterval                   string        `env:"LOCALAI_WATCHDOG_INTERVAL,WATCHDOG_INTERVAL" default:"500ms" help:"Interval between watchdog checks (e.g., 500ms, 5s, 1m) (default: 500ms)" group:"backends"`
 	EnableMemoryReclaimer              bool          `env:"LOCALAI_MEMORY_RECLAIMER,MEMORY_RECLAIMER,LOCALAI_GPU_RECLAIMER,GPU_RECLAIMER" default:"false" help:"Enable memory threshold monitoring to auto-evict backends when memory usage exceeds threshold (uses GPU VRAM if available, otherwise RAM)" group:"backends"`
 	MemoryReclaimerThreshold           float64       `env:"LOCALAI_MEMORY_RECLAIMER_THRESHOLD,MEMORY_RECLAIMER_THRESHOLD,LOCALAI_GPU_RECLAIMER_THRESHOLD,GPU_RECLAIMER_THRESHOLD" default:"0.95" help:"Memory usage threshold (0.0-1.0) that triggers backend eviction (default 0.95 = 95%%)" group:"backends"`
+	VRAMTotal                          string        `env:"LOCALAI_VRAM_TOTAL" help:"Total VRAM of this node as an absolute amount (e.g. 40GB or 48GiB). Overrides GPU detection; use it when the detected VRAM is wrong. LOCALAI_VRAM_BUDGET then caps the share LocalAI may use. Empty uses detection." group:"backends"`
 	VRAMBudget                         string        `env:"LOCALAI_VRAM_BUDGET" help:"Cap VRAM used for model allocation on this node, as a percentage (e.g. 80%) or absolute amount (e.g. 12GB). Empty uses all detected VRAM." group:"backends"`
 	ForceEvictionWhenBusy              bool          `env:"LOCALAI_FORCE_EVICTION_WHEN_BUSY,FORCE_EVICTION_WHEN_BUSY" default:"false" help:"Force eviction even when models have active API calls (default: false for safety)" group:"backends"`
 	SizeAwareEviction                  bool          `env:"LOCALAI_SIZE_AWARE_EVICTION,SIZE_AWARE_EVICTION" default:"false" help:"Evict the largest loaded model first rather than the least-recently-used one, keeping small utility models resident and maximizing freed memory per eviction" group:"backends"`
 	LRUEvictionMaxRetries              int           `env:"LOCALAI_LRU_EVICTION_MAX_RETRIES,LRU_EVICTION_MAX_RETRIES" default:"30" help:"Maximum number of retries when waiting for busy models to become idle before eviction (default: 30)" group:"backends"`
+	ModelSwap                          bool          `env:"LOCALAI_MODEL_SWAP,MODEL_SWAP" default:"true" negatable:"" help:"Unload the least recently used idle model to make room for another when the active model limit or the memory is reached. When false, the request waits for the LRU retry window, then gets a 503 with Retry-After (default: true)" group:"backends"`
 	LRUEvictionRetryInterval           string        `env:"LOCALAI_LRU_EVICTION_RETRY_INTERVAL,LRU_EVICTION_RETRY_INTERVAL" default:"1s" help:"Interval between retries when waiting for busy models to become idle (e.g., 1s, 2s) (default: 1s)" group:"backends"`
 	ModelLoadFailureCooldown           string        `env:"LOCALAI_MODEL_LOAD_FAILURE_COOLDOWN,MODEL_LOAD_FAILURE_COOLDOWN" default:"10s" help:"After a model load fails, refuse new load attempts for that model for this long (returned as HTTP 503 + Retry-After) so a client polling a broken model doesn't respawn a crashing backend every request. Doubles per consecutive failure up to 5m; reset on success. Set to 0 to disable (e.g., 10s, 30s)" group:"backends"`
 	DisableGalleryEndpoint             bool          `env:"LOCALAI_DISABLE_GALLERY_ENDPOINT,DISABLE_GALLERY_ENDPOINT" help:"Disable the gallery endpoints" group:"api"`
@@ -255,6 +269,7 @@ type RunCMD struct {
 	ModelLoadTimeout             string `env:"LOCALAI_NATS_MODEL_LOAD_TIMEOUT" help:"Fixed gRPC deadline for the remote LoadModel call sent to a worker node once its backend is installed and model files are staged. Unset (the default), the deadline is derived from the checkpoint size instead: 5m plus 20s per GiB, capped at 6h, so multi-tens-of-GB diffusion/video checkpoints get the minutes they need without a fixed cliff. Set this only to pin a specific budget; the value is used verbatim, including when it is shorter than the derived one." group:"distributed"`
 	ModelLoadWait                string `env:"LOCALAI_MODEL_LOAD_WAIT" help:"How long an inference request waits for a model that is still cold-loading onto a worker before it is answered with 503, a Retry-After header and live staging progress (default 60s). The request is served the moment the model becomes ready, so a model already most of the way staged needs no client retry. Set to 0 to wait as long as the load takes — only safe when no ingress or load balancer with an idle timeout sits in front." group:"distributed"`
 	ModelLoadStall               string `env:"LOCALAI_MODEL_LOAD_STALL" help:"How long a running cold load of a model may make no progress (no new phase, file or bytes) before a request starts a load of the same model on another node that matches the model's rule, instead of waiting for it (default 5m). Set to 0 to always wait for the running load." group:"distributed"`
+	DrainTimeout                 string `env:"LOCALAI_DRAIN_TIMEOUT" help:"How long a drained worker node keeps the replicas it serves while their replacements load on other nodes (default 10m). After it, the replicas left on the node are removed. A drain request can set its own deadline with ?timeout=." group:"distributed"`
 	StaleNodeThreshold           string `env:"LOCALAI_STALE_NODE_THRESHOLD" help:"How long a worker node may go without a durable heartbeat before the health monitor marks it offline (default 5m). Because a beat that only carries a fresher timestamp is held back by --node-heartbeat-checkpoint, this must stay comfortably wider than that interval; raise both together. Dead-node detection through the per-model gRPC health check and through request-time failure is unaffected by this knob." group:"distributed"`
 	NodeHeartbeatCheckpoint      string `env:"LOCALAI_NODE_HEARTBEAT_CHECKPOINT" help:"Minimum gap between durable heartbeat writes for a worker node (default 60s). A beat that only carries a fresher timestamp is dropped until this interval elapses; every field is compared against the value last written, so a node's first beat, a changed total VRAM/total disk/GPU vendor, and a free VRAM/RAM/disk reading that has moved more than 256 MiB from the written value all still write immediately, and a node that is not active is never suppressed. Set below the worker heartbeat interval to write on every beat." group:"distributed"`
 	ModelConfigResyncInterval    string `env:"LOCALAI_MODEL_CONFIG_RESYNC_INTERVAL" help:"How often each frontend compares its model configs with the shared models directory (default 30s). Frontends normally learn about a model install, edit or removal from a message on NATS; this pass catches a change whose message a frontend missed, for example during a NATS reconnect, so an old config is served for at most this long. A pass reads only the config files and skips the parse when none of them changed." group:"distributed"`
@@ -363,6 +378,10 @@ func (r *RunCMD) Run(ctx *cliContext.Context) (result error) {
 		fmt.Println(internal.Version)
 		return nil
 	}
+
+	// The VRAM total must be in place before the first detection below
+	// (GetSystemState) so every reading of the host uses it.
+	xsysinfo.ApplyVRAMTotalSetting(r.VRAMTotal)
 
 	tlsMaterial, err := tlsconf.Resolve(r.TLSCert, r.TLSKey, r.TLSSelfSigned, r.DataPath)
 	if err != nil {
@@ -478,6 +497,15 @@ func (r *RunCMD) Run(ctx *cliContext.Context) (result error) {
 		// after the two options above.
 		libraryOptionFor(r),
 		config.WithVRAMPersistentCache(r.VRAMPersistentCache),
+		config.WithPromptCacheDisk(r.PromptCacheDisk),
+		config.WithPromptCachePath(r.PromptCachePath),
+		config.WithPromptCacheDiskMaxSizeMiB(r.PromptCacheDiskMaxSizeMiB),
+		config.WithPromptCacheDiskTTL(r.PromptCacheDiskTTL),
+		config.WithPromptCacheDiskUserQuotaMiB(r.PromptCacheDiskUserQuotaMiB),
+		config.WithPromptCacheDiskMinTokens(r.PromptCacheDiskMinTokens),
+		config.WithPromptCacheDiskShared(r.PromptCacheDiskShared),
+		config.WithPromptCacheDiskLowFreeMiB(r.PromptCacheDiskLowFreeMiB),
+		config.WithPromptCacheDiskCriticalFreeMiB(r.PromptCacheDiskCriticalFreeMiB),
 		config.WithCors(r.CORS),
 		config.WithCorsAllowOrigins(r.CORSAllowOrigins),
 		config.WithDisableCSRF(r.DisableCSRF),
@@ -588,6 +616,13 @@ func (r *RunCMD) Run(ctx *cliContext.Context) (result error) {
 			return err
 		}
 		opts = append(opts, config.WithModelLoadStall(d))
+	}
+	if r.DrainTimeout != "" {
+		d, err := parseDistributedDuration("LOCALAI_DRAIN_TIMEOUT", r.DrainTimeout)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, config.WithDrainTimeout(d))
 	}
 	if r.StaleNodeThreshold != "" {
 		d, err := parseDistributedDuration("LOCALAI_STALE_NODE_THRESHOLD", r.StaleNodeThreshold)
@@ -946,6 +981,9 @@ func (r *RunCMD) Run(ctx *cliContext.Context) (result error) {
 	if r.LRUEvictionMaxRetries > 0 {
 		opts = append(opts, config.WithLRUEvictionMaxRetries(r.LRUEvictionMaxRetries))
 	}
+	if !r.ModelSwap {
+		opts = append(opts, config.DisableModelSwap)
+	}
 	if r.LRUEvictionRetryInterval != "" {
 		dur, err := time.ParseDuration(r.LRUEvictionRetryInterval)
 		if err != nil {
@@ -986,6 +1024,7 @@ func (r *RunCMD) Run(ctx *cliContext.Context) (result error) {
 	}
 
 	opts = append(opts, config.WithOfficialLibraries(r.OfficialLibraries))
+	opts = append(opts, config.WithPluginMarketplaces(r.PluginMarketplaces))
 
 	if r.AutoUpgradeBackends {
 		opts = append(opts, config.WithAutoUpgradeBackends(r.AutoUpgradeBackends))

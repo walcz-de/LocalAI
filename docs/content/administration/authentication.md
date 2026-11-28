@@ -256,6 +256,55 @@ There are two roles:
 
 The **first user** to sign in is automatically assigned the admin role. Additional users can be promoted to admin via the admin user management API or by setting `LOCALAI_ADMIN_EMAIL` to their email address.
 
+### Feature defaults
+
+Each feature has a default: the value a user gets when their permissions do not name the feature. Most defaults are fixed. API features such as chat and images are on, and agent and general features such as saved agents and add-ons are off.
+
+An administrator can change the default of a feature that is marked configurable. Today only **Pair own devices (P2P)** (`p2p_pair`) is configurable. Its built-in default is off.
+
+```bash
+# See every feature, the default in force and whether it is configurable
+curl http://localhost:8080/api/auth/admin/features \
+  -H "Authorization: Bearer <admin-key>"
+
+# Turn the default of p2p_pair on for every user
+curl -X PUT http://localhost:8080/api/auth/admin/features/p2p_pair/default \
+  -H "Authorization: Bearer <admin-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}'
+```
+
+A user who has `p2p_pair` may pair their own phone over P2P; the phone then signs in as that user. See [Users pair their own phones]({{% relref "/administration/p2p#users-pair-their-own-phones" %}}). Disabling or deleting a user revokes the phones that sign in as that user and ends their sessions. The session of a phone works only over P2P from that phone: the normal HTTP listener refuses it.
+
+In the response of `GET /api/auth/admin/features`, `default` is the default in force and `configurable` tells whether the `PUT` accepts the feature. The `PUT` answers `400` for a feature that is not configurable and `404` for an unknown feature.
+
+These rules apply:
+
+- A value in a user's permissions wins over the default. If you turned a feature off for one user, that user stays without it when you turn the default on.
+- Administrators always have every feature.
+- The default is stored in the auth database (table `feature_defaults`, with the time of the change and the administrator who made it), so it survives a restart. Each frontend keeps a copy for up to 30 seconds. The frontend that took the change applies it at once; in [distributed mode]({{%relref "/administration/distributed-mode" %}}) the other frontends apply it within 30 seconds.
+
+#### Follow the default or set a value
+
+For each feature, a user either follows the default or has an explicit value:
+
+- **Follows the default**: the user's permissions do not name the feature. When you change the default, the user gets the new value.
+- **Explicit value**: the user's permissions name the feature with `true` or `false`. A change of the default does not apply to this user.
+
+In the web UI, open **Users**, then the access sheet of a user. Under each configurable feature the sheet shows which of the two applies. **Use default** removes the explicit value, and the user follows the default again. When you save the sheet, it keeps the explicit values the user already had and adds only the features you changed. The other features keep following the default.
+
+The API shows both maps. `GET /api/auth/admin/users` and `GET /api/auth/admin/users/{id}/permissions` return `permissions`, the effective value of every feature, and `explicit_permissions`, only the features the user has an explicit value for. `PUT /api/auth/admin/users/{id}/permissions` replaces the explicit map. To make a user follow the default of a feature, send the map without that feature, or with the feature set to `null`:
+
+```bash
+# Keep mcp on for this user; p2p_pair follows the default
+curl -X PUT http://localhost:8080/api/auth/admin/users/<user-id>/permissions \
+  -H "Authorization: Bearer <admin-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"mcp": true, "p2p_pair": null}'
+```
+
+Read `explicit_permissions` first and send it back with your changes: a key you leave out follows the default.
+
 ### Registration Modes
 
 | Mode | Description |
@@ -457,6 +506,8 @@ In the web UI, the **API keys** tab of the Account page and **Administration →
 | `DELETE` | `/api/auth/api-keys/:id` | Revoke API key | Yes |
 | `GET` | `/api/auth/usage` | User's own usage stats | Yes |
 | `GET` | `/api/auth/usage/sources` | User's own per-API-key / per-source breakdown | Yes |
+| `GET` | `/api/auth/admin/features` | List the features, the default in force and whether it is configurable | Admin |
+| `PUT` | `/api/auth/admin/features/:feature/default` | Change the default of a configurable feature (`{"enabled": bool}`) | Admin |
 | `GET` | `/api/auth/admin/users` | List all users, with `lastActiveAt` and `apiKeyCount` | Admin |
 | `PUT` | `/api/auth/admin/users/:id/role` | Change user role | Admin |
 | `DELETE` | `/api/auth/admin/users/:id` | Delete user | Admin |
